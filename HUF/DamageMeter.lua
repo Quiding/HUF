@@ -272,7 +272,7 @@ local function ValueText(fs, src, t)
     elseif c.numbers == "PERSECOND" then
         fs:SetText(Short(ps))
     else
-        local ok = pcall(fs.SetFormattedText, fs, "%s (%s)", Short(total), Short(ps))
+        local ok = pcall(fs.SetFormattedText, fs, c.numbers == "BAR" and "%s | %s" or "%s (%s)", Short(total), Short(ps))
         if not ok then fs:SetText(Short(total)) end
     end
 end
@@ -475,6 +475,22 @@ local function SpellInfo(id)
     return name, icon
 end
 
+-- class icon before a bar (settings "icons" = CLASS); a class the game keeps
+-- secret leaves the spot empty
+local CLASS_ICONS = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
+local function ClassIcon(r, src)
+    if not r.iconOn then return end
+    local class = src.classFilename
+    local coords = Plain(class) and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
+    if coords then
+        r.icon:SetTexture(CLASS_ICONS)
+        r.icon:SetTexCoord(coords[1] + 0.02, coords[2] - 0.02, coords[3] + 0.02, coords[4] - 0.02)
+        r.icon:Show()
+    else
+        r.icon:Hide()
+    end
+end
+
 local function BarColor(bar, src)
     local c = S()
     if src.threatStatus ~= nil and c.threatColors then
@@ -514,6 +530,13 @@ local function Row(i)
     r = CreateFrame("StatusBar", nil, win.body)
     r.bg = r:CreateTexture(nil, "BACKGROUND")
     r.bg:SetAllPoints()
+    -- class icon before the bar (settings "icons"), border around icon and bar
+    r.icon = r:CreateTexture(nil, "ARTWORK")
+    r.icon:SetPoint("RIGHT", r, "LEFT", 0, 0)
+    r.icon:Hide()
+    r.edge = CreateFrame("Frame", nil, r)
+    r.edge:SetPoint("BOTTOMRIGHT")
+    r.border = ns.Frame.MakeBorder(r.edge)
     r.left = r:CreateFontString(nil, "OVERLAY")
     r.right = r:CreateFontString(nil, "OVERLAY")
     ns.ApplyFont(r.left, "GLOBAL", 11, "OUTLINE")
@@ -586,6 +609,7 @@ local function RefreshOne()
                 if not pcall(r.SetValue, r, src.totalAmount or 0) then r:SetValue(0) end
             end
             BarColor(r, src)
+            ClassIcon(r, src)
             r:Show()
         else
             r.src = nil
@@ -809,29 +833,46 @@ local function Layout()
     local c = S()
     local w = win
     w:SetScale(c.scale)
-    w:SetSize(c.width, 20 + Rows() * (c.rowHeight + c.rowGap) + 2)
+    local th = c.titleHeight or 20
+    w:SetSize(c.width, th + Rows() * (c.rowHeight + c.rowGap) + 2)
     local pt = WC().point
     w:ClearAllPoints()
     w:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
     local a = ns.ACCENT
-    w.fill:SetColorTexture(0.04, 0.04, 0.05, c.bgAlpha)
-    w.title:SetColorTexture(0.08, 0.08, 0.09, math.min(1, c.bgAlpha + 0.15))
+    local bg, tc = c.bgColor or { r = 0.04, g = 0.04, b = 0.05 }, c.titleColor or { r = 0.08, g = 0.08, b = 0.09 }
+    local ta = (c.titleAlpha or -1) >= 0 and c.titleAlpha or math.min(1, c.bgAlpha + 0.15)
+    w.fill:SetColorTexture(bg.r, bg.g, bg.b, c.bgAlpha)
+    w.titleBar:SetHeight(th)
+    w.title:SetColorTexture(tc.r, tc.g, tc.b, ta)
     w.line:SetColorTexture(a[1], a[2], a[3], 0.9)
+    w.line:SetShown(c.titleLine ~= false)
+    w.border:SetShown(c.windowBorder ~= false)
+    w.body:ClearAllPoints()
+    w.body:SetPoint("TOPLEFT", 1, -(th + 1))
+    w.body:SetPoint("BOTTOMRIGHT", -1, 1)
     for _, fs in ipairs({ w.typeText, w.sessionText, w.resetText, w.closeText, w.addB.text }) do
         ns.ApplyFont(fs, c.font, c.titleSize, c.outline)
     end
     w.typeB:SetWidth(math.max(70, c.width * 0.42))
     w.typeText:SetTextColor(1, 1, 1)
-    w.sessionText:SetTextColor(a[1], a[2], a[3])
+    if c.titleAccent == false then w.sessionText:SetTextColor(1, 1, 1)
+    else w.sessionText:SetTextColor(a[1], a[2], a[3]) end
     local tex = ns.TexturePath(c.texture)
+    local iconW = (c.icons == "CLASS") and c.rowHeight or 0
+    local bb, rb = c.barBgColor or { r = 0, g = 0, b = 0 }, c.rowBorder or 0
     for i = 1, ROW_POOL do
         local r = Row(i)
         r:ClearAllPoints()
-        r:SetPoint("TOPLEFT", w.body, "TOPLEFT", 0, -(i - 1) * (c.rowHeight + c.rowGap))
+        r:SetPoint("TOPLEFT", w.body, "TOPLEFT", iconW, -(i - 1) * (c.rowHeight + c.rowGap))
         r:SetPoint("TOPRIGHT", w.body, "TOPRIGHT", 0, -(i - 1) * (c.rowHeight + c.rowGap))
         r:SetHeight(c.rowHeight)
         r:SetStatusBarTexture(tex)
-        r.bg:SetColorTexture(0, 0, 0, 0.35)
+        r.bg:SetColorTexture(bb.r, bb.g, bb.b, c.barBgAlpha or 0.35)
+        r.icon:SetSize(iconW > 0 and iconW or 1, c.rowHeight)
+        r.iconOn = iconW > 0
+        if not r.iconOn then r.icon:Hide() end
+        r.edge:SetPoint("TOPLEFT", r, "TOPLEFT", -iconW, 0)
+        ns.Frame.LayoutBorder(r.border, r.edge, rb, { r = 0, g = 0, b = 0 }, 1)
         ns.ApplyFont(r.left, c.font, c.fontSize, c.outline)
         ns.ApplyFont(r.right, c.font, c.fontSize, c.outline)
         r.left:ClearAllPoints()
@@ -931,6 +972,7 @@ local function Build(index)
     w.border = UI.Border(w, 0.15, 0.15, 0.17, 1)
     -- title bar: meter type (click: next, right-click: back), fight, reset
     local title = CreateFrame("Frame", nil, w)
+    w.titleBar = title
     title:SetPoint("TOPLEFT")
     title:SetPoint("TOPRIGHT")
     title:SetHeight(20)

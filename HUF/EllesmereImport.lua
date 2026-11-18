@@ -545,7 +545,7 @@ end
 -- Damage meter (EllesmereUIDamageMeters): its first window -> HUF's meter
 ---------------------------------------------------------------------------
 local DM_SHOW = { always = "ALWAYS", in_party = "GROUP", in_raid = "GROUP" }
-local DM_NUMBERS = { [0] = "PERSECOND", [1] = "TOTAL", [2] = "BOTH", [3] = "BOTH" }
+local DM_NUMBERS = { [0] = "PERSECOND", [1] = "TOTAL", [2] = "BOTH", [3] = "BAR" }
 
 local function ConvertDamageMeter(addon, m, notes)
     local c = type(addon.dm) == "table" and addon.dm or addon
@@ -595,9 +595,14 @@ local function ConvertDamageMeter(addon, m, notes)
     if Num(G("windowCount"), 1) > 5 then
         notes[#notes + 1] = "Damage meter: HUF has up to 5 windows; the first 5 of Ellesmere's are taken."
     end
-    -- rows of a window from its height (Ellesmere's has the title bar in it)
-    local rowHeight = math.max(8, math.floor(Num(G("barHeight"), 18) + 0.5))
-    local rowGap = math.max(0, math.floor(Num(G("barSpacing"), 2) + 0.5))
+    -- rows of a window from its height (Ellesmere's has the title bar in it).
+    -- Ellesmere draws a bar's border inside the bar, HUF around it: with a
+    -- border the bar is 2 x border lower and the gap 2 x border wider, so the
+    -- rows keep their spacing and neighbouring borders fall on one line.
+    local rb = math.max(0, math.floor(Num(G("borderSize"), 0) + 0.5))
+    local barH, spacing = Num(G("barHeight"), 18), Num(G("barSpacing"), 2)
+    local rowHeight = math.max(8, math.floor(barH - 2 * rb + 0.5))
+    local rowGap = math.max(0, math.floor(spacing + 2 * rb + 0.5))
     local function RowsFor(h)
         local body = h - Num(G("hdrHeight"), 22)
         return math.max(1, math.min(40, math.floor((body + rowGap) / (rowHeight + rowGap))))
@@ -633,6 +638,17 @@ local function ConvertDamageMeter(addon, m, notes)
 
     -- look
     m.texture = TextureName(G("barTexture", "atrocity")) or "Flat"
+    m.bgColor = { r = Num(G("bgR"), 0), g = Num(G("bgG"), 0), b = Num(G("bgB"), 0) }
+    m.windowBorder = Num(G("windowBorderSize"), 0) > 0
+    m.titleHeight = math.max(12, math.min(30, math.floor(Num(G("hdrHeight"), 22) + 0.5)))
+    m.titleColor = Color(G("hdrBgColor"), { r = 0x1B / 255, g = 0x1B / 255, b = 0x1B / 255 })
+    m.titleAlpha = Num(G("hdrBgAlpha"), 1)
+    m.titleLine = Num(G("hdrBottomBorderSize"), 0) > 0 or G("hdrBottomSeparator", false) == true
+    m.titleAccent = G("hdrTextUseAccent", true) and true or false
+    m.icons = (G("iconStyle", "spec") ~= "none") and "CLASS" or "NONE"
+    m.rowBorder = rb
+    m.barBgColor = { r = Num(G("barBgR"), 0), g = Num(G("barBgG"), 0), b = Num(G("barBgB"), 0) }
+    m.barBgAlpha = Num(G("barBgAlpha"), 0)
     if G("showClassColor", true) then
         m.colorMode = "CLASS"
     elseif G("barColorUseAccent", true) then

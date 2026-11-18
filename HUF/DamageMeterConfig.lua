@@ -51,6 +51,15 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
     L:Slider("Scale", 0.5, 2, 0.05, function() return D().scale end, function(v) D().scale = v end, "%.2f")
     local gl, sl = Opt("locked")
     L:Check("Lock (no dragging by the title)", gl, sl)
+    local gw, sw = Opt("windowBorder")
+    L:Check("Line around the window", gw, sw)
+    L:Header("Title bar")
+    L:Slider("Height", 12, 30, 1, Opt("titleHeight"))
+    L:Color("Colour", Opt("titleColor"))
+    local gt, st = Opt("titleLine")
+    L:Check("Accent line under it", gt, st)
+    local ga, sa = Opt("titleAccent")
+    L:Check("Fight in the accent colour", ga, sa)
 
     local R = UI.Column(page, COL2_X, -30, COL_W)
     R:Header("Bars")
@@ -62,6 +71,12 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
     }, Opt("colorMode"))
     R:Color("Static colour", Opt("color"))
     R:Slider("Background opacity", 0, 1, 0.05, function() return D().bgAlpha end, function(v) D().bgAlpha = v end, "%.2f")
+    R:Cycle("Icons", {
+        { value = "NONE", text = "None" },
+        { value = "CLASS", text = "Class icon before the bar" },
+    }, Opt("icons"))
+    R:Slider("Border around each bar", 0, 3, 1, Opt("rowBorder"))
+    R:Slider("Empty part of a bar: opacity", 0, 1, 0.05, function() return D().barBgAlpha end, function(v) D().barBgAlpha = v end, "%.2f")
     R:Header("Text")
     R:Cycle("Font", Fonts, Opt("font"))
     R:Slider("Size", 6, 20, 1, Opt("fontSize"))
@@ -74,6 +89,7 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
     }, Opt("outline"))
     R:Cycle("Numbers", {
         { value = "BOTH", text = "Total (per second)" },
+        { value = "BAR", text = "Total | per second" },
         { value = "TOTAL", text = "Total" },
         { value = "PERSECOND", text = "Per second" },
     }, Opt("numbers"))
