@@ -223,7 +223,8 @@ local function Layout(p)
     a:SetHeight(s.auraSize)
     -- debuffs from the left, buffs from the right, more rows go up
     local common = { size = s.auraSize, gap = s.auraGap, perRow = s.auraMax, rows = s.auraRows or 1,
-                     countSize = math.max(6, math.floor(s.auraSize * 0.6)), timer = true, growV = "UP" }
+                     countSize = math.max(6, math.floor(s.auraSize * 0.6)), timer = true, growV = "UP",
+                     timerText = s.auraTimer, timerSize = s.auraTimerSize }
     local d, bf = {}, {}
     for k, v in pairs(common) do d[k], bf[k] = v, v end
     d.enabled, d.kind, d.mine = s.showDebuffs, "HARMFUL", s.debuffsMine

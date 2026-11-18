@@ -533,6 +533,9 @@ local function AuraColumn(col, key, which, title)
     col:Slider("Stack number size", 6, 16, 1, Opt(T, "countSize"))
     local gt, st = Opt(T, "timer")
     col:Check("Time left as a dark sweep", gt, st)
+    local gx, sx = Opt(T, "timerText")
+    col:Check("Time left as numbers", gx, sx)
+    col:Slider("Time size (0: automatic)", 0, 20, 1, Opt(T, "timerSize"))
 end
 
 local function AuraPage(f, key)
