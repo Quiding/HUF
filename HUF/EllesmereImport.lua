@@ -525,6 +525,10 @@ local function ConvertNameplates(s, n, notes)
         if hpSlot[2] ~= "RIGHT" then notes[#notes + 1] = "Nameplates: the health text is on the right of the bar." end
     end
     n.friendlyMode = G("friendlyNameOnly") and "NAME" or "SAME"
+    -- stacking: Ellesmere sets the game's switch (enemies on, friendly off by default)
+    n.stackEnemies = (s.stackingEnabled ~= false) and "ON" or "OFF"
+    n.stackFriendly = (s.stackingFriendly == true) and "ON" or "OFF"
+    n.stackSpacing = math.floor(Num(s.stackSpacingScale, 100) + 0.5)
     -- friendly names: Ellesmere's own size, level and colour (name-only:
     -- class colour with "Class Color Friendly", on by default)
     n.friendlyFontSize = math.floor(Num(s.friendlyNameSize, 15) + 0.5)

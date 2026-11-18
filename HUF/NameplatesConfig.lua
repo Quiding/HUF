@@ -60,6 +60,15 @@ local function GeneralPage(f)
     L:Slider("Height", 1, 20, 1, Opt("height"))
     L:Cycle("Bar texture", Textures, Opt("texture"))
     L:Slider("Raise / lower", -40, 40, 1, Opt("yOffset"))
+    L:Header("Stacking")
+    local STACK = {
+        { value = "GAME", text = "Game setting" },
+        { value = "ON", text = "Stack (no overlap)" },
+        { value = "OFF", text = "Overlap" },
+    }
+    L:Cycle("Enemies", STACK, Opt("stackEnemies"))
+    L:Cycle("Friendly units", STACK, Opt("stackFriendly"))
+    L:Slider("Stack spacing %", 50, 200, 5, Opt("stackSpacing"))
     L:Note("In instances the game protects friendly player nameplates: no addon can draw on them or change their names. \"Hide\" switches them and the names above characters off there while names are private (Names & MMT), and back on outside.")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)

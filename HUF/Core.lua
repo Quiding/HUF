@@ -500,6 +500,10 @@ local function BuildDefaults()
             nameGap = 1,                -- space between name and bar
             namePosition = "ABOVE",     -- ABOVE the bar | LEFT / CENTER: in the bar (name only: centred as ever)
             levelSep = " ",             -- between level and name ("55E Name" / "55E | Name")
+            -- stacking (the game's nameplateStackingTypes; GAME: HUF leaves it alone)
+            stackEnemies = "GAME",      -- GAME | ON (plates push each other apart) | OFF (overlap)
+            stackFriendly = "GAME",
+            stackSpacing = 100,         -- % of the plate's height the game keeps between stacked plates
             -- friendly units' names (default: as enemies')
             friendlyFontSize = 0,       -- 0: the size above
             friendlyLevel = "SAME",     -- SAME | SHOW | HIDE

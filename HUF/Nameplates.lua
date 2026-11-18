@@ -262,7 +262,8 @@ local function Layout(p)
         end
         sb:ClearAllPoints()
         sb:SetPoint("CENTER", np, "CENTER", 0, s.yOffset)
-        sb:SetSize(s.width, s.height + ((showName and not inside) and (s.fontSize + s.nameGap) or 0))
+        local sh = s.height + ((showName and not inside) and (s.fontSize + s.nameGap) or 0)
+        sb:SetSize(s.width, math.max(1, sh * (s.stackSpacing or 100) / 100))
         sb:Show()
         pcall(np.SetStackingBoundsFrame, np, sb)
     end
@@ -643,8 +644,26 @@ ns.On("UNIT_QUEST_LOG_CHANGED", function(unit) if unit == "player" then QuestCha
 ns.On("ZONE_CHANGED_NEW_AREA", QuestChanged)
 
 -- settings changed: every plate again; switched off: Blizzard's back
+-- stacking: the game's own switch per enemies / friendly units (only when
+-- set here; not in combat, the game may refuse it there)
+local function ApplyStacking()
+    local s = S()
+    local types = Enum and Enum.NamePlateStackType
+    if not (types and C_CVar and C_CVar.SetCVarBitfield) then return end
+    local function Set(idx, mode)
+        if idx == nil or mode == nil or mode == "GAME" then return end
+        pcall(C_CVar.SetCVarBitfield, "nameplateStackingTypes", idx, mode == "ON")
+    end
+    ns.RunOOC("nameplate stacking", function()
+        Set(types.Enemy, s.stackEnemies)
+        Set(types.Friendly, s.stackFriendly)
+    end)
+end
+NP.ApplyStacking = ApplyStacking
+
 function NP.ApplyAll()
     local s = S()
+    ApplyStacking()
     if not s.enabled then
         for unit, p in pairs(NP.plates) do
             local np = p.nameplate
