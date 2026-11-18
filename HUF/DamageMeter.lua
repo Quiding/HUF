@@ -697,6 +697,9 @@ local function PanelRow(i)
         if pcall(GameTooltip.SetSpellByID, GameTooltip, id) then GameTooltip:Show() end
     end)
     r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    r:SetScript("OnMouseUp", function(_, button)
+        if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown() end
+    end)
     panel.rows[i] = r
     return r
 end
@@ -716,6 +719,7 @@ local function BuildPanel()
     title:SetPoint("TOPLEFT")
     title:SetPoint("TOPRIGHT")
     title:SetHeight(20)
+    p.titleBar = title
     p.title = title:CreateTexture(nil, "BORDER")
     p.title:SetAllPoints()
     p.line = title:CreateTexture(nil, "ARTWORK")
@@ -728,6 +732,15 @@ local function BuildPanel()
     close:SetWidth(16)
     close.text:SetText("x")
     p.closeText = close.text
+    p.closeB = close
+    -- inside the window: back to the names
+    local back = TitleButton(title, function() DM.CloseBreakdown() end, "Back to the names (or right-click the list)")
+    back:SetPoint("TOPLEFT", 4, 0)
+    back:SetPoint("BOTTOMLEFT", 4, 0)
+    back:SetWidth(16)
+    back.text:SetText("<")
+    p.backB = back
+    p.backText = back.text
     p.head = title:CreateFontString(nil, "OVERLAY")
     ns.ApplyFont(p.head, "GLOBAL", 11, "OUTLINE")
     p.head:SetPoint("LEFT", 6, 0)
@@ -741,6 +754,10 @@ local function BuildPanel()
     p.body:SetScript("OnMouseWheel", function(_, delta)
         p.offset = math.max(0, (p.offset or 0) - delta)
         DM.RefreshBreakdown()
+    end)
+    p.body:EnableMouse(true)
+    p.body:SetScript("OnMouseUp", function(_, button)
+        if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown() end
     end)
     p.empty = p.body:CreateFontString(nil, "OVERLAY")
     ns.ApplyFont(p.empty, "GLOBAL", 11, "OUTLINE")
@@ -756,19 +773,42 @@ local function LayoutPanel()
     p:SetScale(c.scale)
     p:SetSize(c.width, win:GetHeight())
     p:ClearAllPoints()
-    local right = (win:GetRight() or 0) + c.width + 4
-    local screen = (UIParent:GetRight() or GetScreenWidth and GetScreenWidth() or 1920) * (UIParent:GetEffectiveScale() or 1)
-    if right * (win:GetEffectiveScale() or 1) > screen then
-        p:SetPoint("TOPRIGHT", win, "TOPLEFT", -2, 0)
+    local inline = c.breakdownInline
+    if inline then
+        -- in the window's place, above it: "<" (or a right-click) goes back
+        p:SetPoint("TOPLEFT", win, "TOPLEFT", 0, 0)
+        p:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", 0, 0)
+        p:SetFrameLevel(win:GetFrameLevel() + 20)
     else
-        p:SetPoint("TOPLEFT", win, "TOPRIGHT", 2, 0)
+        local right = (win:GetRight() or 0) + c.width + 4
+        local screen = (UIParent:GetRight() or GetScreenWidth and GetScreenWidth() or 1920) * (UIParent:GetEffectiveScale() or 1)
+        if right * (win:GetEffectiveScale() or 1) > screen then
+            p:SetPoint("TOPRIGHT", win, "TOPLEFT", -2, 0)
+        else
+            p:SetPoint("TOPLEFT", win, "TOPRIGHT", 2, 0)
+        end
     end
+    p.backB:SetShown(inline and true or false)
+    p.closeB:SetShown(not inline)
+    p.head:ClearAllPoints()
+    p.head:SetPoint("LEFT", inline and p.backB or p.titleBar, inline and "RIGHT" or "LEFT", inline and 4 or 6, 0)
+    p.head:SetPoint("RIGHT", p.closeB, "LEFT", -4, 0)
+    -- the window's title bar and background settings
     local a = ns.ACCENT
-    p.fill:SetColorTexture(0.04, 0.04, 0.05, c.bgAlpha)
-    p.title:SetColorTexture(0.08, 0.08, 0.09, math.min(1, c.bgAlpha + 0.15))
+    local th = c.titleHeight or 20
+    local bg, tc = c.bgColor or { r = 0.04, g = 0.04, b = 0.05 }, c.titleColor or { r = 0.08, g = 0.08, b = 0.09 }
+    local ta = (c.titleAlpha or -1) >= 0 and c.titleAlpha or math.min(1, c.bgAlpha + 0.15)
+    p.titleBar:SetHeight(th)
+    p.body:ClearAllPoints()
+    p.body:SetPoint("TOPLEFT", 1, -(th + 1))
+    p.body:SetPoint("BOTTOMRIGHT", -1, 1)
+    p.fill:SetColorTexture(bg.r, bg.g, bg.b, inline and math.max(c.bgAlpha, 0.85) or c.bgAlpha)
+    p.title:SetColorTexture(tc.r, tc.g, tc.b, inline and 1 or ta)
     p.line:SetColorTexture(a[1], a[2], a[3], 0.9)
+    p.line:SetShown(c.titleLine ~= false)
     ns.ApplyFont(p.head, c.font, c.titleSize, c.outline)
     ns.ApplyFont(p.closeText, c.font, c.titleSize, c.outline)
+    ns.ApplyFont(p.backText, c.font, c.titleSize, c.outline)
     ns.ApplyFont(p.empty, c.font, c.fontSize, c.outline)
     local tex = ns.TexturePath(c.texture)
     for i = 1, ROW_POOL do
