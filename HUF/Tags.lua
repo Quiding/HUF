@@ -129,20 +129,29 @@ local function GreyLevel(me)
     if me <= 59 then return me - math.floor(me / 5) - 1 end
     return me - 9
 end
+-- the vanilla rule (WoW Forever's own plates): red 5+ above, orange 3-4,
+-- yellow within 2, green below, grey past the trivial range. The game's
+-- GetCreatureDifficultyColor answers orange for a mob of your level there.
 local function LevelColor(level)
     if not level or level <= 0 then return DIFF.red end   -- skull
-    for _, fn in ipairs({ GetCreatureDifficultyColor, GetQuestDifficultyColor }) do
-        local c = Safe(fn, level)
-        if type(c) == "table" and type(c.r) == "number" then return c end
+    local me = Safe(UnitEffectiveLevel or UnitLevel, "player") or Safe(UnitLevel, "player")
+    if type(me) ~= "number" then
+        for _, fn in ipairs({ GetCreatureDifficultyColor, GetQuestDifficultyColor }) do
+            local c = Safe(fn, level)
+            if type(c) == "table" and type(c.r) == "number" then return c end
+        end
+        return nil
     end
-    local me = Safe(UnitLevel, "player")
-    if type(me) ~= "number" then return nil end
     local d = level - me
-    if d >= 5 then return DIFF.red end
-    if d >= 3 then return DIFF.orange end
-    if d >= -2 then return DIFF.yellow end
-    if level > GreyLevel(me) then return DIFF.green end
-    return DIFF.grey
+    local function G(name, fallback)
+        local c = _G[name]
+        return (type(c) == "table" and type(c.r) == "number") and c or fallback
+    end
+    if d >= 5 then return G("IMPOSSIBLE_DIFFICULTY_COLOR", DIFF.red) end
+    if d >= 3 then return G("DIFFICULT_DIFFICULTY_COLOR", DIFF.orange) end
+    if d >= -2 then return G("FAIR_DIFFICULTY_COLOR", DIFF.yellow) end
+    if level > GreyLevel(me) then return G("EASY_DIFFICULTY_COLOR", DIFF.green) end
+    return G("TRIVIAL_DIFFICULTY_COLOR", DIFF.grey)
 end
 
 local function Hex(c)
