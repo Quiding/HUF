@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.3.20.
+Version 0.3.21.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -12,7 +12,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
 ## Frames
 - **Player, Target, Target of target, Pet**: health and power bar, each with a thin dark border.
   Player / Target 175 x 24, Target of target (health only) and Pet hang off the target and
-  player frame. Every frame can be anchored to the screen or to another HUF frame.
+  player frame. Incoming heals (yours and others') show as a semi-transparent green bar after
+  the filled part and may run past the bar's end (overheal). Every frame can be anchored to the screen or to another HUF frame.
 - **Group (party)**: real secure unit frames (SecureGroupHeader), so `[@mouseover]` macros and
   click-casting work on them. Show myself or not, sort by name / Blizzard's party order / class,
   vertical or horizontal in either direction, adjustable padding. Missing health in health-status

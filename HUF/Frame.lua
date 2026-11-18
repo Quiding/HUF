@@ -27,6 +27,7 @@ local UNIT_EVENTS = {
     "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
     "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_CONNECTION", "UNIT_FACTION", "UNIT_FLAGS",
     "UNIT_CLASSIFICATION_CHANGED", "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED",
+    "UNIT_HEAL_PREDICTION",
 }
 local HEALTH_EVENTS = { UNIT_HEALTH = true, UNIT_MAXHEALTH = true, UNIT_HEALTH_FREQUENT = true }
 local POWER_EVENTS = { UNIT_POWER_UPDATE = true, UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true, UNIT_DISPLAYPOWER = true }
@@ -152,7 +153,9 @@ local function OnLeave() GameTooltip:Hide() end
 local function OnUnitEvent(ev, event)
     local f = ev.owner
     if not f.hunit or f.fake then return end
-    if HEALTH_EVENTS[event] then
+    if event == "UNIT_HEAL_PREDICTION" then
+        Frame.UpdateHealPred(f)
+    elseif HEALTH_EVENTS[event] then
         Frame.UpdateHealth(f)
         Frame.UpdateTexts(f)
     elseif POWER_EVENTS[event] then
@@ -197,6 +200,21 @@ function Frame.Build(f, key, secure)
 
     f.bars = {}
     for _, which in ipairs(BARS) do f.bars[which] = BuildBar(f, which) end
+
+    -- incoming heals: two bars (mine, others) that start where the health
+    -- fill ends and are as long as the whole bar, inside a clip frame that
+    -- reaches past the bar's end by the allowed overheal
+    local hp = { clip = CreateFrame("Frame", nil, f) }
+    hp.clip:SetClipsChildren(true)
+    hp.mine = CreateFrame("StatusBar", nil, hp.clip)
+    hp.other = CreateFrame("StatusBar", nil, hp.clip)
+    for _, b in ipairs({ hp.mine, hp.other }) do
+        b:SetStatusBarTexture(FLAT)
+        b:SetMinMaxValues(0, 1)
+        b:SetValue(0)
+    end
+    hp.clip:Hide()
+    f.healPred = hp
     f.health, f.power = f.bars.health, f.bars.power
 
     -- portrait (off by default)
@@ -448,6 +466,7 @@ function Frame.LayoutInner(f)
         LayoutBorder(bar.border, bar, b.borderSize, b.borderColor, b.borderAlpha)
         LayoutTexts(f, which)
     end
+    Frame.LayoutHealPred(f)
     f.textLayer:SetFrameLevel(math.max(h:GetFrameLevel(), pwr:GetFrameLevel()) + 5)
     por.edge:SetFrameLevel(por:GetFrameLevel() + 2)
     Frame.LayoutAuras(f)
@@ -599,6 +618,101 @@ function Frame.UpdateHealth(f)
         if okM and okC then SetValues(bar, max, cur) end
     end
     Frame.ColorBar(f, "health")
+    Frame.UpdateHealPred(f)
+end
+
+---------------------------------------------------------------------------
+-- Incoming heals (the game's heal prediction; values may be secret, they
+-- only go to SetMinMaxValues / SetValue)
+---------------------------------------------------------------------------
+function Frame.LayoutHealPred(f)
+    local hp, c = f.healPred, f.s.healPred
+    if not hp then return end
+    if not (c and c.enabled) then hp.clip:Hide() return end
+    local h = f.health
+    local rev = f.s.health.reverse
+    local w = f.barWidth or f.s.width
+    local over = math.max(0, c.overheal or 0) * w / 100
+    hp.clip:ClearAllPoints()
+    if rev then
+        hp.clip:SetPoint("TOPLEFT", h, "TOPLEFT", -over, 0)
+        hp.clip:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 0, 0)
+    else
+        hp.clip:SetPoint("TOPLEFT", h, "TOPLEFT", 0, 0)
+        hp.clip:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", over, 0)
+    end
+    hp.clip:SetFrameLevel(h:GetFrameLevel() + 2)     -- above the fill and its shading, below the border
+    local tex = ns.TexturePath(f.s.health.texture)
+    local fill = h:GetStatusBarTexture()
+    local a, b = rev and "TOPRIGHT" or "TOPLEFT", rev and "TOPLEFT" or "TOPRIGHT"
+    local a2, b2 = rev and "BOTTOMRIGHT" or "BOTTOMLEFT", rev and "BOTTOMLEFT" or "BOTTOMRIGHT"
+    local prev = fill
+    for i, bar in ipairs({ hp.mine, hp.other }) do
+        bar:SetStatusBarTexture(tex)
+        bar:SetOrientation("HORIZONTAL")
+        bar:SetReverseFill(rev)
+        bar:ClearAllPoints()
+        bar:SetPoint(a, prev, b, 0, 0)
+        bar:SetPoint(a2, prev, b2, 0, 0)
+        bar:SetWidth(w)
+        local alpha = i == 1 and c.alpha or c.alpha * 0.7
+        bar:SetStatusBarColor(c.color.r, c.color.g, c.color.b, alpha)
+        prev = bar:GetStatusBarTexture()
+    end
+    hp.clip:Show()
+    Frame.UpdateHealPred(f)
+end
+
+local function Calculator(hp)
+    if hp.calc ~= nil then return hp.calc end
+    hp.calc = false
+    if CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction then
+        local ok, calc = pcall(CreateUnitHealPredictionCalculator)
+        if ok and calc then
+            -- clamp at maximum health, not at the missing part: the clip frame
+            -- decides how far past full the bars may show
+            local modes = Enum and Enum.UnitIncomingHealClampMode
+            if calc.SetIncomingHealClampMode and modes and modes.MaximumHealth then
+                pcall(calc.SetIncomingHealClampMode, calc, modes.MaximumHealth)
+            end
+            hp.calc = calc
+        end
+    end
+    return hp.calc
+end
+
+function Frame.UpdateHealPred(f)
+    local hp, c = f.healPred, f.s.healPred
+    if not hp or not (c and c.enabled) then return end
+    local mine, others, max
+    if f.fake then
+        max, mine, others = f.fake.maxhp, (not f.fake.dead and not f.fake.offline) and f.fake.incoming or 0, 0
+    elseif f.hunit and not IsGray(f.hunit) then
+        local unit = f.hunit
+        local okM, m = pcall(UnitHealthMax, unit)
+        max = okM and m or nil
+        local calc = Calculator(hp)
+        if calc then
+            local ok = pcall(UnitGetDetailedHealPrediction, unit, "player", calc)
+            if ok then
+                local okI, _, my, oth = pcall(calc.GetIncomingHeals, calc)
+                if okI then mine, others = my, oth end
+            end
+        elseif UnitGetIncomingHeals then
+            local okA, all = pcall(UnitGetIncomingHeals, unit)
+            local okP, my = pcall(UnitGetIncomingHeals, unit, "player")
+            if okA and okP and not IsSecret(all) and not IsSecret(my) then
+                mine, others = my or 0, math.max(0, (all or 0) - (my or 0))
+            elseif okA then
+                mine, others = all, 0
+            end
+        end
+    end
+    if max == nil then mine, others, max = 0, 0, 1 end
+    for i, bar in ipairs({ hp.mine, hp.other }) do
+        if not pcall(bar.SetMinMaxValues, bar, 0, max) then bar:SetMinMaxValues(0, 1) end
+        if not pcall(bar.SetValue, bar, (i == 1 and mine or others) or 0) then bar:SetValue(0) end
+    end
 end
 
 function Frame.UpdatePower(f)

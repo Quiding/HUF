@@ -398,8 +398,14 @@ local function FramePage(f, key)
     L:Slider("Scale", 0.5, 2, 0.05, function() return S().scale end, function(v) S().scale = v end, "%.2f")
     L:Slider("Opacity", 0.1, 1, 0.05, function() return S().alpha end, function(v) S().alpha = v end, "%.2f")
     if ns.UNIT_BY_KEY[key].group then
-        L:Slider("Padding (space between frames)", -10, 80, 1,
-            function() return S().group.spacing end, function(v) S().group.spacing = v end)
+        L:Slider("Padding (this orientation)", -10, 80, 1,
+            function()
+                local o = S().group
+                return ns.Group.Growth(o).dx ~= 0 and (o.spacingH or 2) or o.spacing
+            end, function(v)
+                local o = S().group
+                if ns.Group.Growth(o).dx ~= 0 then o.spacingH = v else o.spacing = v end
+            end)
     end
     L:Header("Position")
     if not ns.UNIT_BY_KEY[key].group then
@@ -452,7 +458,7 @@ local function FramePage(f, key)
             { value = "UP", text = "Vertical - bottom to top" },
             { value = "RIGHT", text = "Horizontal - left to right" },
             { value = "LEFT", text = "Horizontal - right to left" },
-        }, function() return select(2, ns.Group.Growth(O())) end, function(v) O().orientation = v end)
+        }, function() return select(2, ns.Group.Growth(O())) end, function(v) O().orientation = v if ns.RefreshConfig then ns.RefreshConfig() end end)
         R:Cycle("Sort members by", {
             { value = "NAME", text = "Name (alphabetical)" },
             { value = "INDEX", text = "Blizzard's party order" },
@@ -502,6 +508,16 @@ local function BarPage(f, key, which)
     L:Check("Left: accent colour", Opt(B, "gradStartAccent"))
     L:Color("Gradient: right", Opt(B, "gradEnd"))
     L:Check("Right: accent colour", Opt(B, "gradEndAccent"))
+    if which == "health" then
+        local HP = function() return U(key).healPred end
+        L:Header("Incoming heals")
+        local ge, se = Opt(HP, "enabled")
+        L:Check("Show incoming heals", ge, se, "Heals on their way to this unit (yours and others'), as a semi-transparent bar after the filled part.")
+        L:Color("Colour", Opt(HP, "color"))
+        L:Slider("Opacity", 0.1, 1, 0.05, function() return HP().alpha end, function(v) HP().alpha = v end, "%.2f")
+        L:Slider("Past the bar's end (overheal)", 0, 100, 5, function() return HP().overheal end,
+            function(v) HP().overheal = v end, "%d%%")
+    end
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Status colours")

@@ -14,18 +14,18 @@ ns.unlocked = false
 
 -- made-up characters for unlock mode (never real names)
 local PEOPLE = {
-    { first = "Apple",  last = "Bikini",       class = "PRIEST",  slot = 1, classIndex = 1, hp = 3420 },
+    { first = "Apple",  last = "Bikini",       class = "PRIEST",  slot = 1, classIndex = 1, hp = 3420, incoming = 1200 },
     { first = "Monika", last = "Songspike",    class = "BARD",    slot = 2, classIndex = 1, hp = 2650 },
     { first = "John",   last = "Multiboxer",   class = "WARRIOR", slot = 3, classIndex = 1, hp = 4100,
       powerToken = "RAGE", maxpower = 100, power = 35 },
-    { first = "Elsa",   last = "Lookingglass", class = "PRIEST",  slot = 4, classIndex = 2, hp = 1900 },
+    { first = "Elsa",   last = "Lookingglass", class = "PRIEST",  slot = 4, classIndex = 2, hp = 1900, incoming = 2600 },
     { first = "Salsa",  last = "Berry",        class = "WARLOCK", slot = 5, classIndex = 1, hp = 4100 },
 }
 local function Person(i)
     local m = PEOPLE[i]
     return { first = m.first, last = m.last, class = m.class, player = true, level = 60,
         maxhp = 4100, hp = m.hp, maxpower = m.maxpower or 3000, power = m.power or 2100,
-        powerToken = m.powerToken or "MANA", slot = m.slot, classIndex = m.classIndex }
+        powerToken = m.powerToken or "MANA", slot = m.slot, classIndex = m.classIndex, incoming = m.incoming }
 end
 
 local FAKE = {
@@ -154,8 +154,9 @@ local function LayoutGroup()
     local vertical = g.dx == 0
     box:SetScale(s.scale)
     box.label:SetTextColor(A[1], A[2], A[3])
-    local w = vertical and s.width or (n * s.width + (n - 1) * o.spacing)
-    local h = vertical and (n * s.height + (n - 1) * o.spacing) or s.height
+    local sp = ns.Group.Spacing(o)
+    local w = vertical and s.width or (n * s.width + (n - 1) * sp)
+    local h = vertical and (n * s.height + (n - 1) * sp) or s.height
     box:SetSize(w, h)
     ns.Group.Place(box, s)
     for i, f in ipairs(box.members) do
@@ -166,7 +167,7 @@ local function LayoutGroup()
             f:Hide()
         else
             -- from the box corner the header grows from
-            f:SetPoint(g.corner, box, g.corner, g.dx * pos * (s.width + o.spacing), g.dy * pos * (s.height + o.spacing))
+            f:SetPoint(g.corner, box, g.corner, g.dx * pos * (s.width + sp), g.dy * pos * (s.height + sp))
             f:SetSize(s.width, s.height)
             Frame.LayoutInner(f)
             Frame.Update(f)

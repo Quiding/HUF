@@ -36,6 +36,13 @@ function G.Growth(o)
     return GROWTH[key] or GROWTH.DOWN, key
 end
 
+-- padding between the frames: its own value for each direction
+function G.Spacing(o)
+    local g = G.Growth(o)
+    if g.dx ~= 0 then return o.spacingH or o.spacing or 2 end
+    return o.spacing or 10
+end
+
 -- puts a group frame (the header or its preview) so its first member's top
 -- left corner is at s.point
 function G.Place(frame, s)
@@ -125,8 +132,9 @@ local function Wanted(ctl)
     local g = G.Growth(o)
     ctl:SetAttribute("huf-showPlayer", o.showPlayer and true or false)
     ctl:SetAttribute("huf-point", g.point)
-    ctl:SetAttribute("huf-xOffset", g.dx * o.spacing)
-    ctl:SetAttribute("huf-yOffset", g.dy * o.spacing)
+    local sp = G.Spacing(o)
+    ctl:SetAttribute("huf-xOffset", g.dx * sp)
+    ctl:SetAttribute("huf-yOffset", g.dy * sp)
     if o.sort == "CLASS" then
         ctl:SetAttribute("huf-groupBy", "CLASS")
         ctl:SetAttribute("huf-groupingOrder", CLASS_ORDER)

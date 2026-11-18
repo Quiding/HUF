@@ -9,7 +9,7 @@ _G.HUF = ns                      -- public: other addons (MMT) reach HUF here
 
 ns.name = ADDON
 ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.20"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.21"
 ns.API_VERSION = 1
 ns.MEDIA = "Interface\\AddOns\\HUF\\Media\\"
 ns.LOGO = ns.MEDIA .. "Logo"
@@ -328,6 +328,9 @@ local function UnitDefaults(point)
         texts = {},
         debuffs = AuraRow(true, "BELOW_LEFT"),    -- small icons under the frame
         buffs = AuraRow(false, "ABOVE_LEFT"),
+        -- incoming heals on the health bar: semi-transparent green after the
+        -- filled part, may run past the bar's end by up to `overheal` %
+        healPred = { enabled = true, color = C(0.25, 0.95, 0.45), alpha = 0.45, overheal = 50 },
     }
     u.power.enabled = true
     u.power.size = 9                -- health = height - power - gap = 14
@@ -368,14 +371,21 @@ local function BuildDefaults()
     u.targettarget.texts.power = Texts()
     u.targettarget.debuffs.enabled = false
 
-    -- Pet: the player frame's look, at the bottom left of the player frame
-    -- (offsets like the target of target), no buffs / debuffs
+    -- Pet: the player frame's look (175 x 20, health in status colours, 3 px
+    -- power bar, health text 17, no power text), below the player frame on
+    -- the left, no buffs / debuffs, no incoming heals
     local pet = ns.CopyTable(u.player)
     pet.hideBlizzardAuras = nil
     pet.anchorTo = "player"
-    pet.point = { "TOPLEFT", "BOTTOMLEFT", -20, -25 }
+    pet.point = { "BOTTOMLEFT", "BOTTOMLEFT", -140, -45 }
+    pet.height = 20
+    pet.health.colorMode = "STATUS"
+    pet.power.size = 3
+    pet.texts.health.BOTTOMLEFT.size = 17
+    pet.texts.power.RIGHT.text = ""
     pet.debuffs.enabled = false
     pet.buffs.enabled = false
+    pet.healPred.enabled = false
     u.pet = pet
 
     -- Group (party): 200 x 25, health 18 + power 7, class colours; missing
@@ -383,7 +393,7 @@ local function BuildDefaults()
     -- and power % on the power bar, reaching below it; my buffs top left,
     -- debuffs top right
     local g = UnitDefaults({ "TOPLEFT", "TOPLEFT", 40, -300 })
-    g.width, g.height = 150, 30
+    g.width, g.height = 125, 28
     g.power.size, g.power.gap = 7, 0
     g.health.colorMode = "CLASS"
     g.texts.health = Texts({ TOP = { "[hp:missing]", 18 } })
@@ -395,11 +405,13 @@ local function BuildDefaults()
     g.buffs.mine = true
     g.debuffs = AuraRow(true, "ABOVE_RIGHT")
     for _, r in ipairs({ g.buffs, g.debuffs }) do r.size, r.perRow, r.rows, r.offset = 16, 5, 1, 1 end
+    g.buffs.position, g.buffs.offset = "BELOW_LEFT", 8     -- my HoTs under the frame
     g.group = {
         showPlayer = true,          -- me in the group frames
         orientation = "DOWN",       -- growth: DOWN (vertical, top to bottom) | UP | RIGHT (horizontal, left to right) | LEFT
         sort = "NAME",              -- NAME (alphabetical) | INDEX (Blizzard's party order) | CLASS
-        spacing = 10,
+        spacing = 10,               -- padding, vertical
+        spacingH = 2,               -- padding, horizontal
     }
     u.party = g
 
@@ -443,7 +455,7 @@ local function BuildDefaults()
             enabled = true,
             mode = "NAME_BAR",          -- NAME | NAME_BAR | BAR
             friendlyMode = "NAME",      -- SAME (as enemies) | NAME | NAME_BAR | BAR
-            width = 125, height = 8,
+            width = 125, height = 10,
             texture = "Smooth",
             colorMode = "CLASS",        -- CLASS (players) / reaction (NPCs) | STATIC | STATUS
             color = C(0.20, 0.65, 0.30),
@@ -457,7 +469,7 @@ local function BuildDefaults()
             targetBorder = true,        -- your target's plate: accent border
             yOffset = 0,
             -- name
-            font = "GLOBAL", fontSize = 10, outline = "OUTLINE",
+            font = "GLOBAL", fontSize = 12, outline = "OUTLINE",
             nameColor = "REACTION",     -- REACTION (class / reaction) | WHITE | CUSTOM
             nameCustom = C(1, 1, 1),
             nameGap = 1,                -- space between name and bar
@@ -476,9 +488,9 @@ local function BuildDefaults()
             questColor = C(1.00, 0.82, 0.00),
             -- cast bar
             showCast = true,
-            castHeight = 3, castGap = 1,
+            castHeight = 7, castGap = 1,
             castColor = C(1.00, 0.70, 0.20),
-            castText = true, castFontSize = 7,
+            castText = true, castFontSize = 10,
             castIcon = true,
             -- auras (small icons above the name)
             showBuffs = false, showDebuffs = true,
@@ -794,6 +806,40 @@ ns.On("ADDON_LOADED", function(name)
         end
         for _, prof in pairs(HUFDB.profiles or {}) do Walk(prof, 0) end
         HUFDB.dataVersion = 10
+    end
+    -- 0.3.21: new defaults from play (only where still the old defaults)
+    if HUFDB.dataVersion < 11 then
+        local function Same(p, a) return type(p) == "table" and p[1] == a[1] and p[2] == a[2] and p[3] == a[3] and p[4] == a[4] end
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local n = prof.nameplates
+            if n then
+                if n.height == 8 then n.height = 10 end
+                if n.fontSize == 10 then n.fontSize = 12 end
+                if n.castHeight == 3 then n.castHeight = 7 end
+                if n.castFontSize == 7 then n.castFontSize = 10 end
+            end
+            local u = prof.units or {}
+            local g = u.party
+            if g then
+                if g.width == 150 and g.height == 30 then g.width, g.height = 125, 28 end
+                local b = g.buffs
+                if b and b.position == "ABOVE_LEFT" and b.offset == 1 then b.position, b.offset = "BELOW_LEFT", 8 end
+            end
+            local p = u.pet
+            if p then
+                if Same(p.point, { "TOPLEFT", "BOTTOMLEFT", -20, -25 }) then
+                    p.point = { "BOTTOMLEFT", "BOTTOMLEFT", -140, -45 }
+                end
+                if p.width == 175 and p.height == 24 then p.height = 20 end
+                if p.health and p.health.colorMode == "GRADIENT" then p.health.colorMode = "STATUS" end
+                if p.power and p.power.size == 9 then p.power.size = 3 end
+                local t = p.texts
+                if t and t.health and t.health.BOTTOMLEFT and t.health.BOTTOMLEFT.size == 24 then t.health.BOTTOMLEFT.size = 17 end
+                if t and t.power and t.power.RIGHT and t.power.RIGHT.text == "[mp]" then t.power.RIGHT.text = "" end
+                if p.healPred == nil then p.healPred = { enabled = false } end
+            end
+        end
+        HUFDB.dataVersion = 11
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}
