@@ -250,8 +250,113 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         msg:SetText(("Profile \"%s\" exported (%d characters). Copy it with Ctrl+C."):format(ns.CurrentProfileName(), #text))
     end)
     R:Add(exp, 0)
+    -- EllesmereUI's frames (from a string or its live settings) -> HUF's
+    -- the import window: which frames to show (ticked as in Ellesmere; a
+    -- frame Ellesmere has off can be turned on), and while EllesmereUI
+    -- Nameplates is loaded, whether to turn it off (two plates otherwise)
+    local dlg
+    local MAX_ROWS = 6
+    local function ImportWindow()
+        if dlg then return dlg end
+        local f = CreateFrame("Frame", "HUFEllesmereImportFrame", UIParent)
+        f:SetWidth(400)
+        f:SetPoint("TOP", 0, -140)
+        f:SetFrameStrata("FULLSCREEN_DIALOG")
+        f:EnableMouse(true)
+        UI.Fill(f, 0.05, 0.05, 0.06, 0.96)
+        UI.Border(f, ns.ACCENT[1], ns.ACCENT[2], ns.ACCENT[3], 0.6)
+        f.text = UI.Label(f, "")
+        f.text:SetPoint("TOPLEFT", 16, -16)
+        f.text:SetPoint("TOPRIGHT", -16, -16)
+        f.text:SetJustifyH("LEFT")
+        f.rows = {}
+        for i = 1, MAX_ROWS + 1 do
+            local row = { on = false }
+            row.check = UI.Check(f, 368, "", function() return row.on end, function(v) row.on = v end)
+            row.check:SetPoint("TOPLEFT", 16, -52 - (i - 1) * (UI.ROW - 2))
+            f.rows[i] = row
+        end
+        f.accept = UI.Button(f, 170, "Import", function()
+            local fn = f.onAccept
+            f:Hide()
+            if fn then fn() end
+        end)
+        f.accept:SetPoint("BOTTOMLEFT", 16, 14)
+        f.cancel = UI.Button(f, 170, "Cancel", function() f:Hide() end)
+        f.cancel:SetPoint("BOTTOMRIGHT", -16, 14)
+        f:SetScript("OnHide", function() f.onAccept = nil end)
+        UI.CloseOnEscape(f)
+        f:Hide()
+        dlg = f
+        return f
+    end
+
+    local function EllesmereImport(ok, t, notes, what, parts)
+        if not ok then msg:SetText("|cffff6060" .. t .. "|r") return end
+        parts = parts or {}
+        local list = table.concat(what, " and ")
+        local f = ImportWindow()
+        f.text:SetText(("Replace the %s of \"%s\" with EllesmereUI's.\nShow in HUF:"):format(list, ns.CurrentProfileName()))
+        local n = 0
+        for i, row in ipairs(f.rows) do
+            local part = i <= MAX_ROWS and parts[i]
+            if part then
+                n = i
+                row.part, row.on = part, part.on and true or false
+                row.check.label:SetText(part.on and part.title or (part.title .. "  |cff888888(" .. part.why .. ")|r"))
+                row.check.Refresh()
+                row.check:Show()
+            else
+                row.part = nil
+                row.check:Hide()
+            end
+        end
+        -- both nameplate addons on = two plates per unit: offer to turn Ellesmere's off
+        local npLoaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("EllesmereUINameplates")
+        local extra = f.rows[MAX_ROWS + 1]
+        extra.part = nil
+        if npLoaded and C_AddOns.DisableAddOn then
+            n = n + 1
+            extra.check:ClearAllPoints()
+            extra.check:SetPoint("TOPLEFT", 16, -52 - (n - 1) * (UI.ROW - 2) - 8)
+            extra.on = true
+            extra.check.label:SetText("Turn off EllesmereUI Nameplates (reloads)")
+            extra.check.Refresh()
+            extra.check:Show()
+        else
+            extra.on = false
+            extra.check:Hide()
+        end
+        f:SetHeight(52 + n * (UI.ROW - 2) + 64)
+        f.onAccept = function()
+            local npOn = false
+            for i = 1, MAX_ROWS do
+                local row = f.rows[i]
+                if row.part then
+                    row.part.tbl.enabled = row.on
+                    if row.part.title == "Nameplates" then npOn = row.on end
+                end
+            end
+            ns.ImportProfile(t)
+            area.edit:SetText("")
+            msg:SetText(("EllesmereUI %s imported%s"):format(list, #notes > 0 and " (details in chat)." or "."))
+            for _, line in ipairs(notes) do ns.Print("Ellesmere import: %s", line) end
+            if extra.check:IsShown() and extra.on then
+                pcall(C_AddOns.DisableAddOn, "EllesmereUINameplates", UnitName("player"))
+                ReloadUI()
+            elseif npLoaded and npOn then
+                ns.Print("EllesmereUI Nameplates is still on: every unit gets two nameplates.")
+            end
+        end
+        f:Show()
+    end
     local imp = UI.Button(page, (COL_W - 6) / 2, "Import", function()
-        local ok, t = ns.ReadProfileText(area.edit:GetText())
+        local text = area.edit:GetText()
+        if ns.IsEllesmereText(text) then
+            EllesmereImport(ns.ReadEllesmereText(text))
+            return
+        end
+        local ok, t = ns.ReadProfileText(text)
         if not ok then msg:SetText("|cffff6060" .. t .. "|r") return end
         UI.Confirm(("Replace every setting of the active profile \"%s\" with the imported ones?"):format(ns.CurrentProfileName()), "Import",
             function()
@@ -262,8 +367,14 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
     end)
     imp:SetPoint("TOPLEFT", exp, "TOPRIGHT", 6, 0)
     R:Space(UI.ROW + 4)
+    if _G.EllesmereUI and ns.ReadEllesmereLive then
+        R:Button("Import from EllesmereUI (its current settings)", function()
+            EllesmereImport(ns.ReadEllesmereLive())
+        end)
+    end
     R:Add(msg, 40)
     R:Note("Import replaces the active profile. To keep it, create a new profile first (left) and import into that one. Click-cast bindings belong to the character and are not part of a profile.")
+    if _G.EllesmereUI then R:Note("EllesmereUI: \"Import from EllesmereUI\" or an EllesmereUI string (!EUI_...) in the box: its unit frames (player, target, target of target, pet, with the font) and nameplates replace HUF's; group frames stay. Close to Ellesmere's look, not identical.") end
 end)
 
 ---------------------------------------------------------------------------

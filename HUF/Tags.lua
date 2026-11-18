@@ -28,6 +28,7 @@ ns.TAGS = {
     { value = "[hp]",         text = "Health (HP#)" },
     { value = "[hp:max]",     text = "Maximum health" },
     { value = "[hp%]",        text = "Health % (HP%)" },
+    { value = "[hp%:nosign]", text = "Health % without the % sign" },
     { value = "[hp:missing]", text = "Missing health" },
     { value = "[hp:smart]",   text = "Smart health (max when full, else HP | %)" },
     { header = true, text = "Mana / energy / rage" },
@@ -225,6 +226,14 @@ Live["hp%"] = function(u)
     local ok, s = pcall(fmt, "%d%%", v)
     return ok and s or nil
 end
+Live["hp%:nosign"] = function(u)
+    local w = Word(u)
+    if w then return w end
+    local v = HealthPct(u)
+    if v == nil then return nil end
+    local ok, s = pcall(fmt, "%d", v)
+    return ok and s or nil
+end
 Live["hp:missing"] = function(u)
     local w = Word(u)
     if w then return w end
@@ -323,6 +332,7 @@ end
 Fake["hp"] = function(f) return FakeWord(f) or FakeAbbrev(f.hp) end
 Fake["hp:max"] = function(f) return FakeAbbrev(f.maxhp) end
 Fake["hp%"] = function(f) return FakeWord(f) or fmt("%d%%", f.hp / f.maxhp * 100) end
+Fake["hp%:nosign"] = function(f) return FakeWord(f) or fmt("%d", f.hp / f.maxhp * 100) end
 Fake["hp:missing"] = function(f)
     local w = FakeWord(f)
     if w then return w end

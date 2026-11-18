@@ -158,18 +158,29 @@ local function Layout(p)
 
     ns.ApplyFont(p.name, s.font, s.fontSize, s.outline)
     p.name:ClearAllPoints()
-    if showBar then
+    local inside = showBar and (s.namePosition == "LEFT" or s.namePosition == "CENTER")
+    p.nameInside = inside
+    if inside then
+        -- in the bar: left (room for the health text on the right) or centred
+        local left = s.namePosition == "LEFT"
+        p.name:SetPoint(left and "LEFT" or "CENTER", p, left and "LEFT" or "CENTER", left and 3 or 0, 0)
+        p.name:SetJustifyH(left and "LEFT" or "CENTER")
+        p.name:SetWidth(math.max(10, s.width - (left and (s.showHealth and 34 or 6) or 4)))
+    elseif showBar then
+        p.name:SetJustifyH("CENTER")
         p.name:SetPoint("BOTTOM", p, "TOP", 0, s.nameGap + bs)
         p.name:SetWidth(s.width + 40)
     else
+        p.name:SetJustifyH("CENTER")
         p.name:SetPoint("CENTER", p, "CENTER", 0, 0)
         p.name:SetWidth(0)
     end
     p.name:SetShown(showName)
 
-    ns.ApplyFont(p.hp, s.font, math.max(6, s.fontSize - 2), s.outline)
+    local hs = (s.healthSize or 0) > 0 and s.healthSize or math.max(6, s.fontSize - 2)
+    ns.ApplyFont(p.hp, s.font, hs, s.outline)
     p.hp:ClearAllPoints()
-    p.hp:SetPoint("RIGHT", p, "RIGHT", -1, 0)
+    p.hp:SetPoint("RIGHT", p, "RIGHT", inside and -3 or -1, 0)
     p.hp:SetShown(showBar and s.showHealth)
 
     -- quest progress ("2/10") left outside the bar (left of the name without a bar)
@@ -213,7 +224,7 @@ local function Layout(p)
     -- aura row above the name (above the bar in bar-only mode)
     local a = p.auras
     a:ClearAllPoints()
-    if showName then
+    if showName and not inside then
         a:SetPoint("BOTTOMLEFT", p.name, "TOPLEFT", 0, s.auraGap)
         a:SetPoint("BOTTOMRIGHT", p.name, "TOPRIGHT", 0, s.auraGap)
     else
@@ -247,7 +258,7 @@ local function Layout(p)
         end
         sb:ClearAllPoints()
         sb:SetPoint("CENTER", np, "CENTER", 0, s.yOffset)
-        sb:SetSize(s.width, s.height + (showName and (s.fontSize + s.nameGap) or 0))
+        sb:SetSize(s.width, s.height + ((showName and not inside) and (s.fontSize + s.nameGap) or 0))
         sb:Show()
         pcall(np.SetStackingBoundsFrame, np, sb)
     end
@@ -266,7 +277,7 @@ local function UpdateHealth(p)
         pcall(h.SetValue, h, cur)
     end
     local s = S()
-    if s.showHealth then ns.SetTemplateText(p.hp, p, "[hp%]") end
+    if s.showHealth then ns.SetTemplateText(p.hp, p, s.healthTag or "[hp%]") end
     if s.tappedGray and UnitIsTapDenied then
         local ok, t = pcall(UnitIsTapDenied, unit)
         if ok and Bool(t) then h:SetStatusBarColor(0.5, 0.5, 0.5) return end
@@ -275,10 +286,27 @@ local function UpdateHealth(p)
         local ok, r, g, b = ns.UnitStatusColor(unit, s, false)
         if ok then h:SetStatusBarColor(r, g, b) return end
     end
-    local c
-    if s.colorMode == "CLASS" then c = ns.UnitColor(unit, true) end
+    local c, dim
+    if s.colorMode == "CLASS" then
+        local okP, isPlayer = pcall(UnitIsPlayer, unit)
+        local okR, reaction = pcall(UnitReaction, unit, "player")
+        if s.reactionColors == "CUSTOM" and not (okP and Bool(isPlayer))
+            and okR and reaction and not IsSecret(reaction) then
+            -- own colours (EllesmereUI's way): a neutral NPC fighting counts as hostile
+            local okC, fighting = pcall(UnitAffectingCombat, unit)
+            fighting = okC and Bool(fighting)
+            if reaction <= 3 or (reaction == 4 and fighting) then
+                c = s.hostileColor
+                dim = s.dimOutOfCombat and not fighting
+            elseif reaction == 4 then c = s.neutralColor
+            else c = s.friendlyColor end
+        else
+            c = ns.UnitColor(unit, true)
+        end
+    end
     c = c or s.color
-    h:SetStatusBarColor(c.r, c.g, c.b)
+    if dim then h:SetStatusBarColor(c.r * 0.6, c.g * 0.6, c.b * 0.6)
+    else h:SetStatusBarColor(c.r, c.g, c.b) end
 end
 
 local function UpdateName(p)
@@ -292,7 +320,7 @@ local function UpdateName(p)
         ns.SetTemplateText(p.name, holder, "[levelclass:color]")
         local okL, lvl = pcall(p.name.GetText, p.name)
         if okL and lvl ~= nil and not IsSecret(lvl) and lvl ~= "" then
-            pcall(p.name.SetFormattedText, p.name, "%s %s", lvl, name)
+            pcall(p.name.SetFormattedText, p.name, "%s%s%s", lvl, s.levelSep or " ", name)
         else
             pcall(p.name.SetText, p.name, name)
         end

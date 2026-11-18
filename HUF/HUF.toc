@@ -11,6 +11,7 @@
 
 Core.lua
 Share.lua
+EllesmereImport.lua
 Debug.lua
 Widgets.lua
 Names.lua
