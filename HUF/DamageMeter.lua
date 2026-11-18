@@ -589,7 +589,8 @@ local function RefreshOne()
     win.typeText:SetText(t.text)
     win.sessionText:SetText(SessionLabel())
     if c.titleIcons then
-        local size = c.titleIconSize or 18
+        -- inside the title bar: at most its height - 2
+        local size = math.max(8, math.min(c.titleIconSize or 18, (c.titleHeight or 20) - 2))
         win.typeB:SetIcon(TYPE_ICONS[t.key] or TYPE_ICONS.DamageDone, size)
         local sk = (wc.session == "OVERALL" and "OVERALL") or (type(wc.session) == "number" and "EARLIER") or "CURRENT"
         win.sessB:SetIcon(SESSION_ICONS[sk], size)
@@ -946,7 +947,7 @@ local function Layout()
     if c.titleIcons then
         -- like EllesmereUI's header: the name at the left; at the right the
         -- meter type and fight icons, + new window, R reset, x close
-        local is = c.titleIconSize or 18
+        local is = math.max(8, math.min(c.titleIconSize or 18, th - 2))
         w.addB:SetPoint("TOPRIGHT", resetB, "TOPLEFT", -3, 0)
         w.addB:SetPoint("BOTTOMRIGHT", resetB, "BOTTOMLEFT", -3, 0)
         w.addB:SetWidth(14)
