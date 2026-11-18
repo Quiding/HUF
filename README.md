@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.3.16.
+Version 0.3.17.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -20,7 +20,9 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   left, debuffs top right. Offline members: light grey bar and "Offline". Hidden alone and in a
   raid (raid frames are planned).
 - **Nameplates**: name only / name + bar / bar only (friendly units separately), level, elite /
-  rare star, quest progress ("2/10") left of the bar, cast bar, your debuffs and buffs.
+  rare star, quest progress ("2/10") left of the bar, cast bar, your debuffs and buffs with time
+  left as numbers. Name above or inside the bar, own NPC colours, darker out of combat. Questie's
+  quest icon is moved next to HUF's quest progress.
 - **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
   where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
   and debuff icons.
@@ -53,6 +55,8 @@ MMT hides names outside MMT / never). HUF uses MMT's documented privacy API (top
 ## Profiles
 Account-wide profiles chosen per character. General > Profiles: create, copy, reset, and
 **export / import** a profile as one line of text (copy & paste to another account).
+With EllesmereUI installed: **Import from EllesmereUI** (its current settings or a `!EUI_` string)
+brings over the look of its player, target, target of target, pet frames and nameplates.
 
 ## For addon authors
 `_G.HUF`: `HUF.API_VERSION` (1), `HUF.RegisterNameProvider(id, fn)` (`fn(unit, first, last)`
