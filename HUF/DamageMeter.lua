@@ -672,6 +672,190 @@ end
 -- Breakdown panel: beside the meter (right, or left when there's no room)
 ---------------------------------------------------------------------------
 local panel
+---------------------------------------------------------------------------
+-- Spell details on hover (a breakdown row): a box beside the window with
+-- the spell's total, per second, share and rank, and the player's damage
+-- per target. The game's meter data has no hits, crits or misses (only the
+-- combat log has those, and addons may not read it here).
+---------------------------------------------------------------------------
+local hover
+local HOVER_LINES = 14
+
+local function BuildHover()
+    if hover then return end
+    local h = CreateFrame("Frame", "HUF_DamageMeterSpell", UIParent)
+    hover = h
+    h:SetFrameStrata("TOOLTIP")
+    h:SetClampedToScreen(true)
+    h.fill = h:CreateTexture(nil, "BACKGROUND")
+    h.fill:SetAllPoints()
+    h.border = UI.Border(h, 0, 0, 0, 1)
+    h.top = h:CreateTexture(nil, "BORDER")
+    h.top:SetPoint("TOPLEFT")
+    h.top:SetPoint("TOPRIGHT")
+    h.icon = h:CreateTexture(nil, "ARTWORK")
+    h.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    h.head = h:CreateFontString(nil, "OVERLAY")
+    h.head:SetJustifyH("LEFT")
+    h.head:SetWordWrap(false)
+    h.lines = {}
+    for i = 1, HOVER_LINES do
+        local l = {}
+        l.left = h:CreateFontString(nil, "OVERLAY")
+        l.right = h:CreateFontString(nil, "OVERLAY")
+        l.left:SetJustifyH("LEFT")
+        l.left:SetWordWrap(false)
+        l.right:SetJustifyH("RIGHT")
+        h.lines[i] = l
+    end
+    h:Hide()
+end
+
+-- the session of a meter type, as the window shows it
+local function SessionOf(c, mtype)
+    if not (Available() and mtype ~= nil) then return nil end
+    local ok, s
+    if type(c.session) == "number" and C_DamageMeter.GetCombatSessionFromID then
+        ok, s = pcall(C_DamageMeter.GetCombatSessionFromID, c.session, mtype)
+    elseif C_DamageMeter.GetCombatSessionFromType then
+        local st = c.session == "OVERALL" and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        ok, s = pcall(C_DamageMeter.GetCombatSessionFromType, st, mtype)
+    end
+    return ok and type(s) == "table" and s or nil
+end
+local function SourceOf(c, mtype, guid, cid)
+    local ok, s
+    if type(c.session) == "number" and C_DamageMeter.GetCombatSessionSourceFromID then
+        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromID, c.session, mtype, guid, cid)
+    elseif C_DamageMeter.GetCombatSessionSourceFromType then
+        local st = c.session == "OVERALL" and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromType, st, mtype, guid, cid)
+    end
+    return ok and type(s) == "table" and s or nil
+end
+
+-- the player's damage per enemy (from the enemies' damage taken; the
+-- attackers' names are readable only out of combat), largest first
+local function TargetsOf(c, realName)
+    if not (Plain(realName) and Enum.DamageMeterType.EnemyDamageTaken) then return nil end
+    local s = SessionOf(c, Enum.DamageMeterType.EnemyDamageTaken)
+    if not (s and type(s.combatSources) == "table") then return nil end
+    local list = {}
+    for _, enemy in ipairs(s.combatSources) do
+        local sd = SourceOf(c, Enum.DamageMeterType.EnemyDamageTaken, enemy.sourceGUID, enemy.sourceCreatureID)
+        local sum = 0
+        for _, sp in ipairs(sd and sd.combatSpells or {}) do
+            local det = sp.combatSpellDetails
+            local who, amt = det and det.unitName, sp.totalAmount
+            if Plain(who) and who == realName and Plain(amt) and type(amt) == "number" then sum = sum + amt end
+        end
+        if sum > 0 then
+            list[#list + 1] = { name = Plain(enemy.name) and enemy.name or "?", total = sum }
+        end
+    end
+    table.sort(list, function(a, b) return a.total > b.total end)
+    return list
+end
+
+local function ShowHover(row)
+    local sp = row.sp
+    if not sp then return end
+    BuildHover()
+    local c = S()
+    local h = hover
+    local w = bd.win or win
+    -- look: the meter's
+    local bg, tc = c.bgColor or { r = 0.04, g = 0.04, b = 0.05 }, c.titleColor or { r = 0.08, g = 0.08, b = 0.09 }
+    h:SetScale(c.scale)
+    h.fill:SetColorTexture(bg.r, bg.g, bg.b, math.max(0.9, c.bgAlpha))
+    h.top:SetColorTexture(tc.r, tc.g, tc.b, 1)
+    local th = c.titleHeight or 20
+    h.top:SetHeight(th)
+    h.icon:SetSize(th - 4, th - 4)
+    h.icon:ClearAllPoints()
+    h.icon:SetPoint("TOPLEFT", 4, -2)
+    h.head:ClearAllPoints()
+    h.head:SetPoint("LEFT", h.icon, "RIGHT", 4, 0)
+    h.head:SetPoint("RIGHT", h, "TOPRIGHT", -6, -th / 2)
+    ns.ApplyFont(h.head, c.font, c.titleSize, c.outline)
+    local sname, icon = SpellInfo(sp.spellID)
+    h.icon:SetTexture(icon or 134400)
+    if sname ~= nil then h.head:SetText(sname)
+    elseif sp.creatureName ~= nil then h.head:SetText(sp.creatureName)
+    else h.head:SetText("Melee / other") end
+
+    -- the lines: label, value (a header line has no value)
+    local lines = {}
+    local function Add(l, r, head) lines[#lines + 1] = { l, r, head } end
+    local t = TYPE_BY_KEY[(w and w.cfg and w.cfg.meterType) or "DamageDone"] or TYPES[1]
+    local total, ps = sp.totalAmount, sp.amountPerSecond
+    Add(t.text, Short(total))
+    if ps ~= nil then Add("Per second", Short(ps)) end
+    local function Join(a, b)
+        local ok, txt = pcall(function() return a .. b end)
+        return ok and txt or a
+    end
+    if row.share then Add(Join("Share of ", bd.name or "the total"), row.share .. "%") end
+    if row.rank then Add("Rank", ("%d of %d"):format(row.rank, row.count or row.rank)) end
+    if t.key == "DamageDone" then
+        local src = bd.src
+        local targets = src and TargetsOf(w.cfg, src.name)
+        if targets and #targets > 0 then
+            Add(Join("Targets of ", bd.name or "the player") .. " (all spells)", nil, true)
+            for i = 1, math.min(#targets, HOVER_LINES - #lines) do Add(targets[i].name, Short(targets[i].total)) end
+        elseif InCombatLockdown() then
+            Add("Targets: after the fight", nil, true)
+        end
+    end
+    Add("Hits, crits and misses: not in the game's meter data", nil, true)
+
+    local lh = math.max(c.fontSize + 4, 14)
+    local y = -(th + 4)
+    for i, l in ipairs(h.lines) do
+        local e = lines[i]
+        l.left:ClearAllPoints()
+        l.right:ClearAllPoints()
+        if e then
+            ns.ApplyFont(l.left, c.font, e[3] and math.max(8, c.fontSize - 2) or c.fontSize, c.outline)
+            ns.ApplyFont(l.right, c.font, c.fontSize, c.outline)
+            l.left:SetPoint("TOPLEFT", 6, y)
+            l.left:SetPoint("TOPRIGHT", -6, y)
+            l.right:SetPoint("TOPRIGHT", -6, y)
+            local okL = pcall(l.left.SetText, l.left, e[1])
+            if not okL then l.left:SetText("?") end
+            if e[3] then l.left:SetTextColor(0.6, 0.6, 0.62) else l.left:SetTextColor(1, 1, 1) end
+            if e[2] ~= nil then
+                if not pcall(l.right.SetText, l.right, e[2]) then l.right:SetText("") end
+                l.left:SetPoint("TOPRIGHT", l.right, "TOPLEFT", -6, 0)
+            else
+                l.right:SetText("")
+            end
+            l.left:Show()
+            l.right:Show()
+            y = y - lh
+        else
+            l.left:Hide()
+            l.right:Hide()
+        end
+    end
+    h:SetSize(c.width, -y + 6)
+    -- beside the window (the breakdown panel's side when it stands there)
+    h:ClearAllPoints()
+    local anchor = (panel and panel:IsShown() and not c.breakdownInline) and panel or w
+    local right = (anchor:GetRight() or 0) + c.width + 4
+    local screen = (UIParent:GetRight() or 1920) * (UIParent:GetEffectiveScale() or 1)
+    if right * (anchor:GetEffectiveScale() or 1) > screen then
+        h:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -2, 0)
+    else
+        h:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 2, 0)
+    end
+    h:Show()
+end
+
+local function HideHover()
+    if hover then hover:Hide() end
+end
+
 local TitleButton      -- defined with the window's title bar below
 local function PanelRow(i)
     local r = panel.rows[i]
@@ -698,13 +882,13 @@ local function PanelRow(i)
     r.left:SetWordWrap(false)
     r.right:SetJustifyH("RIGHT")
     r:EnableMouse(true)
+    -- hover: the spell's details in a box beside the window
     r:SetScript("OnEnter", function(self)
-        local id = self.spellID
-        if id == nil or not Plain(id) then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if pcall(GameTooltip.SetSpellByID, GameTooltip, id) then GameTooltip:Show() end
+        if self.typeKey or not self.sp then return end
+        local ok, err = pcall(ShowHover, self)
+        if not ok then ns.Log("meter", "spell details: %s", tostring(err)) end
     end)
-    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    r:SetScript("OnLeave", function() HideHover() end)
     r:SetScript("OnMouseUp", function(self, button)
         if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown()
         elseif button == "LeftButton" and self.typeKey and bd.types then
@@ -882,7 +1066,7 @@ local function RefreshTypes()
         local t = TYPES[i + (panel.offset or 0)]
         if t then
             shown = shown + 1
-            r.typeKey, r.spellID = t.key, nil
+            r.typeKey, r.spellID, r.sp = t.key, nil, nil
             r.icon:SetTexture(TYPE_ICONS[t.key] or TYPE_ICONS.DamageDone)
             r.icon:SetDesaturated(muted)
             if muted then r.icon:SetVertexColor(0.75, 0.75, 0.77) else r.icon:SetVertexColor(1, 1, 1) end
@@ -917,6 +1101,7 @@ end
 
 function DM.CloseBreakdown()
     bd = { open = false }
+    HideHover()
     if panel then panel:Hide() end
 end
 
@@ -953,6 +1138,8 @@ function DM.RefreshBreakdown()
             local id = sp.spellID
             local sname, icon = SpellInfo(id)
             r.spellID = id
+            r.sp, r.rank, r.count, r.share = sp, i + panel.offset, n, nil
+            if plain and sum > 0 then r.share = math.floor(sp.totalAmount / sum * 100 + 0.5) end
             r.icon:SetTexture(icon or 134400)          -- question mark
             if sname ~= nil then r.left:SetText(sname)
             elseif sp.creatureName ~= nil then r.left:SetText(sp.creatureName)
@@ -970,7 +1157,7 @@ function DM.RefreshBreakdown()
             else BarColor(r.bar, { classFilename = bd.color }) end
             r:Show()
         else
-            r.spellID = nil
+            r.spellID, r.sp = nil, nil
             r:Hide()
         end
     end
