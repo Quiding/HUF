@@ -256,7 +256,10 @@ local function ConvertUnit(key, s, uf, u, notes)
             notes[#notes + 1] = title .. ": the detached portrait is attached to the frame."
         end
     end
-    u.width = math.floor(W + 0.5)
+    -- Ellesmere draws its border inside the frame's size, HUF around the bars
+    local inset = 2 * math.max(0, Num(G("borderSize"), 1))
+    u.width = math.floor(W - inset + 0.5)
+    u.height = math.max(4, u.height - inset)
 
     -- position (centre of the screen based, like Ellesmere's)
     local pos = type(uf.positions) == "table" and uf.positions[key] or EUI_POSITIONS[key]

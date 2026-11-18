@@ -384,7 +384,15 @@ local function LayoutTexts(f, which)
         local inset = (a:find("LEFT") and 2) or (a:find("RIGHT") and -2) or 0
         fs:SetPoint(a, bar, a, inset + t.x, t.y)
         fs:SetJustifyH(Justify(a))
-        fs:SetWidth(0)
+        -- a left text sharing its row with a right text is cut short ("Burnin...")
+        -- instead of running into it
+        local right = a:find("LEFT") and set[(a:gsub("LEFT", "RIGHT"))]
+        if right and right.text ~= nil and right.text ~= "" then
+            fs:SetWordWrap(false)
+            fs:SetWidth(math.max(10, w * 0.6 - math.abs(t.x)))
+        else
+            fs:SetWidth(0)
+        end
         -- a bar that is off (power bar off, a unit without power) shows no texts either
         fs:SetShown(t.text ~= nil and t.text ~= "" and bar:IsShown())
     end
@@ -468,9 +476,10 @@ function Frame.LayoutInner(f)
         LayoutTexts(f, which)
     end
     Frame.LayoutHealPred(f)
-    -- power bar right under the health bar: one shared divider (the health
-    -- bar's bottom edge), not two lines eating a thin power bar
-    if showPower and pb.gap <= 0 and (s.health.borderSize or 0) > 0 then
+    -- power bar right under the health bar: no line between them, one
+    -- border around both (as EllesmereUI draws it)
+    if showPower and pb.gap <= 0 then
+        f.bars.health.border.lines[2]:Hide()
         f.bars.power.border.lines[1]:Hide()
     end
     f.textLayer:SetFrameLevel(math.max(h:GetFrameLevel(), pwr:GetFrameLevel()) + 5)
