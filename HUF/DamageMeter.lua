@@ -212,15 +212,41 @@ end
 ---------------------------------------------------------------------------
 -- Numbers
 ---------------------------------------------------------------------------
+-- whole numbers up to 9999, then 12.3K / 1.23M. The game's own
+-- AbbreviateNumbers with HUF's tiers: it also takes secret values (in combat)
+-- and never shows decimals below 10,000 (per second used to read 845.3333).
+local abbrevConfig
+local function AbbrevConfig()
+    if abbrevConfig ~= nil then return abbrevConfig end
+    abbrevConfig = false
+    if CreateAbbreviateConfig then
+        local ok, cfg = pcall(CreateAbbreviateConfig, {
+            { breakpoint = 1000000000, abbreviation = "B", significandDivisor = 10000000, fractionDivisor = 100, abbreviationIsGlobal = false },
+            { breakpoint = 1000000, abbreviation = "M", significandDivisor = 10000, fractionDivisor = 100, abbreviationIsGlobal = false },
+            { breakpoint = 10000, abbreviation = "K", significandDivisor = 100, fractionDivisor = 10, abbreviationIsGlobal = false },
+            { breakpoint = 1, abbreviation = "", significandDivisor = 1, fractionDivisor = 1, abbreviationIsGlobal = false },
+        })
+        if ok and cfg then abbrevConfig = cfg end
+    end
+    return abbrevConfig
+end
+
 local function Short(v)
     if v == nil then return "" end
+    if Plain(v) and type(v) == "number" then
+        v = math.floor(v + 0.5)
+        if v < 10000 then return tostring(v) end
+    end
+    local cfg = AbbrevConfig()
     if AbbreviateNumbers then
-        local ok, s = pcall(AbbreviateNumbers, v)
+        local ok, s
+        if cfg then ok, s = pcall(AbbreviateNumbers, v, cfg) else ok, s = pcall(AbbreviateNumbers, v) end
         if ok and s ~= nil then return s end
     end
-    local ok, s = pcall(string.format, "%d", v)
+    local ok, s = pcall(string.format, "%.0f", v)
     return ok and s or ""
 end
+DM.Short = Short
 
 local function ValueText(fs, src, t)
     local c = S()
@@ -407,6 +433,7 @@ function DM.Refresh()
     win.sessionText:SetText(SessionLabel())
     local sources = session and session.combatSources or {}
     local n = #sources
+    win.sessB:SetDisabled(t.threat and true or false)    -- threat: the enemy's name stands there
     if t.threat then
         win.sessionText:SetText(session and session.title or "")
         win.empty:SetText(session and session.empty or "No threat yet")
@@ -468,7 +495,7 @@ local function Layout()
         ns.ApplyFont(fs, c.font, c.titleSize, c.outline)
     end
     for _, b in pairs(w.quick) do ns.ApplyFont(b.text, c.font, c.titleSize, c.outline) end
-    w.typeText:GetParent():SetWidth(math.max(60, c.width * 0.42))
+    w.typeB:SetWidth(math.max(70, c.width * 0.42))
     w.typeText:SetTextColor(1, 1, 1)
     w.sessionText:SetTextColor(a[1], a[2], a[3])
     local tex = ns.TexturePath(c.texture)
@@ -492,11 +519,59 @@ local function Layout()
     ns.ApplyFont(w.empty, c.font, c.fontSize, c.outline)
 end
 
-local function Cycle(list, cur, step)
-    local idx = 1
-    for i, e in ipairs(list) do if e == cur then idx = i end end
-    idx = (idx - 1 + step) % #list + 1
-    return list[idx]
+
+-- a dropdown in the title bar: dark box, text, arrow; opens HUF's list
+local function TitleDropdown(parent, items, get, set, tip)
+    local b = CreateFrame("Button", nil, parent)
+    b:RegisterForClicks("LeftButtonUp")
+    b.box = b:CreateTexture(nil, "BACKGROUND")
+    b.box:SetPoint("TOPLEFT", 0, -3)
+    b.box:SetPoint("BOTTOMRIGHT", 0, 3)
+    b.box:SetColorTexture(0.13, 0.13, 0.15, 1)
+    b.hl = b:CreateTexture(nil, "HIGHLIGHT")
+    b.hl:SetAllPoints(b.box)
+    b.hl:SetColorTexture(1, 1, 1, 0.07)
+    b.arrow = b:CreateFontString(nil, "OVERLAY")
+    ns.ApplyFont(b.arrow, "GLOBAL", 9, "OUTLINE")
+    b.arrow:SetPoint("RIGHT", -4, 0)
+    b.arrow:SetText("v")
+    b.arrow:SetTextColor(0.65, 0.65, 0.65)
+    b.text = b:CreateFontString(nil, "OVERLAY")
+    ns.ApplyFont(b.text, "GLOBAL", 11, "OUTLINE")
+    b.text:SetPoint("LEFT", 5, 0)
+    b.text:SetPoint("RIGHT", b.arrow, "LEFT", -3, 0)
+    b.text:SetJustifyH("LEFT")
+    b.text:SetWordWrap(false)
+    b:SetScript("OnClick", function(self)
+        if self.disabled then return end
+        GameTooltip:Hide()
+        UI.OpenList(self, items(), get(), function(v) set(v) end)
+    end)
+    -- mouse wheel steps through the list without opening it
+    b:EnableMouseWheel(true)
+    b:SetScript("OnMouseWheel", function(self, delta)
+        if self.disabled then return end
+        local list, cur, idx = items(), get(), nil
+        local values = {}
+        for _, e in ipairs(list) do if not e.header then values[#values + 1] = e.value end end
+        for i, v in ipairs(values) do if v == cur then idx = i end end
+        idx = ((idx or 1) - 1 - delta) % #values + 1
+        set(values[idx])
+    end)
+    b:SetScript("OnEnter", function(self)
+        if self.disabled then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    function b:SetDisabled(off)
+        self.disabled = off
+        self.arrow:SetShown(not off)
+        self.box:SetShown(not off)
+        self:EnableMouse(not off)
+    end
+    return b
 end
 
 local function TitleButton(parent, onClick, tip)
@@ -556,17 +631,19 @@ local function Build()
     w.line:SetPoint("BOTTOMRIGHT")
     w.line:SetHeight(1)
 
-    local keys = {}
-    for _, t in ipairs(TYPES) do keys[#keys + 1] = t.key end
-    local typeB = TitleButton(title, function(_, button)
-        S().meterType = Cycle(keys, S().meterType, button == "RightButton" and -1 or 1)
+    local typeB = TitleDropdown(title, function()
+        local l = {}
+        for _, t in ipairs(TYPES) do l[#l + 1] = { value = t.key, text = t.text } end
+        return l
+    end, function() return S().meterType end, function(v)
+        S().meterType = v
         w.offset = 0
         DM.Refresh()
-    end, "Click: next list, right-click: previous (damage, healing, taken, interrupts, dispels, deaths)")
-    typeB:SetPoint("TOPLEFT", 6, 0)
-    typeB:SetPoint("BOTTOMLEFT", 6, 0)
+    end, "What the meter shows (damage, healing, taken, interrupts, dispels, deaths, threat). Mouse wheel: step through.")
+    typeB:SetPoint("TOPLEFT", 3, 0)
+    typeB:SetPoint("BOTTOMLEFT", 3, 0)
     typeB:SetWidth(120)
-    typeB.text:SetJustifyH("LEFT")
+    w.typeB = typeB
     w.typeText = typeB.text
 
     -- quick switches: damage, healing, threat
@@ -600,17 +677,19 @@ local function Build()
     reset.text:SetText("x")
     w.resetText = reset.text
 
-    local sessB = TitleButton(title, function(_, button)
-        local ids = {}
-        for _, e in ipairs(DM.Sessions()) do ids[#ids + 1] = e.id end
-        S().session = Cycle(ids, S().session, button == "RightButton" and -1 or 1)
+    local sessB = TitleDropdown(title, function()
+        local l = {}
+        for _, e in ipairs(DM.Sessions()) do l[#l + 1] = { value = e.id, text = e.text } end
+        return l
+    end, function() return S().session end, function(v)
+        S().session = v
         w.offset = 0
         DM.Refresh()
-    end, "Click: next fight, right-click: previous (current, overall, earlier fights)")
-    sessB:SetPoint("TOPRIGHT", reset, "TOPLEFT", -4, 0)
-    sessB:SetPoint("BOTTOMRIGHT", reset, "BOTTOMLEFT", -4, 0)
+    end, "Which fight: current, overall or an earlier one. Mouse wheel: step through.")
+    sessB:SetPoint("TOPRIGHT", reset, "TOPLEFT", -3, 0)
+    sessB:SetPoint("BOTTOMRIGHT", reset, "BOTTOMLEFT", -3, 0)
     sessB:SetPoint("LEFT", w.quickLast, "RIGHT", 4, 0)
-    sessB.text:SetJustifyH("RIGHT")
+    w.sessB = sessB
     w.sessionText = sessB.text
 
     w.body = CreateFrame("Frame", nil, w)

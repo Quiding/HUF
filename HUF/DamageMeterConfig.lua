@@ -78,5 +78,5 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
         { value = "THICKOUTLINE", text = "Thick" },
     }, Opt("outline"))
     R:Note("Names follow Names & MMT. In combat in instances the game hides the meter's names from addons: HUF then shows you, a class only one group member has, or a member it recognised by class and specialisation after an earlier fight; else the class name until the fight ends. It never shows a hidden real name while names are private.")
-    R:Note("Title bar: D / H / T switch to damage, healing and threat. Click the list name or the fight to switch (right-click goes back), x resets. Drag the title to move. Threat shows your group's threat on your target (or your target's target) in percent.")
+    R:Note("Title bar: the two dropdowns pick the list and the fight (mouse wheel steps through them), D / H / T switch straight to damage, healing and threat, x resets. Drag the title to move. Threat shows your group's threat on your target (or your target's target) in percent.")
 end, function() return ns.db.damageMeter.enabled end)
