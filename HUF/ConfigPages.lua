@@ -86,6 +86,8 @@ ns.RegisterPage("general", "General", "general", function(page)
     L:Check("Short numbers (12.3k)", ga, sa, "Health and power values as 12.3k instead of 12345.")
     local gs, ss = Opt(G, "statusText")
     L:Check("Dead, Ghost, Offline instead of health", gs, ss)
+    local gx, sx = Opt(G, "shortenTexts")
+    L:Check("Shorten a left text next to a right text", gx, sx, "A left text sharing its row with a right text is cut short (\"Burnin...\") instead of running into it.")
 
     L:Header("Power colours")
     L:Cycle("Power bars by type", {
@@ -511,6 +513,8 @@ local function BarPage(f, key, which)
         L:Check("Show the power bar", Opt(B, "enabled"))
         L:Slider("Height", 2, 30, 1, Opt(B, "size"))
         L:Slider("Gap to the health bar", 0, 10, 1, Opt(B, "gap"))
+        local gd, sd = Opt(B, "divider")
+        L:Check("Line between health and power", gd, sd, "With no gap: a border line between the two bars. Off: one border around both, as EllesmereUI draws it.")
     end
     L:Cycle("Bar texture", TextureChoices, Opt(B, "texture"))
     L:Check("Fill from the right", Opt(B, "reverse"))

@@ -231,6 +231,7 @@ local function ConvertUnit(key, s, uf, u, notes)
     u.power.enabled = power
     u.power.size = math.max(1, math.floor(pH + 0.5))
     u.power.gap = 0
+    u.power.divider = false         -- one border around health and power, as Ellesmere draws it
     if power and pPos ~= "below" then
         notes[#notes + 1] = ("%s: power bar \"%s\" is drawn below the health bar."):format(title, tostring(pPos))
     end
@@ -553,6 +554,9 @@ local function Convert(prof, uf, np, npOn)
 
     -- font and outline (Ellesmere's Unit Frames font, else its global one)
     if not uf then return true, out, Unique(notes), what, parts end
+
+    -- Ellesmere cuts a left text short next to a right text
+    out.global.shortenTexts = true
 
     -- power colours by type: Ellesmere's palette (its defaults + the profile's own)
     local EUI = _G.EllesmereUI

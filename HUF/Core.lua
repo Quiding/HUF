@@ -335,6 +335,7 @@ local function UnitDefaults(point)
     u.power.enabled = true
     u.power.size = 9                -- health = height - power - gap = 14
     u.power.gap = 1
+    u.power.divider = true          -- gap 0: a line between health and power (off: one border around both)
     u.power.color = C(0.25, 0.45, 1.00)
     return u
 end
@@ -422,6 +423,7 @@ local function BuildDefaults()
             outline = "OUTLINE",
             shadow = false,
             abbreviate = true,         -- 12.3k instead of 12345
+            shortenTexts = false,      -- a left text next to a right text cut short ("Burnin...")
             statusText = true,         -- "Dead", "Ghost", "Offline" instead of health values
             hideBlizzard = true,
             menuMode = "PROXY",        -- right-click menu: PROXY (secure proxy, 12.x) | DIRECT

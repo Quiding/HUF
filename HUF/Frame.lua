@@ -386,7 +386,7 @@ local function LayoutTexts(f, which)
         fs:SetJustifyH(Justify(a))
         -- a left text sharing its row with a right text is cut short ("Burnin...")
         -- instead of running into it
-        local right = a:find("LEFT") and set[(a:gsub("LEFT", "RIGHT"))]
+        local right = ns.db.global.shortenTexts and a:find("LEFT") and set[(a:gsub("LEFT", "RIGHT"))]
         if right and right.text ~= nil and right.text ~= "" then
             fs:SetWordWrap(false)
             fs:SetWidth(math.max(10, w * 0.6 - math.abs(t.x)))
@@ -476,9 +476,9 @@ function Frame.LayoutInner(f)
         LayoutTexts(f, which)
     end
     Frame.LayoutHealPred(f)
-    -- power bar right under the health bar: no line between them, one
-    -- border around both (as EllesmereUI draws it)
-    if showPower and pb.gap <= 0 then
+    -- power bar right under the health bar, "line between" off: no line
+    -- between them, one border around both (as EllesmereUI draws it)
+    if showPower and pb.gap <= 0 and pb.divider == false then
         f.bars.health.border.lines[2]:Hide()
         f.bars.power.border.lines[1]:Hide()
     end
