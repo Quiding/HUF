@@ -312,6 +312,8 @@ SlashCmdList.HUF = function(msg)
             ns.Print("Data recorder %s.", on and "on" or "off")
         end
         if ns.RefreshConfig then ns.RefreshConfig() end
+    elseif cmd == "meter" or cmd == "dm" then
+        if ns.DamageMeter then ns.DamageMeter.Toggle() end
     elseif cmd == "mmt" then
         local st = ns.Bridge.Status()
         ns.Print("MMT %s%s, privacy: %s, team: %d, HUF uses it: %s, privacy interface: v%s (HUF knows v%d).",

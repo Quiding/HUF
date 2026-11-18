@@ -248,6 +248,7 @@ function ns.FrameReport(add)
         end
     end
     if ns.Group then ns.Group.Report(add) end
+    if ns.DamageMeter then ns.DamageMeter.Report(add) end
     if ns.ClickCast then ns.ClickCast.Report(add) end
     if ns.Auras then
         for _, l in ipairs(ns.Auras.Report()) do add("auras " .. l) end

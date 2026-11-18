@@ -122,6 +122,7 @@ local COMMANDS = table.concat({
     "/huf rec [on|off|now]      data recorder on/off, one snapshot now",
     "/huf unlock | lock         move frames (previews)",
     "/huf mmt                   state of the link to MMT",
+    "/huf meter                 damage meter on / off",
 }, "\n")
 
 local API = [[

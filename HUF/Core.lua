@@ -9,7 +9,7 @@ _G.HUF = ns                      -- public: other addons (MMT) reach HUF here
 
 ns.name = ADDON
 ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.18"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.19"
 ns.API_VERSION = 1
 ns.MEDIA = "Interface\\AddOns\\HUF\\Media\\"
 ns.LOGO = ns.MEDIA .. "Logo"
@@ -421,6 +421,22 @@ local function BuildDefaults()
             mmt = "ALWAYS",            -- MMT team members: ALWAYS | OUTSIDE (only with MMT's "hide outside") | NEVER
         },
         units = u,
+        -- damage meter: the game's meter data in a HUF window, privacy names
+        damageMeter = {
+            enabled = true,
+            hideBlizzard = true,        -- Blizzard's meter window off (CVar damageMeterEnabled, put back when off)
+            show = "ALWAYS",            -- ALWAYS | GROUP | INSTANCE
+            meterType = "DamageDone",
+            session = "CURRENT",        -- CURRENT | OVERALL | a fight's session id
+            point = { "BOTTOMRIGHT", "BOTTOMRIGHT", -40, 220 },
+            width = 240, rows = 8, rowHeight = 18, rowGap = 1, scale = 1,
+            locked = false,
+            texture = "Smooth", colorMode = "CLASS", color = C(0.35, 0.55, 0.85),   -- CLASS | ACCENT | STATIC
+            bgAlpha = 0.75,
+            font = "GLOBAL", fontSize = 11, titleSize = 11, outline = "OUTLINE",
+            showRank = true,
+            numbers = "BOTH",           -- BOTH "12.3K (845)" | TOTAL | PERSECOND
+        },
         nameplates = {
             enabled = true,
             mode = "NAME_BAR",          -- NAME | NAME_BAR | BAR
