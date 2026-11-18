@@ -156,7 +156,10 @@ local function Layout(p)
     Frame.LayoutBorder(h.border, h, bs, s.borderColor, 1)
     p.text:SetFrameLevel(h:GetFrameLevel() + 4)
 
-    ns.ApplyFont(p.name, s.font, s.fontSize, s.outline)
+    -- friendly units may have their own name size
+    p.friendly = IsFriendly(p.unit)
+    local nameSize = (p.friendly and (s.friendlyFontSize or 0) > 0) and s.friendlyFontSize or s.fontSize
+    ns.ApplyFont(p.name, s.font, nameSize, s.outline)
     p.name:ClearAllPoints()
     local inside = showBar and (s.namePosition == "LEFT" or s.namePosition == "CENTER")
     p.nameInside = inside
@@ -316,7 +319,10 @@ local function UpdateName(p)
     local unit = p.unit
     if p.mode == "BAR" then return end
     local name = ns.NameText(unit, "PRIVACY")
-    if s.showLevel then
+    p.friendly = IsFriendly(unit)
+    local showLevel = s.showLevel
+    if p.friendly and s.friendlyLevel and s.friendlyLevel ~= "SAME" then showLevel = s.friendlyLevel == "SHOW" end
+    if showLevel then
         local holder = { hunit = unit }
         -- level + classification ("55E") in difficulty colour, then the name
         ns.SetTemplateText(p.name, holder, "[levelclass:color]")
@@ -330,8 +336,10 @@ local function UpdateName(p)
         pcall(p.name.SetText, p.name, name)
     end
     local c
-    if s.nameColor == "CUSTOM" then c = s.nameCustom
-    elseif s.nameColor == "REACTION" then c = ns.UnitColor(unit, true) end
+    local mode = s.nameColor
+    if p.friendly and s.friendlyNameColor and s.friendlyNameColor ~= "SAME" then mode = s.friendlyNameColor end
+    if mode == "CUSTOM" then c = s.nameCustom
+    elseif mode == "REACTION" then c = ns.UnitColor(unit, true) end
     c = c or { r = 1, g = 1, b = 1 }
     p.name:SetTextColor(c.r, c.g, c.b)
 end

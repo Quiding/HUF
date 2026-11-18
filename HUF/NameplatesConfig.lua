@@ -107,6 +107,18 @@ local function NamePage(f)
         { value = "LEFT", text = "In the bar, left" },
         { value = "CENTER", text = "In the bar, centred" },
     }, Opt("namePosition"))
+    L:Header("Friendly units")
+    L:Slider("Name size (0: as enemies)", 0, 24, 1, Opt("friendlyFontSize"))
+    L:Cycle("Level", {
+        { value = "SAME", text = "As enemies" },
+        { value = "SHOW", text = "Show" },
+        { value = "HIDE", text = "Hide" },
+    }, Opt("friendlyLevel"))
+    L:Cycle("Name colour", {
+        { value = "SAME", text = "As enemies" },
+        { value = "REACTION", text = "Class / reaction" },
+        { value = "WHITE", text = "White" },
+    }, Opt("friendlyNameColor"))
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Extras")
