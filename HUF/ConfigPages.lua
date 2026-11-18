@@ -86,6 +86,17 @@ ns.RegisterPage("general", "General", "general", function(page)
     L:Check("Short numbers (12.3k)", ga, sa, "Health and power values as 12.3k instead of 12345.")
     local gs, ss = Opt(G, "statusText")
     L:Check("Dead, Ghost, Offline instead of health", gs, ss)
+    local gx, sx = Opt(G, "shortenTexts")
+    L:Check("Shorten a left text next to a right text", gx, sx, "A left text sharing its row with a right text is cut short (\"Burnin...\") instead of running into it.")
+
+    L:Header("Power colours")
+    L:Cycle("Power bars by type", {
+        { value = "GAME", text = "The game's colours" },
+        { value = "CUSTOM", text = "My colours (below)" },
+    }, Opt(G, "powerColors"))
+    for _, p in ipairs({ { "MANA", "Mana" }, { "RAGE", "Rage" }, { "ENERGY", "Energy" }, { "FOCUS", "Focus" } }) do
+        L:Color(p[2], function() return G().customPower[p[1]] end, function(c) G().customPower[p[1]] = c end)
+    end
 
     local R = UI.Column(page, COL2_X, 0, COL_W)
     R:Header("Frames")
@@ -276,13 +287,23 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
             row.check:SetPoint("TOPLEFT", 16, -52 - (i - 1) * (UI.ROW - 2))
             f.rows[i] = row
         end
-        f.accept = UI.Button(f, 170, "Import", function()
+        local function Accept()
             local fn = f.onAccept
             f:Hide()
             if fn then fn() end
-        end)
+        end
+        f.accept = UI.Button(f, 116, "Import", Accept)
         f.accept:SetPoint("BOTTOMLEFT", 16, 14)
-        f.cancel = UI.Button(f, 170, "Cancel", function() f:Hide() end)
+        -- every frame and the nameplates on, whatever Ellesmere has
+        f.all = UI.Button(f, 116, "Import all", function()
+            for i = 1, MAX_ROWS do
+                local row = f.rows[i]
+                if row.part then row.on = true end
+            end
+            Accept()
+        end)
+        f.all:SetPoint("BOTTOM", 0, 14)
+        f.cancel = UI.Button(f, 116, "Cancel", function() f:Hide() end)
         f.cancel:SetPoint("BOTTOMRIGHT", -16, 14)
         f:SetScript("OnHide", function() f.onAccept = nil end)
         UI.CloseOnEscape(f)
@@ -492,6 +513,8 @@ local function BarPage(f, key, which)
         L:Check("Show the power bar", Opt(B, "enabled"))
         L:Slider("Height", 2, 30, 1, Opt(B, "size"))
         L:Slider("Gap to the health bar", 0, 10, 1, Opt(B, "gap"))
+        local gd, sd = Opt(B, "divider")
+        L:Check("Line between health and power", gd, sd, "With no gap: a border line between the two bars. Off: one border around both, as EllesmereUI draws it.")
     end
     L:Cycle("Bar texture", TextureChoices, Opt(B, "texture"))
     L:Check("Fill from the right", Opt(B, "reverse"))

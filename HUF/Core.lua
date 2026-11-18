@@ -335,6 +335,7 @@ local function UnitDefaults(point)
     u.power.enabled = true
     u.power.size = 9                -- health = height - power - gap = 14
     u.power.gap = 1
+    u.power.divider = true          -- gap 0: a line between health and power (off: one border around both)
     u.power.color = C(0.25, 0.45, 1.00)
     return u
 end
@@ -422,11 +423,18 @@ local function BuildDefaults()
             outline = "OUTLINE",
             shadow = false,
             abbreviate = true,         -- 12.3k instead of 12345
+            shortenTexts = false,      -- a left text next to a right text cut short ("Burnin...")
             statusText = true,         -- "Dead", "Ghost", "Offline" instead of health values
             hideBlizzard = true,
             menuMode = "PROXY",        -- right-click menu: PROXY (secure proxy, 12.x) | DIRECT
             clickCast = true,
             configBg = "Honeycomb",    -- background of the settings window
+            powerColors = "GAME",      -- power bars by type: GAME (the game's colours) | CUSTOM (below)
+            customPower = {            -- softer than the game's (mana 0, 0.55, 1: EllesmereUI's)
+                MANA = C(0.00, 0.55, 1.00), RAGE = C(0.90, 0.15, 0.15),
+                ENERGY = C(1.00, 0.96, 0.41), FOCUS = C(0.87, 0.57, 0.22),
+                RUNIC_POWER = C(0.77, 0.12, 0.23),
+            },
         },
         privacy = {
             mode = "FIRST",            -- [name]: FIRST | LAST | FULL | CLASS | SLOT

@@ -231,6 +231,7 @@ local function ConvertUnit(key, s, uf, u, notes)
     u.power.enabled = power
     u.power.size = math.max(1, math.floor(pH + 0.5))
     u.power.gap = 0
+    u.power.divider = false         -- one border around health and power, as Ellesmere draws it
     if power and pPos ~= "below" then
         notes[#notes + 1] = ("%s: power bar \"%s\" is drawn below the health bar."):format(title, tostring(pPos))
     end
@@ -256,7 +257,10 @@ local function ConvertUnit(key, s, uf, u, notes)
             notes[#notes + 1] = title .. ": the detached portrait is attached to the frame."
         end
     end
-    u.width = math.floor(W + 0.5)
+    -- Ellesmere draws its border inside the frame's size, HUF around the bars
+    local inset = 2 * math.max(0, Num(G("borderSize"), 1))
+    u.width = math.floor(W - inset + 0.5)
+    u.height = math.max(4, u.height - inset)
 
     -- position (centre of the screen based, like Ellesmere's)
     local pos = type(uf.positions) == "table" and uf.positions[key] or EUI_POSITIONS[key]
@@ -267,9 +271,11 @@ local function ConvertUnit(key, s, uf, u, notes)
     end
 
     -- bars: texture, colours, border
-    local tex = TextureName(uf.healthBarTexture)
+    -- the frame's own texture first, as Ellesmere draws it (health and power alike)
+    local texKey = s.healthBarTexture or uf.healthBarTexture
+    local tex = TextureName(texKey)
     if not tex then
-        notes[#notes + 1] = ("Bar texture \"%s\" is not known to HUF: Flat instead."):format(tostring(uf.healthBarTexture))
+        notes[#notes + 1] = ("Bar texture \"%s\" is not known to HUF: Flat instead."):format(tostring(texKey))
         tex = "Flat"
     end
     local bSize = Num(G("borderSize"), 1)
@@ -295,32 +301,64 @@ local function ConvertUnit(key, s, uf, u, notes)
             or Color(s.customFillColor, h.color)
     end
     if s.bgClassColored then notes[#notes + 1] = title .. ": class coloured background is a plain colour." end
-    u.power.colorMode = "TYPE"
+    -- power fill: Ellesmere's power colours by type (the import sets them
+    -- globally), a custom fill with "power colour" off, or the class colour
+    if s.powerPercentPowerColor == false then
+        u.power.colorMode = "STATIC"
+        u.power.color = Color(s.customPowerFillColor, { r = 0, g = 0, b = 1 })
+    elseif s.powerClassColored then
+        u.power.colorMode = "CLASS"
+    else
+        u.power.colorMode = "TYPE"
+    end
 
-    -- texts on the health bar: left / center / right
+    -- texts on the health bar: left / center / right, and the extra text
+    -- (its own alignment). Ellesmere sets them 5 px in from the bar's edge
+    -- (HUF 2) and centres them vertically; an extra text whose spot is taken
+    -- goes to the bottom (or top) anchor, moved to the same place.
     local texts = EmptyTexts()
     local base = Num(G("textSize"), 12)
-    for _, slot in ipairs({ { "left", "LEFT" }, { "center", "CENTER" }, { "right", "RIGHT" } }) do
-        local p, anchor = slot[1], slot[2]
+    local barH = math.max(1, H - (power and pH or 0))
+    local function Slot(p, anchor)
         local content = G(p .. "TextContent")
-        if content and content ~= "none" then
-            local tpl = CONTENT[content]
-            if tpl then
-                local a = NewAnchor(tpl, Num(s[p .. "TextSize"], base))
-                a.x, a.y = Num(s[p .. "TextX"], 0), Num(s[p .. "TextY"], 0)
-                if s[p .. "TextClassColor"] then
-                    a.colorMode = "CLASS"
-                elseif type(s[p .. "TextColorR"]) == "number" then
-                    a.colorMode = "CUSTOM"
-                    a.color = { r = s[p .. "TextColorR"], g = Num(s[p .. "TextColorG"], 1), b = Num(s[p .. "TextColorB"], 1) }
-                    if a.color.r == 1 and a.color.g == 1 and a.color.b == 1 then a.colorMode = "WHITE" end
-                end
-                texts[anchor] = a
+        if not content or content == "none" then return end
+        local tpl = CONTENT[content]
+        if not tpl then
+            notes[#notes + 1] = ("%s: %s text \"%s\" has no HUF value, left out."):format(title, p, tostring(content))
+            return
+        end
+        local size = Num(s[p .. "TextSize"], base)
+        local a = NewAnchor(tpl, size)
+        a.x, a.y = Num(s[p .. "TextX"], 0), Num(s[p .. "TextY"], 0)
+        if texts[anchor].text ~= "" then
+            -- spot taken: bottom anchor (text bottom at the bar's bottom), else top
+            local side = anchor == "CENTER" and "" or anchor
+            local bottom, top = "BOTTOM" .. side, "TOP" .. side
+            if texts[bottom].text == "" then
+                anchor, a.y = bottom, a.y + barH / 2 - size / 2
+            elseif texts[top].text == "" then
+                anchor, a.y = top, a.y - barH / 2 + size / 2
             else
-                notes[#notes + 1] = ("%s: %s text \"%s\" has no HUF value, left out."):format(title, p, tostring(content))
+                notes[#notes + 1] = ("%s: no free spot for the %s text, left out."):format(title, p)
+                return
             end
         end
+        if anchor:find("LEFT") then a.x = a.x + 3 elseif anchor:find("RIGHT") then a.x = a.x - 3 end
+        a.y = math.floor(a.y + 0.5)
+        if s[p .. "TextClassColor"] then
+            a.colorMode = "CLASS"
+        elseif type(s[p .. "TextColorR"]) == "number" then
+            a.colorMode = "CUSTOM"
+            a.color = { r = s[p .. "TextColorR"], g = Num(s[p .. "TextColorG"], 1), b = Num(s[p .. "TextColorB"], 1) }
+            if a.color.r == 1 and a.color.g == 1 and a.color.b == 1 then a.colorMode = "WHITE" end
+        end
+        texts[anchor] = a
     end
+    Slot("left", "LEFT")
+    Slot("center", "CENTER")
+    Slot("right", "RIGHT")
+    local align = G("extraTextAlign")
+    Slot("extra", (align == "right" and "RIGHT") or (align == "center" and "CENTER") or "LEFT")
     u.texts.health = texts
 
     -- power text
@@ -359,12 +397,14 @@ local function ConvertUnit(key, s, uf, u, notes)
         Row(u.buffs, G("showBuffs"), G("buffAnchor"), Num(G("maxBuffs"), 4), Num(G("buffSize"), 22),
             Num(G("buffOffsetX"), 0), Num(G("buffOffsetY"), 0))
         u.buffs.timer = true
+        u.buffs.countSize = math.floor(Num(s.buffStackTextSize, u.buffs.countSize) + 0.5)
         u.buffs.timerText = s.buffShowCooldownText and true or false
         u.buffs.timerSize = Num(s.buffCooldownTextSize, 0)
         Row(u.debuffs, true, G("debuffAnchor"), Num(G("maxDebuffs"), 10), Num(G("debuffSize"), 22),
             Num(G("debuffOffsetX"), 0), Num(G("debuffOffsetY"), 0))
         u.debuffs.mine = s.onlyPlayerDebuffs and true or false
         u.debuffs.timer = true
+        u.debuffs.countSize = math.floor(Num(s.debuffStackTextSize, u.debuffs.countSize) + 0.5)
         u.debuffs.timerText = s.debuffShowCooldownText and true or false
         u.debuffs.timerSize = Num(s.debuffCooldownTextSize, 0)
     end
@@ -514,6 +554,23 @@ local function Convert(prof, uf, np, npOn)
 
     -- font and outline (Ellesmere's Unit Frames font, else its global one)
     if not uf then return true, out, Unique(notes), what, parts end
+
+    -- Ellesmere cuts a left text short next to a right text
+    out.global.shortenTexts = true
+
+    -- power colours by type: Ellesmere's palette (its defaults + the profile's own)
+    local EUI = _G.EllesmereUI
+    local defaults = type(EUI) == "table" and type(EUI.DEFAULT_POWER_COLORS) == "table" and EUI.DEFAULT_POWER_COLORS or {}
+    local own = type(prof.customColors) == "table" and type(prof.customColors.power) == "table" and prof.customColors.power or {}
+    local any = false
+    for _, k in ipairs({ "MANA", "RAGE", "ENERGY", "FOCUS", "RUNIC_POWER" }) do
+        local c = own[k] or defaults[k]
+        if type(c) == "table" and type(c.r) == "number" then
+            out.global.customPower[k] = Color(c, out.global.customPower[k])
+            any = true
+        end
+    end
+    if any then out.global.powerColors = "CUSTOM" end
     local fonts = type(prof.fonts) == "table" and prof.fonts or {}
     local fontName, outline = fonts.global, fonts.outlineMode
     for _, e in ipairs(type(fonts.moduleFonts) == "table" and fonts.moduleFonts or {}) do
