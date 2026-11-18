@@ -251,6 +251,7 @@ local function Layout(p)
         sb:Show()
         pcall(np.SetStackingBoundsFrame, np, sb)
     end
+    if NP.PlaceQuestie then NP.PlaceQuestie(p) end
 end
 
 ---------------------------------------------------------------------------
@@ -559,6 +560,7 @@ local function Attach(unit)
     for _, row in pairs(p.auraRows) do row:SetUnit(unit) end
     p:Show()
     UpdateAll(p)
+    C_Timer.After(0, function() if NP.plates[unit] == p then NP.PlaceQuestie(p) end end)
 end
 
 local function Detach(unit)
@@ -571,6 +573,7 @@ local function Detach(unit)
     for _, row in pairs(p.auraRows) do row:SetUnit(nil) end
     p:Hide()
     p:SetParent(nil)
+    if NP.QuestieRelease then NP.QuestieRelease(p.nameplate) end
     if p.nameplate and p.nameplate.UnitFrame then owned[p.nameplate.UnitFrame] = nil end
     p.unit, p.hunit, p.nameplate = nil, nil, nil
     pool[#pool + 1] = p
@@ -627,6 +630,78 @@ function NP.ApplyAll()
 end
 ns.OnRefresh(function() if ns.ready then NP.ApplyAll() end end)
 ns.Listen("PROFILE_CHANGED", function() NP.ApplyAll() end)
+
+---------------------------------------------------------------------------
+-- Questie's quest icon: Questie pins it to the left edge of the game's
+-- nameplate (under ours, on the level). HUF puts it on its own plate: left
+-- of the quest progress, right of the bar, or where Questie wants it.
+---------------------------------------------------------------------------
+-- Questie's icon frames on one game nameplate (a child with .Icon and .lastIcon)
+local function QuestieFrames(nameplate)
+    local list = {}
+    if not nameplate then return list end
+    local ok, kids = pcall(function() return { nameplate:GetChildren() } end)
+    if not ok then return list end
+    for _, k in ipairs(kids) do
+        if type(rawget(k, "Icon")) == "table" and rawget(k, "lastIcon") ~= nil then list[#list + 1] = k end
+    end
+    return list
+end
+
+-- back to Questie's own spot (its setting, relative to the game's nameplate)
+local function QuestieHome(f)
+    local db = Questie and Questie.db and Questie.db.profile
+    f:ClearAllPoints()
+    f:SetPoint("LEFT", (db and db.nameplateX) or -17, (db and db.nameplateY) or -7)
+end
+
+function NP.PlaceQuestie(p)
+    if not (p and p.nameplate) then return end
+    local where = S().questieIcon or "LEFT"
+    for _, f in ipairs(QuestieFrames(p.nameplate)) do
+        if where == "QUESTIE" then
+            QuestieHome(f)
+        else
+            f:ClearAllPoints()
+            if where == "RIGHT" then
+                -- after the elite star's spot, clear of the bar
+                f:SetPoint("LEFT", p.elite, "RIGHT", 1, 0)
+            else
+                -- left of the quest progress ("0/6"), or of the bar without it
+                f:SetPoint("RIGHT", p.quest, "LEFT", -2, 0)
+            end
+        end
+    end
+end
+
+function NP.QuestieRelease(nameplate)
+    for _, f in ipairs(QuestieFrames(nameplate)) do QuestieHome(f) end
+end
+
+local function PlaceQuestieFor(token)
+    local p = token and NP.plates[token]
+    if p then
+        NP.PlaceQuestie(p)
+    elseif token and C_NamePlate then
+        -- no HUF plate here (any more): Questie's own spot
+        local ok, np = pcall(C_NamePlate.GetNamePlateForUnit, token)
+        if ok and np then for _, f in ipairs(QuestieFrames(np)) do QuestieHome(f) end end
+    end
+end
+
+ns.OnLogin(function()
+    local mods = QuestieLoader and QuestieLoader._modules
+    local QN = type(mods) == "table" and mods.QuestieNameplate
+    if type(QN) ~= "table" then return end
+    local function All() for _, p in pairs(NP.plates) do NP.PlaceQuestie(p) end end
+    if type(QN.NameplateCreated) == "function" then
+        hooksecurefunc(QN, "NameplateCreated", function(_, token) PlaceQuestieFor(token) end)
+    end
+    for _, fn in ipairs({ "UpdateNameplate", "RedrawIcons" }) do
+        if type(QN[fn]) == "function" then hooksecurefunc(QN, fn, All) end
+    end
+    ns.Log("init", "Questie nameplate icons follow HUF's plates")
+end)
 
 function NP.Count()
     local n = 0

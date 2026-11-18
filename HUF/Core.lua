@@ -443,6 +443,7 @@ local function BuildDefaults()
             showElite = true,           -- star right of the bar: elite gold, rare silver, rare elite silver + gold ring, boss red
             eliteSize = 10,
             showQuest = true,           -- quest progress ("2/10") left of the bar
+            questieIcon = "LEFT",       -- Questie's quest icon: LEFT (of the progress / bar) | RIGHT (of the bar) | QUESTIE (its own spot)
             questColor = C(1.00, 0.82, 0.00),
             -- cast bar
             showCast = true,
