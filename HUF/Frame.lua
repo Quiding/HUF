@@ -385,7 +385,8 @@ local function LayoutTexts(f, which)
         fs:SetPoint(a, bar, a, inset + t.x, t.y)
         fs:SetJustifyH(Justify(a))
         fs:SetWidth(0)
-        fs:SetShown(t.text ~= nil and t.text ~= "")
+        -- a bar that is off (power bar off, a unit without power) shows no texts either
+        fs:SetShown(t.text ~= nil and t.text ~= "" and bar:IsShown())
     end
 end
 
