@@ -297,30 +297,53 @@ local function ConvertUnit(key, s, uf, u, notes)
     if s.bgClassColored then notes[#notes + 1] = title .. ": class coloured background is a plain colour." end
     u.power.colorMode = "TYPE"
 
-    -- texts on the health bar: left / center / right
+    -- texts on the health bar: left / center / right, and the extra text
+    -- (its own alignment). Ellesmere sets them 5 px in from the bar's edge
+    -- (HUF 2) and centres them vertically; an extra text whose spot is taken
+    -- goes to the bottom (or top) anchor, moved to the same place.
     local texts = EmptyTexts()
     local base = Num(G("textSize"), 12)
-    for _, slot in ipairs({ { "left", "LEFT" }, { "center", "CENTER" }, { "right", "RIGHT" } }) do
-        local p, anchor = slot[1], slot[2]
+    local barH = math.max(1, H - (power and pH or 0))
+    local function Slot(p, anchor)
         local content = G(p .. "TextContent")
-        if content and content ~= "none" then
-            local tpl = CONTENT[content]
-            if tpl then
-                local a = NewAnchor(tpl, Num(s[p .. "TextSize"], base))
-                a.x, a.y = Num(s[p .. "TextX"], 0), Num(s[p .. "TextY"], 0)
-                if s[p .. "TextClassColor"] then
-                    a.colorMode = "CLASS"
-                elseif type(s[p .. "TextColorR"]) == "number" then
-                    a.colorMode = "CUSTOM"
-                    a.color = { r = s[p .. "TextColorR"], g = Num(s[p .. "TextColorG"], 1), b = Num(s[p .. "TextColorB"], 1) }
-                    if a.color.r == 1 and a.color.g == 1 and a.color.b == 1 then a.colorMode = "WHITE" end
-                end
-                texts[anchor] = a
+        if not content or content == "none" then return end
+        local tpl = CONTENT[content]
+        if not tpl then
+            notes[#notes + 1] = ("%s: %s text \"%s\" has no HUF value, left out."):format(title, p, tostring(content))
+            return
+        end
+        local size = Num(s[p .. "TextSize"], base)
+        local a = NewAnchor(tpl, size)
+        a.x, a.y = Num(s[p .. "TextX"], 0), Num(s[p .. "TextY"], 0)
+        if texts[anchor].text ~= "" then
+            -- spot taken: bottom anchor (text bottom at the bar's bottom), else top
+            local side = anchor == "CENTER" and "" or anchor
+            local bottom, top = "BOTTOM" .. side, "TOP" .. side
+            if texts[bottom].text == "" then
+                anchor, a.y = bottom, a.y + barH / 2 - size / 2
+            elseif texts[top].text == "" then
+                anchor, a.y = top, a.y - barH / 2 + size / 2
             else
-                notes[#notes + 1] = ("%s: %s text \"%s\" has no HUF value, left out."):format(title, p, tostring(content))
+                notes[#notes + 1] = ("%s: no free spot for the %s text, left out."):format(title, p)
+                return
             end
         end
+        if anchor:find("LEFT") then a.x = a.x + 3 elseif anchor:find("RIGHT") then a.x = a.x - 3 end
+        a.y = math.floor(a.y + 0.5)
+        if s[p .. "TextClassColor"] then
+            a.colorMode = "CLASS"
+        elseif type(s[p .. "TextColorR"]) == "number" then
+            a.colorMode = "CUSTOM"
+            a.color = { r = s[p .. "TextColorR"], g = Num(s[p .. "TextColorG"], 1), b = Num(s[p .. "TextColorB"], 1) }
+            if a.color.r == 1 and a.color.g == 1 and a.color.b == 1 then a.colorMode = "WHITE" end
+        end
+        texts[anchor] = a
     end
+    Slot("left", "LEFT")
+    Slot("center", "CENTER")
+    Slot("right", "RIGHT")
+    local align = G("extraTextAlign")
+    Slot("extra", (align == "right" and "RIGHT") or (align == "center" and "CENTER") or "LEFT")
     u.texts.health = texts
 
     -- power text
@@ -359,12 +382,14 @@ local function ConvertUnit(key, s, uf, u, notes)
         Row(u.buffs, G("showBuffs"), G("buffAnchor"), Num(G("maxBuffs"), 4), Num(G("buffSize"), 22),
             Num(G("buffOffsetX"), 0), Num(G("buffOffsetY"), 0))
         u.buffs.timer = true
+        u.buffs.countSize = math.floor(Num(s.buffStackTextSize, u.buffs.countSize) + 0.5)
         u.buffs.timerText = s.buffShowCooldownText and true or false
         u.buffs.timerSize = Num(s.buffCooldownTextSize, 0)
         Row(u.debuffs, true, G("debuffAnchor"), Num(G("maxDebuffs"), 10), Num(G("debuffSize"), 22),
             Num(G("debuffOffsetX"), 0), Num(G("debuffOffsetY"), 0))
         u.debuffs.mine = s.onlyPlayerDebuffs and true or false
         u.debuffs.timer = true
+        u.debuffs.countSize = math.floor(Num(s.debuffStackTextSize, u.debuffs.countSize) + 0.5)
         u.debuffs.timerText = s.debuffShowCooldownText and true or false
         u.debuffs.timerSize = Num(s.debuffCooldownTextSize, 0)
     end
