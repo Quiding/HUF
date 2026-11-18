@@ -101,6 +101,13 @@ local function NamePage(f)
     local gq, sq = Opt("showQuest")
     R:Check("Quest progress left of the bar", gq, sq, "For mobs you need for a quest (kills or quest item drops): your progress, e.g. 2/10, like Blizzard's plates show it.")
     R:Color("Quest progress colour", Opt("questColor"))
+    if QuestieLoader then
+        R:Cycle("Questie icon", {
+            { value = "LEFT", text = "Left of the quest progress" },
+            { value = "RIGHT", text = "Right of the bar" },
+            { value = "QUESTIE", text = "Where Questie puts it" },
+        }, Opt("questieIcon"))
+    end
     R:Note("Names follow the privacy setting (Names & MMT), so your MMT team shows the way MMT says.")
 end
 
