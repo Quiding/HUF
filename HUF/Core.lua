@@ -308,7 +308,8 @@ end
 -- buff / debuff icons of a unit frame
 local function AuraRow(on, position)
     return { enabled = on, mine = false, size = 20, gap = 2, perRow = 6, rows = 4,
-             position = position, offset = 2, x = 0, y = 0, countSize = 9, timer = true }
+             position = position, offset = 2, x = 0, y = 0, countSize = 9, timer = true,
+             timerText = false, timerSize = 0 }      -- time left as numbers; size 0: from the icon size
 end
 
 local function UnitDefaults(point)
@@ -454,6 +455,7 @@ local function BuildDefaults()
             showBuffs = false, showDebuffs = true,
             debuffsMine = true,         -- only the debuffs you cast
             auraSize = 15, auraMax = 5, auraRows = 1, auraGap = 1,
+            auraTimer = true, auraTimerSize = 0,    -- time left on the icons; size 0: from the icon size
         },
     }
 end

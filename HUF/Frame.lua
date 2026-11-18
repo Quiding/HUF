@@ -474,7 +474,7 @@ local function AuraCfg(f, which)
         enabled = a.enabled and f.s.enabled,
         kind = which == "debuffs" and "HARMFUL" or "HELPFUL",
         mine = a.mine, size = a.size, gap = a.gap, perRow = a.perRow, rows = a.rows,
-        countSize = a.countSize, timer = a.timer,
+        countSize = a.countSize, timer = a.timer, timerText = a.timerText, timerSize = a.timerSize,
         anchor = pos[1], growH = pos[3], growV = pos[4],
         point = { pos[1], f, pos[2], a.x + pos[5] * a.offset, a.y + pos[6] * a.offset },
     }

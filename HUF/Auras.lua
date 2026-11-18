@@ -69,7 +69,8 @@ end
 -- A row
 --   cfg: enabled, kind ("HARMFUL" / "HELPFUL"), mine, size, gap, perRow,
 --        rows, point {point, rel, relPoint, x, y}, anchor (= point[1]),
---        growH ("LEFT"/"RIGHT"), growV ("UP"/"DOWN"), countSize, timer
+--        growH ("LEFT"/"RIGHT"), growV ("UP"/"DOWN"), countSize, timer,
+--        timerText (time left as numbers), timerSize (0: from the icon size)
 ---------------------------------------------------------------------------
 local Row = {}
 Row.__index = Row
@@ -96,6 +97,24 @@ function Row:Fail(what, err)
     end
 end
 
+-- time left as numbers: the cooldown's own countdown (the game counts it,
+-- so it also works while the aura's times are secret)
+local function TimerSize(cfg)
+    local s = cfg.timerSize or 0
+    if s > 0 then return s end
+    return math.max(7, math.floor((cfg.size or 20) * 0.5 + 0.5))
+end
+local function StyleTimer(cd, cfg)
+    cd:SetHideCountdownNumbers(not cfg.timerText)
+    if cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, 100) end
+    local fs = cd.GetCountdownFontString and cd:GetCountdownFontString()
+    if fs then
+        ns.ApplyFont(fs, "GLOBAL", TimerSize(cfg), "OUTLINE")
+        fs:ClearAllPoints()
+        fs:SetPoint("CENTER", 0, 0)
+    end
+end
+
 -- icon look shared by engine buttons and scan icons
 local function Dress(b, cfg, top)
     local bg = b:CreateTexture(nil, "BACKGROUND")
@@ -109,8 +128,8 @@ local function Dress(b, cfg, top)
     cd:SetAllPoints(icon)
     cd:SetDrawEdge(false)
     cd:SetReverse(true)
-    cd:SetHideCountdownNumbers(true)
     cd:SetDrawSwipe(cfg.timer ~= false)
+    StyleTimer(cd, cfg)
     local over = CreateFrame("Frame", nil, b)
     over:SetAllPoints()
     over:SetFrameLevel(cd:GetFrameLevel() + 2)
@@ -119,7 +138,7 @@ local function Dress(b, cfg, top)
     ns.ApplyFont(count, "GLOBAL", cfg.countSize or 9, "OUTLINE")   -- a font before any text
     count:SetPoint("BOTTOMRIGHT", 1, 0)
     count:SetJustifyH("RIGHT")
-    return { icon = icon, cd = cd, count = count }
+    return { icon = icon, cd = cd, count = count, timerText = cfg.timerText, timerSize = TimerSize(cfg) }
 end
 
 ---------------------------------------------------------------------------
@@ -203,6 +222,10 @@ function Row:Resize()
             if pcall(d.cd.SetDrawSwipe, d.cd, cfg.timer ~= false) then d.timer = cfg.timer
             else self.pendingResize = true end
         end
+        if d.timerText ~= cfg.timerText or d.timerSize ~= TimerSize(cfg) then
+            if pcall(StyleTimer, d.cd, cfg) then d.timerText, d.timerSize = cfg.timerText, TimerSize(cfg)
+            else self.pendingResize = true end
+        end
     end
 end
 
@@ -256,6 +279,7 @@ function Row:Icon(i)
     b:SetSize(cfg.size, cfg.size)
     ns.ApplyFont(b.d.count, "GLOBAL", cfg.countSize or 9, "OUTLINE")
     b.d.cd:SetDrawSwipe(cfg.timer ~= false)
+    StyleTimer(b.d.cd, cfg)
     return b
 end
 

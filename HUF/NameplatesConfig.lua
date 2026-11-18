@@ -131,6 +131,9 @@ local function AuraPage(f)
     R:Slider("Icons per row", 1, 10, 1, Opt("auraMax"))
     R:Slider("Rows", 1, 4, 1, Opt("auraRows"))
     R:Slider("Space", 0, 6, 1, Opt("auraGap"))
+    local gt, st = Opt("auraTimer")
+    R:Check("Time left as numbers", gt, st)
+    R:Slider("Time size (0: automatic)", 0, 20, 1, Opt("auraTimerSize"))
     R:Note("Debuffs start at the left, buffs at the right. Shown by the game's own aura display, so they also work where addons may not read auras.")
 end
 
