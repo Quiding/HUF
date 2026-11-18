@@ -589,14 +589,16 @@ local function RefreshOne()
     win.typeText:SetText(t.text)
     win.sessionText:SetText(SessionLabel())
     if c.titleIcons then
-        local size = math.max(8, (c.titleHeight or 20) - 6)
+        local size = c.titleIconSize or 18
         win.typeB:SetIcon(TYPE_ICONS[t.key] or TYPE_ICONS.DamageDone, size)
         local sk = (wc.session == "OVERALL" and "OVERALL") or (type(wc.session) == "number" and "EARLIER") or "CURRENT"
-        win.sessB:SetIcon(not t.threat and SESSION_ICONS[sk] or nil, size)    -- threat: the enemy's name
+        win.sessB:SetIcon(SESSION_ICONS[sk], size)
+        win.sessB:SetShown(not t.threat)                 -- threat: no fight to pick
         win.label:SetText(t.text)
     else
         win.typeB:SetIcon(nil)
         win.sessB:SetIcon(nil)
+        win.sessB:Show()
         win.label:SetText("")
     end
     local sources = session and session.combatSources or {}
@@ -604,6 +606,10 @@ local function RefreshOne()
     win.sessB:SetDisabled(t.threat and true or false)    -- threat: the enemy's name stands there
     if t.threat then
         win.sessionText:SetText(session and session.title or "")
+        -- icon title bar: the enemy's name where the meter type's name stands
+        if c.titleIcons and session and session.title and session.title ~= "" then
+            pcall(win.label.SetFormattedText, win.label, "%s: %s", t.text, session.title)
+        end
         win.empty:SetText(session and session.empty or "No threat yet")
     else
         win.empty:SetText("No data yet")
@@ -883,20 +889,35 @@ local function Layout()
     end
     ns.ApplyFont(w.label, c.font, c.titleSize, c.outline)
     w.label:SetTextColor(1, 1, 1)
+    local resetB = w.resetText:GetParent()
+    w.typeB:ClearAllPoints()
     w.sessB:ClearAllPoints()
-    w.sessB:SetPoint("TOPRIGHT", w.resetText:GetParent(), "TOPLEFT", -3, 0)
-    w.sessB:SetPoint("BOTTOMRIGHT", w.resetText:GetParent(), "BOTTOMLEFT", -3, 0)
+    w.addB:ClearAllPoints()
     w.label:ClearAllPoints()
     if c.titleIcons then
-        local bw = math.max(8, th - 6) + 16       -- icon + arrow
-        w.typeB:SetWidth(bw)
-        w.sessB:SetWidth(bw)
-        w.label:SetPoint("LEFT", w.quickLast, "RIGHT", 6, 0)
-        w.label:SetPoint("RIGHT", w.sessB, "LEFT", -6, 0)
+        -- like EllesmereUI's header: the name at the left; at the right the
+        -- meter type and fight icons, + new window, R reset, x close
+        local is = c.titleIconSize or 18
+        w.addB:SetPoint("TOPRIGHT", resetB, "TOPLEFT", -3, 0)
+        w.addB:SetPoint("BOTTOMRIGHT", resetB, "BOTTOMLEFT", -3, 0)
+        w.addB:SetWidth(14)
+        w.sessB:SetSize(is + 2, is + 2)
+        w.sessB:SetPoint("RIGHT", w.addB, "LEFT", -3, 0)
+        w.typeB:SetSize(is + 2, is + 2)
+        w.typeB:SetPoint("RIGHT", w.sessB, "LEFT", -2, 0)
+        w.label:SetPoint("LEFT", 6, 0)
+        w.label:SetPoint("RIGHT", w.typeB, "LEFT", -4, 0)
         w.label:Show()
     else
+        w.typeB:SetPoint("TOPLEFT", 3, 0)
+        w.typeB:SetPoint("BOTTOMLEFT", 3, 0)
         w.typeB:SetWidth(math.max(70, c.width * 0.42))
-        w.sessB:SetPoint("LEFT", w.quickLast, "RIGHT", 4, 0)
+        w.addB:SetPoint("TOPLEFT", w.typeB, "TOPRIGHT", 3, 0)
+        w.addB:SetPoint("BOTTOMLEFT", w.typeB, "BOTTOMRIGHT", 3, 0)
+        w.addB:SetWidth(14)
+        w.sessB:SetPoint("TOPRIGHT", resetB, "TOPLEFT", -3, 0)
+        w.sessB:SetPoint("BOTTOMRIGHT", resetB, "BOTTOMLEFT", -3, 0)
+        w.sessB:SetPoint("LEFT", w.addB, "RIGHT", 4, 0)
         w.label:Hide()
     end
     w.typeText:SetTextColor(1, 1, 1)
@@ -954,19 +975,28 @@ local function TitleDropdown(parent, items, get, set, tip)
     b.text:SetJustifyH("LEFT")
     b.text:SetWordWrap(false)
     b.icon = b:CreateTexture(nil, "ARTWORK")
-    b.icon:SetPoint("LEFT", 3, 0)
+    b.icon:SetPoint("CENTER")
     b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     b.icon:Hide()
-    -- an icon in place of the text (nil: the text again)
+    -- an icon in place of the text, box and arrow (nil: the text again)
     function b:SetIcon(path, size)
+        self.iconMode = path ~= nil
         if path then
             self.icon:SetTexture(path)
             self.icon:SetSize(size, size)
             self.icon:Show()
             self.text:Hide()
+            self.arrow:Hide()
+            self.box:Hide()
+            self.hl:ClearAllPoints()
+            self.hl:SetAllPoints(self.icon)
         else
             self.icon:Hide()
             self.text:Show()
+            self.arrow:SetShown(not self.disabled)
+            self.box:SetShown(not self.disabled)
+            self.hl:ClearAllPoints()
+            self.hl:SetAllPoints(self.box)
         end
     end
     b:SetScript("OnClick", function(self)
@@ -994,8 +1024,8 @@ local function TitleDropdown(parent, items, get, set, tip)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
     function b:SetDisabled(off)
         self.disabled = off
-        self.arrow:SetShown(not off)
-        self.box:SetShown(not off)
+        self.arrow:SetShown(not off and not self.iconMode)
+        self.box:SetShown(not off and not self.iconMode)
         self:EnableMouse(not off)
     end
     return b
