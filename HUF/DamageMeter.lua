@@ -664,14 +664,28 @@ function DM.Refresh()
         win = w
         RefreshOne()
     end
+    -- every window's own breakdown / meter list
+    for _, w in ipairs(wins) do
+        if w.bd and w.bd.open then
+            DM.UseWindow(w)
+            DM.RefreshBreakdown()
+        end
+    end
     win = keep
-    if bd.open then DM.RefreshBreakdown() end
 end
 
 ---------------------------------------------------------------------------
 -- Breakdown panel: beside the meter (right, or left when there's no room)
+-- or in its place. Every window has its own (w.panel) and its own state
+-- (w.bd: what is open); `panel` and `bd` are the window at hand's.
 ---------------------------------------------------------------------------
 local panel
+function DM.UseWindow(w)
+    win = w
+    if not w.bd then w.bd = { open = false } end
+    bd = w.bd
+    panel = w.panel
+end
 ---------------------------------------------------------------------------
 -- Spell details on hover (a breakdown row): a box beside the window with
 -- the spell's total, per second, share and rank, and the player's damage
@@ -861,6 +875,7 @@ local function PanelRow(i)
     local r = panel.rows[i]
     if r then return r end
     r = CreateFrame("Frame", nil, panel.body)
+    r.w = win
     r.icon = r:CreateTexture(nil, "ARTWORK")
     r.icon:SetPoint("TOPLEFT")
     r.icon:SetPoint("BOTTOMLEFT")
@@ -885,11 +900,13 @@ local function PanelRow(i)
     -- hover: the spell's details in a box beside the window
     r:SetScript("OnEnter", function(self)
         if self.typeKey or not self.sp then return end
+        DM.UseWindow(self.w)
         local ok, err = pcall(ShowHover, self)
         if not ok then ns.Log("meter", "spell details: %s", tostring(err)) end
     end)
     r:SetScript("OnLeave", function() HideHover() end)
     r:SetScript("OnMouseUp", function(self, button)
+        DM.UseWindow(self.w)
         if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown()
         elseif button == "LeftButton" and self.typeKey and bd.types then
             -- meter list: this meter in the window
@@ -908,9 +925,12 @@ local function PanelRow(i)
 end
 
 local function BuildPanel()
-    if panel then return end
-    local p = CreateFrame("Frame", "HUF_DamageMeterBreakdown", UIParent)
+    if win.panel then panel = win.panel return end
+    local w = win
+    local p = CreateFrame("Frame", "HUF_DamageMeterBreakdown" .. (w.index or 1), UIParent)
+    w.panel = p
     panel = p
+    p.w = w
     p:SetFrameStrata("MEDIUM")
     p:SetClampedToScreen(true)
     p:EnableMouse(true)
@@ -929,7 +949,7 @@ local function BuildPanel()
     p.line:SetPoint("BOTTOMLEFT")
     p.line:SetPoint("BOTTOMRIGHT")
     p.line:SetHeight(1)
-    local close = TitleButton(title, function() DM.CloseBreakdown() end, "Close")
+    local close = TitleButton(title, function() DM.UseWindow(w) DM.CloseBreakdown() end, "Close")
     close:SetPoint("TOPRIGHT", -4, 0)
     close:SetPoint("BOTTOMRIGHT", -4, 0)
     close:SetWidth(16)
@@ -937,7 +957,7 @@ local function BuildPanel()
     p.closeText = close.text
     p.closeB = close
     -- inside the window: back to the names
-    local back = TitleButton(title, function() DM.CloseBreakdown() end, "Back to the names (or right-click the list)")
+    local back = TitleButton(title, function() DM.UseWindow(w) DM.CloseBreakdown() end, "Back to the names (or right-click the list)")
     back:SetPoint("TOPLEFT", 4, 0)
     back:SetPoint("BOTTOMLEFT", 4, 0)
     back:SetWidth(16)
@@ -955,11 +975,13 @@ local function BuildPanel()
     p.body:SetPoint("BOTTOMRIGHT", -1, 1)
     p.body:EnableMouseWheel(true)
     p.body:SetScript("OnMouseWheel", function(_, delta)
+        DM.UseWindow(w)
         p.offset = math.max(0, (p.offset or 0) - delta)
         DM.RefreshBreakdown()
     end)
     p.body:EnableMouse(true)
     p.body:SetScript("OnMouseUp", function(_, button)
+        DM.UseWindow(w)
         if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown() end
     end)
     p.empty = p.body:CreateFontString(nil, "OVERLAY")
@@ -1010,7 +1032,7 @@ local function LayoutPanel()
     p.border:SetShown(c.windowBorder ~= false)
     -- inside the window: the window's own contents step aside, so the
     -- breakdown has exactly its background (also when see-through)
-    for _, o in ipairs(wins) do DM.Cover(o, inline and o == win) end
+    DM.Cover(win, inline and true or false)
     p.line:SetColorTexture(a[1], a[2], a[3], 0.9)
     p.line:SetShown(c.titleLine ~= false)
     ns.ApplyFont(p.head, c.font, c.titleSize, c.outline)
@@ -1049,7 +1071,9 @@ end
 -- meter list inside the window (right-click on the names): a row per meter
 -- type, the current one lit; a click picks it, a right-click goes back
 function DM.OpenTypes()
+    DM.UseWindow(win)
     bd = { open = true, types = true, win = win }
+    win.bd = bd
     BuildPanel()
     LayoutPanel()
     panel.offset = 0
@@ -1092,10 +1116,12 @@ end
 function DM.OpenBreakdown(src, name)
     local t = TYPE_BY_KEY[WC().meterType] or TYPES[1]
     if t.threat then return end
+    DM.UseWindow(win)
     if bd.open and bd.src == src then DM.CloseBreakdown() return end
     local guid, cid = RowIdentity(src)
     bd = { open = true, src = src, guid = guid, cid = cid, name = name, unit = RowUnit(src),
            color = src.classFilename, win = win }
+    win.bd = bd
     BuildPanel()
     LayoutPanel()
     panel.offset = 0
@@ -1103,11 +1129,21 @@ function DM.OpenBreakdown(src, name)
     DM.RefreshBreakdown()
 end
 
+-- closes the window at hand's breakdown / meter list (the others stay)
 function DM.CloseBreakdown()
     bd = { open = false }
+    if win then win.bd = bd end
     HideHover()
     if panel then panel:Hide() end
-    for _, o in ipairs(wins) do DM.Cover(o, false) end
+    DM.Cover(win, false)
+end
+
+local function CloseAllBreakdowns()
+    local keep = win
+    for _, w in ipairs(wins) do
+        if w.bd and w.bd.open then DM.UseWindow(w) DM.CloseBreakdown() end
+    end
+    win = keep
 end
 
 -- a window's own title bar, rows and background hidden (under a breakdown
@@ -1122,6 +1158,7 @@ function DM.Cover(w, on)
 end
 
 function DM.RefreshBreakdown()
+    if win then DM.UseWindow(win) end
     if not (bd.open and panel and panel:IsShown()) then return end
     win = bd.win or win
     if bd.types then RefreshTypes() return end
@@ -1428,7 +1465,7 @@ local function Build(index)
         p[4] = math.floor(p[4] + (w:GetTop() or 0) - from[2] + 0.5)
         win = w
         Layout()
-        if bd.open and bd.win == w then LayoutPanel() end
+        if w.bd and w.bd.open then DM.UseWindow(w) LayoutPanel() end
     end)
     w.title = title:CreateTexture(nil, "BORDER")
     w.title:SetAllPoints()
@@ -1585,10 +1622,11 @@ local function Fade()
     local dim = c.fadeOOC and not InCombatLockdown()
     for _, w in ipairs(wins) do
         if w:IsShown() then
-            local over = w:IsMouseOver() or (bd.open and bd.win == w and panel and panel:IsShown() and panel:IsMouseOver())
+            local p = w.bd and w.bd.open and w.panel
+            local over = w:IsMouseOver() or (p and p:IsShown() and p:IsMouseOver())
             local a = (dim and not over) and c.fadeAlpha or 1
             w:SetAlpha(a)
-            if bd.open and bd.win == w and panel then panel:SetAlpha(a) end
+            if p then p:SetAlpha(a) end
         end
     end
     if dim and not fader then
@@ -1602,7 +1640,7 @@ DM.Fade = Fade
 
 local function HideAll()
     for _, w in ipairs(wins) do w:Hide() end
-    DM.CloseBreakdown()
+    CloseAllBreakdowns()
 end
 
 function DM.Apply()
@@ -1619,8 +1657,11 @@ function DM.Apply()
     end
     for i = count + 1, #wins do wins[i]:Hide() end
     Fade()
-    if bd.open then
-        if bd.win and bd.win:IsShown() then win = bd.win LayoutPanel() else DM.CloseBreakdown() end
+    for _, w in ipairs(wins) do
+        if w.bd and w.bd.open then
+            DM.UseWindow(w)
+            if w:IsShown() then LayoutPanel() else DM.CloseBreakdown() end
+        end
     end
     DM.Refresh()
 end
@@ -1691,7 +1732,11 @@ end
 function DM.CloseWindow(i)
     local c = S()
     if i <= 1 or i > c.windowCount then return end
-    if bd.open and bd.win == wins[i] then DM.CloseBreakdown() end
+    -- the closed window's breakdown and those after it (their settings move up)
+    for j = i, #wins do
+        local w = wins[j]
+        if w.bd and w.bd.open then DM.UseWindow(w) DM.CloseBreakdown() end
+    end
     table.remove(c.windows, i)
     c.windowCount = c.windowCount - 1
     for _, w in ipairs(wins) do w.keepThreat = nil end
