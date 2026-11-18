@@ -917,7 +917,7 @@ local function BuildPanel()
     p.rows = {}
     p.fill = p:CreateTexture(nil, "BACKGROUND")
     p.fill:SetAllPoints()
-    UI.Border(p, 0.15, 0.15, 0.17, 1)
+    p.border = UI.Border(p, 0.15, 0.15, 0.17, 1)
     local title = CreateFrame("Frame", nil, p)
     title:SetPoint("TOPLEFT")
     title:SetPoint("TOPRIGHT")
@@ -1005,8 +1005,12 @@ local function LayoutPanel()
     p.body:ClearAllPoints()
     p.body:SetPoint("TOPLEFT", 1, -(th + 1))
     p.body:SetPoint("BOTTOMRIGHT", -1, 1)
-    p.fill:SetColorTexture(bg.r, bg.g, bg.b, inline and math.max(c.bgAlpha, 0.85) or c.bgAlpha)
-    p.title:SetColorTexture(tc.r, tc.g, tc.b, inline and 1 or ta)
+    p.fill:SetColorTexture(bg.r, bg.g, bg.b, c.bgAlpha)
+    p.title:SetColorTexture(tc.r, tc.g, tc.b, ta)
+    p.border:SetShown(c.windowBorder ~= false)
+    -- inside the window: the window's own contents step aside, so the
+    -- breakdown has exactly its background (also when see-through)
+    for _, o in ipairs(wins) do DM.Cover(o, inline and o == win) end
     p.line:SetColorTexture(a[1], a[2], a[3], 0.9)
     p.line:SetShown(c.titleLine ~= false)
     ns.ApplyFont(p.head, c.font, c.titleSize, c.outline)
@@ -1103,6 +1107,18 @@ function DM.CloseBreakdown()
     bd = { open = false }
     HideHover()
     if panel then panel:Hide() end
+    for _, o in ipairs(wins) do DM.Cover(o, false) end
+end
+
+-- a window's own title bar, rows and background hidden (under a breakdown
+-- inside it) or back
+function DM.Cover(w, on)
+    if not (w and w.body) or (w.covered or false) == on then return end
+    w.covered = on
+    w.body:SetShown(not on)
+    w.titleBar:SetShown(not on)
+    w.fill:SetShown(not on)
+    w.border:SetShown(not on and S().windowBorder ~= false)
 end
 
 function DM.RefreshBreakdown()
@@ -1183,7 +1199,7 @@ local function Layout()
     w.title:SetColorTexture(tc.r, tc.g, tc.b, ta)
     w.line:SetColorTexture(a[1], a[2], a[3], 0.9)
     w.line:SetShown(c.titleLine ~= false)
-    w.border:SetShown(c.windowBorder ~= false)
+    w.border:SetShown(c.windowBorder ~= false and not w.covered)
     w.body:ClearAllPoints()
     w.body:SetPoint("TOPLEFT", 1, -(th + 1))
     w.body:SetPoint("BOTTOMRIGHT", -1, 1)
