@@ -776,6 +776,7 @@ local function UnitPage(key)
         subs.power = SubFrame(page); BarPage(subs.power, key, "power")
         subs.texts = SubFrame(page); TextsPage(subs.texts, key, page)
         if not info.noAuras then subs.auras = SubFrame(page); AuraPage(subs.auras, key) end
+        strip:Bind(subs, Show)
         Show("frame")
     end
 end

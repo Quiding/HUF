@@ -53,6 +53,7 @@ function UI.Label(parent, text, template)
 end
 
 function UI.Tooltip(frame, title, text)
+    frame.hufTipTitle, frame.hufTip = title, text      -- the settings search reads them
     frame:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(title)
@@ -678,7 +679,7 @@ function UI.SubTabs(parent, tabs, onSelect)
     local x = 0
     for _, t in ipairs(tabs) do
         local b = CreateFrame("Button", nil, strip)
-        b.key = t[1]
+        b.key, b.text = t[1], t[2]
         b.label = UI.Label(b, t[2], "GameFontNormal")
         b.label:SetPoint("CENTER", 0, 1)
         local w = math.max(70, (b.label:GetStringWidth() or 60) + 24)
@@ -692,6 +693,13 @@ function UI.SubTabs(parent, tabs, onSelect)
         Highlight(b)
         b:SetScript("OnClick", function() strip:Select(b.key) if onSelect then onSelect(b.key) end end)
         strip.buttons[#strip.buttons + 1] = b
+    end
+    -- the settings search: each tab's panel knows its tab (frame.hufTab)
+    function strip:Bind(subs, show)
+        for _, b in ipairs(self.buttons) do
+            local f = subs[b.key]
+            if f then f.hufTab = { label = b.text, show = function() show(b.key) end } end
+        end
     end
     function strip:Select(key)
         self.current = key

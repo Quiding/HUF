@@ -14,6 +14,7 @@ ns.PAGE_W, ns.PAGE_H = WIDTH - NAV - 32, HEIGHT - 56
 local window
 local pages, order = {}, {}
 local current
+ns.configPages, ns.ConfigOrder = pages, order     -- the settings search reads them (Search.lua)
 
 -- section: "general" or "frames"; isOn(): nil = no on/off state
 function ns.RegisterPage(key, title, section, build, isOn)
@@ -43,20 +44,27 @@ end
 ns.OnRefresh(function() ns.RefreshConfig() end)
 ns.Listen("PROFILE_CHANGED", function() ns.RefreshConfig() end)
 
+-- a page's frame (built the first time it is needed; hidden until selected)
+local function BuildPage(page)
+    if page.frame then return page.frame end
+    local frame = CreateFrame("Frame", nil, window)
+    frame:SetPoint("TOPLEFT", NAV + 16, -44)
+    frame:SetSize(ns.PAGE_W, ns.PAGE_H)
+    frame.widgets = {}
+    frame:Hide()
+    page.build(frame)
+    page.frame = frame
+    return frame
+end
+ns.ConfigBuildPage = BuildPage
+
 local function Select(key)
     if not pages[key] then key = "general" end
     current = key
     ns.Log("config", "page %s", key)
     for k, page in pairs(pages) do
         local selected = (k == key)
-        if selected and not page.frame then
-            local frame = CreateFrame("Frame", nil, window)
-            frame:SetPoint("TOPLEFT", NAV + 16, -44)
-            frame:SetSize(ns.PAGE_W, ns.PAGE_H)
-            frame.widgets = {}
-            page.build(frame)
-            page.frame = frame
-        end
+        if selected and not page.frame then BuildPage(page) end
         if page.frame then page.frame:SetShown(selected) end
     end
     window.pageTitle:SetText(pages[key].title)
@@ -213,6 +221,7 @@ local function Build()
     w.pageTitle:SetPoint("TOPLEFT", NAV + 16, -14)
     local close = UI.TextButton(w, "x", function() w:Hide() end, 20)
     close:SetPoint("TOPRIGHT", -8, -8)
+    if ns.BuildConfigSearch then ns.BuildConfigSearch(w) end
 
     function w.ApplyLook()
         ns.Frame.SetBackground(w.art, ns.db.global.configBg, { r = 1, g = 1, b = 1 }, 0.55)
@@ -244,6 +253,11 @@ function ns.SetConfigScale(v)
 end
 
 -- key: page key ("general", "player", "raid", ...); open: never close
+-- the settings search: open a page (the window open)
+function ns.ConfigSelect(key)
+    if window and window:IsShown() then Select(key) end
+end
+
 -- not in combat: settings changes can touch secure frames (and a reload is
 -- refused), so the window stays closed while fighting and opens after
 local reopen   -- page to open when combat ends (false: none)
