@@ -244,7 +244,17 @@ function ns.SetConfigScale(v)
 end
 
 -- key: page key ("general", "player", "raid", ...); open: never close
+-- not in combat: settings changes can touch secure frames (and a reload is
+-- refused), so the window stays closed while fighting and opens after
+local reopen   -- page to open when combat ends (false: none)
 function ns.ToggleConfig(key, open)
+    if InCombatLockdown() then
+        if not (window and window:IsShown()) then
+            reopen = key or current or "general"
+            ns.Print("The settings open when the fight is over.")
+        end
+        return
+    end
     window = window or Build()
     if key and pages[key] then
         current = key
@@ -278,6 +288,26 @@ end)
 ---------------------------------------------------------------------------
 -- Slash command
 ---------------------------------------------------------------------------
+-- combat starts: the settings and their dialogs close (back after the fight)
+ns.On("PLAYER_REGEN_DISABLED", function()
+    if window and window:IsShown() then
+        reopen = current or "general"
+        window:Hide()
+        ns.Print("Settings closed for the fight; they open again when it's over.")
+    end
+    for _, name in ipairs({ "HUFEllesmereImportFrame", "HUFConfirmFrame" }) do
+        local f = _G[name]
+        if f and f:IsShown() then f:Hide() end
+    end
+end)
+ns.On("PLAYER_REGEN_ENABLED", function()
+    if reopen then
+        local key = reopen
+        reopen = false
+        ns.ToggleConfig(key, true)
+    end
+end)
+
 SLASH_HUF1 = "/huf"
 SlashCmdList.HUF = function(msg)
     local raw = ns.Trim(msg)
