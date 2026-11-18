@@ -23,6 +23,7 @@ local EUI_PREFIX = "!EUI_"
 local UF_FOLDER = "EllesmereUIUnitFrames"
 local NP_FOLDER = "EllesmereUINameplates"
 local DM_FOLDER = "EllesmereUIDamageMeters"
+local RF_FOLDER = "EllesmereUIRaidFrames"
 
 -- HUF frame key -> Ellesmere settings key
 local UNIT_KEYS = { player = "player", target = "target", targettarget = "targettarget", pet = "pet" }
@@ -701,6 +702,48 @@ local function ConvertDamageMeter(addon, m, notes)
 end
 
 ---------------------------------------------------------------------------
+-- Group frames (EllesmereUIRaidFrames: its party size, raid look)
+---------------------------------------------------------------------------
+local GROWTH = { DOWN = "DOWN", UP = "UP", RIGHT = "RIGHT", LEFT = "LEFT" }
+local function ConvertGroup(rf, g, notes)
+    local function G(k, d) local v = rf[k] if v == nil then return d end return v end
+    local bs = math.max(0, math.floor(Num(G("borderSize"), 1) + 0.5))
+    g.enabled = true
+    g.width = math.max(40, math.floor(Num(G("partyFrameWidth"), Num(G("frameWidth"), 125)) - 2 * bs + 0.5))
+    g.height = math.max(10, math.floor(Num(G("partyFrameHeight"), Num(G("frameHeight"), 60)) - 2 * bs + 0.5))
+    local power = G("showPowerBar", true) and true or false
+    g.power.enabled = power
+    g.power.size = math.max(1, math.floor(Num(G("powerHeight"), 4) + 0.5))
+    g.power.gap = 0
+    g.power.divider = false
+    local tex = TextureName(G("healthBarTexture", "atrocity")) or "Flat"
+    local bg = Color(G("customBgColor"), { r = 17 / 255, g = 17 / 255, b = 17 / 255 })
+    for _, which in ipairs({ "health", "power" }) do
+        local b = g[which]
+        b.texture = tex
+        b.borderSize = bs
+        b.borderColor = Color(G("borderColor"), { r = 0, g = 0, b = 0 })
+        b.bgTexture, b.bgColor, b.bgAlpha = "Plain", ns.CopyTable(bg), 1
+    end
+    local mode = G("healthColorMode", "class")
+    if mode == "class" or mode == "classReactive" then
+        g.health.colorMode = "CLASS"
+    else
+        g.health.colorMode = "STATIC"
+        g.health.color = Color(G("customFillColor"), { r = 37 / 255, g = 193 / 255, b = 29 / 255 })
+        if mode ~= "custom" then notes[#notes + 1] = ("Group: health colour \"%s\" is a static colour in HUF."):format(tostring(mode)) end
+    end
+    if type(g.healPred) == "table" then g.healPred.enabled = G("healPrediction", false) == true end
+    g.group = g.group or {}
+    g.group.orientation = GROWTH[G("unitGrowth", "DOWN")] or "DOWN"
+    g.group.spacing = math.max(0, math.floor(Num(G("cellSpacing"), -1) + 2 * bs + 0.5))
+    g.group.spacingH = g.group.spacing
+    g.group.sort = (G("sortMode", "ROLE") == "INDEX") and "INDEX" or "NAME"
+    g.group.showPlayer = true
+    notes[#notes + 1] = "Group: size, bars, border, colours and growth imported; texts, auras and role icons keep HUF's."
+end
+
+---------------------------------------------------------------------------
 -- Public
 ---------------------------------------------------------------------------
 -- prof: Ellesmere profile data (addons, fonts); uf / np its Unit Frames /
@@ -732,6 +775,14 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         out.nameplates.enabled = npOn ~= false
         parts[#parts + 1] = { title = "Nameplates", tbl = out.nameplates, on = out.nameplates.enabled,
             why = "EllesmereUI Nameplates is off", folder = NP_FOLDER, module = "EllesmereUI Nameplates" }
+    end
+    local rf = prof and prof.addons and prof.addons[RF_FOLDER]
+    if type(rf) == "table" and out.units.party then
+        local okG, err = pcall(ConvertGroup, rf, out.units.party, notes)
+        if not okG then return false, "Could not convert the group frames: " .. tostring(err) end
+        what[#what + 1] = "group frames"
+        parts[#parts + 1] = { title = "Group frames", tbl = out.units.party, on = true,
+            why = "off in Ellesmere", folder = RF_FOLDER, module = "EllesmereUI Raid Frames" }
     end
     if dm and type(out.damageMeter) == "table" then
         local okD, err = pcall(ConvertDamageMeter, dm, out.damageMeter, notes)
