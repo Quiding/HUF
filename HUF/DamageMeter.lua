@@ -90,14 +90,16 @@ local function GroupUnits()
     return list
 end
 
-local roster = { byGUID = {}, byName = {}, byClass = {} }   -- rebuilt on roster changes
+local roster = { byGUID = {}, byName = {}, byClass = {}, guidOf = {} }   -- rebuilt on roster changes
 local specGUID = {}      -- "HUNTER:132215" -> guid (false: two members share it)
 
 local function RebuildRoster()
-    roster = { byGUID = {}, byName = {}, byClass = {} }
+    local oldGuid = roster.guidOf or {}
+    roster = { byGUID = {}, byName = {}, byClass = {}, guidOf = {} }
     for _, u in ipairs(GroupUnits()) do
         local okG, g = pcall(UnitGUID, u)
-        if okG and Plain(g) then roster.byGUID[g] = u end
+        if okG and Plain(g) then roster.byGUID[g] = u roster.guidOf[u] = g
+        elseif oldGuid[u] then roster.guidOf[u] = oldGuid[u] end
         local first, last = ns.UnitRealNames(u)
         if Plain(first) then
             roster.byName[ns.NormKey(first)] = roster.byName[ns.NormKey(first)] == nil and u or false
@@ -374,6 +376,65 @@ local function GetSession()
     return s, t
 end
 
+---------------------------------------------------------------------------
+-- Breakdown: one row's spells (like the game's own meter). The game's
+-- getters refuse secret arguments, so in combat a row needs a plain GUID:
+-- yours, or a group member's that HUF recognised (RowUnit).
+---------------------------------------------------------------------------
+local bd = { open = false }      -- guid, cid, name, unit of the shown row
+
+local function RowIdentity(src)
+    local g, cid = src.sourceGUID, src.sourceCreatureID
+    if Plain(g) and (cid == nil or Plain(cid)) then return g, cid end
+    local unit = RowUnit(src)
+    if unit then
+        local okG, ug = pcall(UnitGUID, unit)
+        if okG and Plain(ug) then return ug, nil end
+        if roster.guidOf[unit] then return roster.guidOf[unit], nil end
+    end
+end
+
+local function GetBreakdown()
+    local c = S()
+    local t = TYPE_BY_KEY[c.meterType] or TYPES[1]
+    if t.threat or t.deaths then return nil, t, t.threat and "No breakdown for threat" or "No breakdown for deaths" end
+    if not bd.guid and bd.unit then bd.guid = roster.guidOf[bd.unit] end
+    if not bd.guid and not bd.cid then return nil, t, "Available when the fight ends" end
+    local mtype = Enum.DamageMeterType[t.key]
+    local ok, s
+    if type(c.session) == "number" and C_DamageMeter.GetCombatSessionSourceFromID then
+        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromID, c.session, mtype, bd.guid, bd.cid)
+    elseif C_DamageMeter.GetCombatSessionSourceFromType then
+        local st = c.session == "OVERALL" and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromType, st, mtype, bd.guid, bd.cid)
+    end
+    if not ok or type(s) ~= "table" or type(s.combatSpells) ~= "table" then
+        return nil, t, InCombatLockdown() and "Available when the fight ends" or "Nothing in this fight"
+    end
+    return s.combatSpells, t
+end
+
+local function SpellInfo(id)
+    local name, icon
+    if id ~= nil then
+        if C_Spell and C_Spell.GetSpellName then
+            local ok, n = pcall(C_Spell.GetSpellName, id)
+            if ok then name = n end
+        elseif GetSpellInfo then
+            local ok, n = pcall(GetSpellInfo, id)
+            if ok then name = n end
+        end
+        if C_Spell and C_Spell.GetSpellTexture then
+            local ok, t = pcall(C_Spell.GetSpellTexture, id)
+            if ok then icon = t end
+        elseif GetSpellTexture then
+            local ok, t = pcall(GetSpellTexture, id)
+            if ok then icon = t end
+        end
+    end
+    return name, icon
+end
+
 local function BarColor(bar, src)
     local c = S()
     if src.threatStatus ~= nil and c.threatColors then
@@ -420,6 +481,17 @@ local function Row(i)
     r.left:SetJustifyH("LEFT")
     r.right:SetJustifyH("RIGHT")
     r.left:SetWordWrap(false)
+    r:EnableMouse(true)
+    r:SetScript("OnMouseUp", function(self, button)
+        if button == "LeftButton" and self.src then DM.OpenBreakdown(self.src, self.name) end
+    end)
+    r:SetScript("OnEnter", function(self)
+        if not self.src or self.isThreat then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText("Click: what this was made of", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
     win.rows[i] = r
     return r
 end
@@ -454,6 +526,7 @@ function DM.Refresh()
             shown = shown + 1
             local rank = i + win.offset
             local name = DM.RowName(src)
+            r.src, r.name, r.isThreat = src, name, t.threat
             if c.showRank then
                 local ok = pcall(r.left.SetFormattedText, r.left, "%d. %s", rank, name)
                 if not ok then r.left:SetText(name) end
@@ -473,11 +546,211 @@ function DM.Refresh()
             BarColor(r, src)
             r:Show()
         else
+            r.src = nil
             r:Hide()
         end
     end
     for i = c.rows + 1, #win.rows do win.rows[i]:Hide() end
     win.empty:SetShown(shown == 0)
+    if bd.open then DM.RefreshBreakdown() end
+end
+
+---------------------------------------------------------------------------
+-- Breakdown panel: beside the meter (right, or left when there's no room)
+---------------------------------------------------------------------------
+local panel
+local TitleButton      -- defined with the window's title bar below
+local function PanelRow(i)
+    local r = panel.rows[i]
+    if r then return r end
+    r = CreateFrame("Frame", nil, panel.body)
+    r.icon = r:CreateTexture(nil, "ARTWORK")
+    r.icon:SetPoint("TOPLEFT")
+    r.icon:SetPoint("BOTTOMLEFT")
+    r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    r.bar = CreateFrame("StatusBar", nil, r)
+    r.bar:SetPoint("TOPLEFT", r.icon, "TOPRIGHT", 1, 0)
+    r.bar:SetPoint("BOTTOMRIGHT")
+    r.bg = r.bar:CreateTexture(nil, "BACKGROUND")
+    r.bg:SetAllPoints()
+    r.left = r.bar:CreateFontString(nil, "OVERLAY")
+    r.right = r.bar:CreateFontString(nil, "OVERLAY")
+    ns.ApplyFont(r.left, "GLOBAL", 11, "OUTLINE")
+    ns.ApplyFont(r.right, "GLOBAL", 11, "OUTLINE")
+    r.left:SetJustifyH("LEFT")
+    r.left:SetWordWrap(false)
+    r.right:SetJustifyH("RIGHT")
+    r:EnableMouse(true)
+    r:SetScript("OnEnter", function(self)
+        local id = self.spellID
+        if id == nil or not Plain(id) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if pcall(GameTooltip.SetSpellByID, GameTooltip, id) then GameTooltip:Show() end
+    end)
+    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    panel.rows[i] = r
+    return r
+end
+
+local function BuildPanel()
+    if panel then return end
+    local p = CreateFrame("Frame", "HUF_DamageMeterBreakdown", UIParent)
+    panel = p
+    p:SetFrameStrata("MEDIUM")
+    p:SetClampedToScreen(true)
+    p:EnableMouse(true)
+    p.rows = {}
+    p.fill = p:CreateTexture(nil, "BACKGROUND")
+    p.fill:SetAllPoints()
+    UI.Border(p, 0.15, 0.15, 0.17, 1)
+    local title = CreateFrame("Frame", nil, p)
+    title:SetPoint("TOPLEFT")
+    title:SetPoint("TOPRIGHT")
+    title:SetHeight(20)
+    p.title = title:CreateTexture(nil, "BORDER")
+    p.title:SetAllPoints()
+    p.line = title:CreateTexture(nil, "ARTWORK")
+    p.line:SetPoint("BOTTOMLEFT")
+    p.line:SetPoint("BOTTOMRIGHT")
+    p.line:SetHeight(1)
+    local close = TitleButton(title, function() DM.CloseBreakdown() end, "Close")
+    close:SetPoint("TOPRIGHT", -4, 0)
+    close:SetPoint("BOTTOMRIGHT", -4, 0)
+    close:SetWidth(16)
+    close.text:SetText("x")
+    p.closeText = close.text
+    p.head = title:CreateFontString(nil, "OVERLAY")
+    ns.ApplyFont(p.head, "GLOBAL", 11, "OUTLINE")
+    p.head:SetPoint("LEFT", 6, 0)
+    p.head:SetPoint("RIGHT", close, "LEFT", -4, 0)
+    p.head:SetJustifyH("LEFT")
+    p.head:SetWordWrap(false)
+    p.body = CreateFrame("Frame", nil, p)
+    p.body:SetPoint("TOPLEFT", 1, -21)
+    p.body:SetPoint("BOTTOMRIGHT", -1, 1)
+    p.body:EnableMouseWheel(true)
+    p.body:SetScript("OnMouseWheel", function(_, delta)
+        p.offset = math.max(0, (p.offset or 0) - delta)
+        DM.RefreshBreakdown()
+    end)
+    p.empty = p.body:CreateFontString(nil, "OVERLAY")
+    ns.ApplyFont(p.empty, "GLOBAL", 11, "OUTLINE")
+    p.empty:SetPoint("TOP", 0, -8)
+    p.empty:SetTextColor(0.5, 0.5, 0.5)
+    p.offset = 0
+    p:Hide()
+end
+
+local function LayoutPanel()
+    local c = S()
+    local p = panel
+    p:SetScale(c.scale)
+    p:SetSize(c.width, win:GetHeight())
+    p:ClearAllPoints()
+    local right = (win:GetRight() or 0) + c.width + 4
+    local screen = (UIParent:GetRight() or GetScreenWidth and GetScreenWidth() or 1920) * (UIParent:GetEffectiveScale() or 1)
+    if right * (win:GetEffectiveScale() or 1) > screen then
+        p:SetPoint("TOPRIGHT", win, "TOPLEFT", -2, 0)
+    else
+        p:SetPoint("TOPLEFT", win, "TOPRIGHT", 2, 0)
+    end
+    local a = ns.ACCENT
+    p.fill:SetColorTexture(0.04, 0.04, 0.05, c.bgAlpha)
+    p.title:SetColorTexture(0.08, 0.08, 0.09, math.min(1, c.bgAlpha + 0.15))
+    p.line:SetColorTexture(a[1], a[2], a[3], 0.9)
+    ns.ApplyFont(p.head, c.font, c.titleSize, c.outline)
+    ns.ApplyFont(p.closeText, c.font, c.titleSize, c.outline)
+    ns.ApplyFont(p.empty, c.font, c.fontSize, c.outline)
+    local tex = ns.TexturePath(c.texture)
+    for i = 1, ROW_POOL do
+        local r = PanelRow(i)
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT", p.body, "TOPLEFT", 0, -(i - 1) * (c.rowHeight + c.rowGap))
+        r:SetPoint("TOPRIGHT", p.body, "TOPRIGHT", 0, -(i - 1) * (c.rowHeight + c.rowGap))
+        r:SetHeight(c.rowHeight)
+        r.icon:SetWidth(c.rowHeight)
+        r.bar:SetStatusBarTexture(tex)
+        r.bg:SetColorTexture(0, 0, 0, 0.35)
+        ns.ApplyFont(r.left, c.font, c.fontSize, c.outline)
+        ns.ApplyFont(r.right, c.font, c.fontSize, c.outline)
+        r.left:ClearAllPoints()
+        r.left:SetPoint("LEFT", 4, 0)
+        r.left:SetPoint("RIGHT", r.right, "LEFT", -4, 0)
+        r.right:ClearAllPoints()
+        r.right:SetPoint("RIGHT", -4, 0)
+        if i > c.rows then r:Hide() end
+    end
+end
+
+function DM.OpenBreakdown(src, name)
+    local t = TYPE_BY_KEY[S().meterType] or TYPES[1]
+    if t.threat then return end
+    if bd.open and bd.src == src then DM.CloseBreakdown() return end
+    local guid, cid = RowIdentity(src)
+    bd = { open = true, src = src, guid = guid, cid = cid, name = name, unit = RowUnit(src),
+           color = src.classFilename }
+    BuildPanel()
+    LayoutPanel()
+    panel.offset = 0
+    panel:Show()
+    DM.RefreshBreakdown()
+end
+
+function DM.CloseBreakdown()
+    bd = { open = false }
+    if panel then panel:Hide() end
+end
+
+function DM.RefreshBreakdown()
+    if not (bd.open and panel and panel:IsShown()) then return end
+    local c = S()
+    local spells, t, why = GetBreakdown()
+    local ok = pcall(panel.head.SetFormattedText, panel.head, "%s - %s", bd.name or "?", t.text)
+    if not ok then panel.head:SetText(t.text) end
+    spells = spells or {}
+    local n = #spells
+    panel.offset = math.max(0, math.min(panel.offset or 0, n - c.rows))
+    -- percent of the whole row, when the numbers are readable
+    local sum, plain = 0, true
+    for _, sp in ipairs(spells) do
+        local a = sp.totalAmount
+        if Plain(a) and type(a) == "number" then sum = sum + a else plain = false end
+    end
+    local max = spells[1] and spells[1].totalAmount
+    local col = bd.color and Plain(bd.color) and ns.ClassColor(bd.color)
+    local shown = 0
+    for i = 1, c.rows do
+        local r = PanelRow(i)
+        local sp = spells[i + panel.offset]
+        if sp then
+            shown = shown + 1
+            local id = sp.spellID
+            local sname, icon = SpellInfo(id)
+            r.spellID = id
+            r.icon:SetTexture(icon or 134400)          -- question mark
+            if sname ~= nil then r.left:SetText(sname)
+            elseif sp.creatureName ~= nil then r.left:SetText(sp.creatureName)
+            else r.left:SetText("Melee / other") end
+            local total = sp.totalAmount
+            local txt = Short(total)
+            if plain and sum > 0 then
+                local okF, s2 = pcall(string.format, "%s  %d%%", txt, math.floor(total / sum * 100 + 0.5))
+                if okF then txt = s2 end
+            end
+            r.right:SetText(txt)
+            if max == nil or not pcall(r.bar.SetMinMaxValues, r.bar, 0, max) then r.bar:SetMinMaxValues(0, 1) end
+            if not pcall(r.bar.SetValue, r.bar, total or 0) then r.bar:SetValue(0) end
+            if col and c.colorMode == "CLASS" then r.bar:SetStatusBarColor(col.r, col.g, col.b)
+            else BarColor(r.bar, { classFilename = bd.color }) end
+            r:Show()
+        else
+            r.spellID = nil
+            r:Hide()
+        end
+    end
+    for i = c.rows + 1, #panel.rows do panel.rows[i]:Hide() end
+    panel.empty:SetText(why or "Nothing in this fight")
+    panel.empty:SetShown(shown == 0)
 end
 
 local function Layout()
@@ -574,7 +847,7 @@ local function TitleDropdown(parent, items, get, set, tip)
     return b
 end
 
-local function TitleButton(parent, onClick, tip)
+TitleButton = function(parent, onClick, tip)
     local b = CreateFrame("Button", nil, parent)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     b:SetScript("OnClick", onClick)
@@ -720,6 +993,9 @@ end
 
 function DM.Apply()
     DM.ApplyBlizzard()
+    if panel and panel:IsShown() then
+        if WantShown() and win then LayoutPanel() else DM.CloseBreakdown() end
+    end
     if not Available() then
         if win then win:Hide() end
         return
