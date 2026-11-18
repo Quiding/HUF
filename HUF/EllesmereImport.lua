@@ -7,7 +7,7 @@
 --     power bar, portrait, texts, buffs / debuffs, texture, colours, border,
 --     font, incoming heals (Heal Prediction), power colours
 --   * Nameplates: bar, texts, NPC colours, cast bar, debuffs
---   * Damage Meters: its first window
+--   * Damage Meters: its windows (up to 5), look, when it shows
 -- Everything else of the active HUF profile (group frames, accent, privacy
 -- ...) stays as it is. The result looks close to Ellesmere's, not
 -- pixel-identical: what HUF has no setting for is left out and listed after
@@ -550,28 +550,69 @@ local DM_NUMBERS = { [0] = "PERSECOND", [1] = "TOTAL", [2] = "BOTH", [3] = "BOTH
 local function ConvertDamageMeter(addon, m, notes)
     local c = type(addon.dm) == "table" and addon.dm or addon
     local function G(k, d) local v = c[k] if v == nil then return d end return v end
-    local w = type(c.windows) == "table" and type(c.windows[1]) == "table" and c.windows[1] or {}
+    local list = type(c.windows) == "table" and c.windows or {}
+    local w = type(list[1]) == "table" and list[1] or {}
     m.enabled = true
     m.hideBlizzard = true
 
-    -- place and size: Ellesmere's window height has its title bar in it
-    local pos = w.position
-    if type(pos) == "table" then
+    -- a window's place: unlock format { point, relPoint, x, y } or the older
+    -- { x, y } (its top left from the screen's bottom left)
+    local function Point(pos)
+        if type(pos) ~= "table" then return nil end
         local p1, p2 = pos.point or pos[1], pos.relPoint or pos[2]
         local x, y = pos.x or pos[3], pos.y or pos[4]
         if type(p1) == "string" and type(x) == "number" and type(y) == "number" then
-            m.point = { p1, type(p2) == "string" and p2 or p1, math.floor(x + 0.5), math.floor(y + 0.5) }
+            return { p1, type(p2) == "string" and p2 or p1, math.floor(x + 0.5), math.floor(y + 0.5) }
         elseif type(pos.x) == "number" and type(pos.y) == "number" then
-            -- older format: the window's top left from the screen's bottom left
-            m.point = { "TOPLEFT", "BOTTOMLEFT", math.floor(pos.x + 0.5), math.floor(pos.y + 0.5) }
+            return { "TOPLEFT", "BOTTOMLEFT", math.floor(pos.x + 0.5), math.floor(pos.y + 0.5) }
         end
+        return nil
     end
+    -- a window's meter type, when HUF has it (Ellesmere stores the game's enum number)
+    local function MeterType(cur)
+        if type(cur) ~= "number" or not (Enum and type(Enum.DamageMeterType) == "table") then return nil end
+        for key, v in pairs(Enum.DamageMeterType) do
+            if v == cur then
+                for _, t in ipairs((ns.DamageMeter and ns.DamageMeter.TYPES) or {}) do
+                    if t.key == key then return key end
+                end
+            end
+        end
+        return nil
+    end
+
+    -- the windows: each its own meter type and place (HUF: up to 5)
+    local count = math.max(1, math.min(5, math.floor(Num(G("windowCount"), 1))))
+    if Num(G("windowCount"), 1) > 5 then
+        notes[#notes + 1] = "Damage meter: HUF has up to 5 windows; the first 5 of Ellesmere's are taken."
+    end
+    local windows = {}
+    for i = 1, count do
+        local e = type(list[i]) == "table" and list[i] or {}
+        local before = windows[i - 1]
+        local point = Point(e.position)
+            or (before and { before.point[1], before.point[2], before.point[3] - Num(w.width, 375) - 8, before.point[4] })
+            or ns.CopyTable(m.point)
+        windows[i] = { meterType = MeterType(e.curDMType) or "DamageDone", session = "CURRENT", point = point }
+    end
+    m.windows, m.windowCount = windows, count
+    m.point = ns.CopyTable(windows[1].point)
+    m.meterType, m.session = windows[1].meterType, "CURRENT"
+
+    -- size: shared by HUF's windows, Ellesmere's first one's (its height has the title bar in it)
     m.width = math.max(100, math.floor(Num(w.width, 375) + 0.5))
     m.rowHeight = math.max(8, math.floor(Num(G("barHeight"), 18) + 0.5))
     m.rowGap = math.max(0, math.floor(Num(G("barSpacing"), 2) + 0.5))
     local body = Num(w.height, 150) - Num(G("hdrHeight"), 22)
     m.rows = math.max(1, math.min(40, math.floor((body + m.rowGap) / (m.rowHeight + m.rowGap))))
     m.locked = w.locked and true or false
+    for i = 2, count do
+        local e = list[i]
+        if type(e) == "table" and (Num(e.width, m.width) ~= Num(w.width, 375) or Num(e.height, 150) ~= Num(w.height, 150)) then
+            notes[#notes + 1] = "Damage meter: HUF's windows share one size; the first window's is taken."
+            break
+        end
+    end
 
     -- look
     m.texture = TextureName(G("barTexture", "atrocity")) or "Flat"
@@ -588,30 +629,23 @@ local function ConvertDamageMeter(addon, m, notes)
     m.titleSize = math.floor(Num(G("hdrFontSize"), 11) + 0.5)
     m.numbers = DM_NUMBERS[G("numberFormat", 2)] or "BOTH"
 
-    -- when it shows
+    -- when it shows. Ellesmere doesn't fade out of combat: HUF's fading off,
+    -- except for "in combat" / "mouseover" (out of combat invisible, the
+    -- mouse brings it back)
     local vis = G("visibility", "always")
+    m.show = "ALWAYS"
+    m.fadeOOC = false
     if w.hideOutOfInstance then
         m.show = "INSTANCE"
     elseif DM_SHOW[vis] then
         m.show = DM_SHOW[vis]
-    else
-        m.show = "ALWAYS"
-        notes[#notes + 1] = ("Damage meter: \"%s\" visibility is not in HUF, it shows always."):format(tostring(vis))
-    end
-
-    -- what it shows: the window's meter type, when HUF has it
-    local cur = w.curDMType
-    if type(cur) == "number" and Enum and type(Enum.DamageMeterType) == "table" then
-        for key, v in pairs(Enum.DamageMeterType) do
-            if v == cur then
-                for _, t in ipairs((ns.DamageMeter and ns.DamageMeter.TYPES) or {}) do
-                    if t.key == key then m.meterType = key end
-                end
-            end
+    elseif vis == "in_combat" or vis == "mouseover" then
+        m.fadeOOC, m.fadeAlpha = true, 0
+        if vis == "mouseover" then
+            notes[#notes + 1] = "Damage meter: \"mouseover\" becomes invisible out of combat (shown in combat and under the mouse)."
         end
-    end
-    if Num(G("windowCount"), 1) > 1 then
-        notes[#notes + 1] = "Damage meter: HUF has one window; the first of Ellesmere's is taken."
+    else
+        notes[#notes + 1] = ("Damage meter: \"%s\" visibility is not in HUF, it shows always."):format(tostring(vis))
     end
 end
 
