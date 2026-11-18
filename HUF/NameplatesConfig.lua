@@ -140,6 +140,37 @@ local function NamePage(f)
     R:Note("Names follow the privacy setting (Names & MMT), so your MMT team shows the way MMT says.")
 end
 
+-- the game's damage numbers over units (world text): read and written as the
+-- game's own settings (CVars), not kept in a HUF profile. Nameplates are
+-- always drawn over them (no addon can change that): larger numbers, or
+-- numbers that fall away faster, are covered less.
+local function CVarNum(name, default)
+    local v = C_CVar and C_CVar.GetCVar and C_CVar.GetCVar(name)
+    return tonumber(v) or default
+end
+local function SetCVarNum(name, v)
+    if InCombatLockdown() then ns.Print("Damage numbers: change them out of combat.") return end
+    if C_CVar and C_CVar.SetCVar then pcall(C_CVar.SetCVar, name, tostring(v)) end
+end
+local function CombatTextPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Damage numbers (game setting)")
+    L:Slider("Size", 0.5, 2.5, 0.05, function() return CVarNum("WorldTextScale_v2", 1) end,
+        function(v) SetCVarNum("WorldTextScale_v2", v) end, "%.2f")
+    L:Slider("Gravity (how fast they fall away)", 0, 2, 0.05, function() return CVarNum("WorldTextGravity_v2", 0.5) end,
+        function(v) SetCVarNum("WorldTextGravity_v2", v) end, "%.2f")
+    L:Button("Game defaults (1.00 / 0.50)", function()
+        SetCVarNum("WorldTextScale_v2", 1)
+        SetCVarNum("WorldTextGravity_v2", 0.5)
+        ns.RefreshConfig()
+    end)
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Why they can hide behind plates")
+    R:Note("The damage and healing numbers over units are drawn by the game into the world, and every nameplate (Blizzard's too) is drawn over the world: no addon can bring them in front.")
+    R:Note("Larger numbers are covered less; with more gravity they leave the plate sooner. Raising the plates (General: Raise / lower) also helps.")
+    R:Note("These are the game's own settings for this account, not part of a HUF profile.")
+end
+
 local function CastPage(f)
     local L = UI.Column(f, 0, 0, COL_W)
     L:Header("Cast bar")
@@ -185,7 +216,7 @@ ns.RegisterPage("nameplates", "Nameplates", "frames", function(page)
         end)
     end)
     reset:SetPoint("TOPRIGHT", 0, 4)
-    local tabs = { { "general", "General" }, { "name", "Name & level" }, { "cast", "Cast bar" }, { "auras", "Buffs & debuffs" } }
+    local tabs = { { "general", "General" }, { "name", "Name & level" }, { "cast", "Cast bar" }, { "auras", "Buffs & debuffs" }, { "numbers", "Damage numbers" } }
     local subs, strip = {}, nil
     local function Show(k)
         for n, sf in pairs(subs) do sf:SetShown(n == k) end
@@ -198,5 +229,6 @@ ns.RegisterPage("nameplates", "Nameplates", "frames", function(page)
     subs.name = SubFrame(page); NamePage(subs.name)
     subs.cast = SubFrame(page); CastPage(subs.cast)
     subs.auras = SubFrame(page); AuraPage(subs.auras)
+    subs.numbers = SubFrame(page); CombatTextPage(subs.numbers)
     Show("general")
 end, function() return ns.db.nameplates.enabled end)
