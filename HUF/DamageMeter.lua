@@ -1220,6 +1220,7 @@ local function Layout()
         w.label:SetPoint("LEFT", 6, 0)
         w.label:SetPoint("RIGHT", w.typeB, "LEFT", -4, 0)
         w.label:Show()
+        w.labelB:Show()
     else
         w.typeB:SetPoint("TOPLEFT", 3, 0)
         w.typeB:SetPoint("BOTTOMLEFT", 3, 0)
@@ -1231,6 +1232,7 @@ local function Layout()
         w.sessB:SetPoint("BOTTOMRIGHT", resetB, "BOTTOMLEFT", -3, 0)
         w.sessB:SetPoint("LEFT", w.addB, "RIGHT", 4, 0)
         w.label:Hide()
+        w.labelB:Hide()
     end
     w.typeText:SetTextColor(1, 1, 1)
     if c.titleAccent == false then w.sessionText:SetTextColor(1, 1, 1)
@@ -1325,6 +1327,7 @@ local function TitleDropdown(parent, items, get, set, tip)
         GameTooltip:Hide()
         UI.OpenList(self, items(), get(), function(v) set(v) end)
     end)
+    b.items, b.get, b.set = items, get, set
     -- mouse wheel steps through the list without opening it
     b:EnableMouseWheel(true)
     b:SetScript("OnMouseWheel", function(self, delta)
@@ -1492,6 +1495,28 @@ local function Build(index)
     w.label = title:CreateFontString(nil, "OVERLAY")
     w.label:SetJustifyH("LEFT")
     w.label:SetWordWrap(false)
+    -- the name is a button too: the meter list (as the type icon), the mouse
+    -- wheel steps through; dragging it still moves the window
+    local lb = CreateFrame("Button", nil, title)
+    lb:SetAllPoints(w.label)
+    lb:RegisterForClicks("LeftButtonUp")
+    lb:RegisterForDrag("LeftButton")
+    lb:SetScript("OnDragStart", function() title:GetScript("OnDragStart")(title) end)
+    lb:SetScript("OnDragStop", function() title:GetScript("OnDragStop")(title) end)
+    lb:SetScript("OnClick", function(self)
+        local tb = w.typeB
+        if tb.disabled then return end
+        GameTooltip:Hide()
+        UI.OpenList(self, tb.items(), tb.get(), function(v) tb.set(v) end)
+    end)
+    lb:EnableMouseWheel(true)
+    lb:SetScript("OnMouseWheel", function(_, delta) w.typeB:GetScript("OnMouseWheel")(w.typeB, delta) end)
+    lb:SetScript("OnEnter", function()
+        local a = ns.ACCENT
+        w.label:SetTextColor(a[1], a[2], a[3])
+    end)
+    lb:SetScript("OnLeave", function() w.label:SetTextColor(1, 1, 1) end)
+    w.labelB = lb
 
     w.body = CreateFrame("Frame", nil, w)
     w.body:SetPoint("TOPLEFT", 1, -21)
