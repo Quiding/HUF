@@ -66,6 +66,15 @@ local function GeneralPage(f)
     }, Opt("colorMode"))
     R:Color("Static colour", Opt("color"))
     R:Check("Grey when tapped by others", Opt("tappedGray"))
+    R:Cycle("NPC colours", {
+        { value = "GAME", text = "Standard reaction colours" },
+        { value = "CUSTOM", text = "My colours (below)" },
+    }, Opt("reactionColors"))
+    R:Color("Hostile", Opt("hostileColor"))
+    R:Color("Neutral", Opt("neutralColor"))
+    R:Color("Friendly", Opt("friendlyColor"))
+    local gd, sd = Opt("dimOutOfCombat")
+    R:Check("Darker while not in combat", gd, sd, "My colours: hostile NPCs that are not fighting are drawn at 60% brightness.")
     R:Header("Background and border")
     R:Cycle("Background", Backgrounds, Opt("bgTexture"))
     R:Color("Background colour", Opt("bgColor"))
@@ -88,13 +97,28 @@ local function NamePage(f)
     }, Opt("nameColor"))
     L:Color("Custom colour", Opt("nameCustom"))
     L:Slider("Space to the bar", -10, 10, 1, Opt("nameGap"))
+    L:Cycle("Position", {
+        { value = "ABOVE", text = "Above the bar" },
+        { value = "LEFT", text = "In the bar, left" },
+        { value = "CENTER", text = "In the bar, centred" },
+    }, Opt("namePosition"))
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Extras")
     local gl, sl = Opt("showLevel")
     R:Check("Show the level", gl, sl, "Level and classification before the name (\"55E Northshire Guard\"), in difficulty colour.")
     local gh, sh = Opt("showHealth")
-    R:Check("Health % on the bar", gh, sh)
+    R:Check("Health on the bar", gh, sh)
+    R:Cycle("Health text", {
+        { value = "[hp%]", text = "Health % (100%)" },
+        { value = "[hp%:nosign]", text = "Health % without sign (100)" },
+        { value = "[hp]", text = "Health (12.3k)" },
+    }, Opt("healthTag"))
+    R:Slider("Health text size (0: automatic)", 0, 20, 1, Opt("healthSize"))
+    R:Cycle("Between level and name", {
+        { value = " ", text = "Space (55E Name)" },
+        { value = " | ", text = "Bar (55E | Name)" },
+    }, Opt("levelSep"))
     local ge, se = Opt("showElite")
     R:Check("Elite / rare star right of the bar", ge, se, "Gold star: elite. Silver: rare. Silver with a gold ring: rare elite. Red with a gold ring: boss.")
     R:Slider("Star size", 6, 24, 1, Opt("eliteSize"))

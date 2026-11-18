@@ -117,7 +117,8 @@ ns.textures = {
     { name = "Blizzard Raid", path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
 }
 local EUI_TEXTURES = { "atrocity", "beautiful", "divide", "fade", "fade-right", "glass", "gradient-bt", "gradient-lr",
-    "gradient-rl", "gradient-sharp", "gradient-tb", "matte", "plating", "sheer", "pixels-fill" }
+    "gradient-rl", "gradient-sharp", "gradient-tb", "matte", "plating", "sheer", "pixels-fill",
+    "melli", "thin-line-top", "thin-line-bottom", "pixels-dark", "pixels-bg" }
 
 -- tile = repeats (small patterns), else stretched
 ns.backgrounds = {
@@ -430,6 +431,9 @@ local function BuildDefaults()
             color = C(0.20, 0.65, 0.30),
             high = C(0.20, 0.75, 0.30), mid = C(1.00, 0.70, 0.10), low = C(0.85, 0.15, 0.15),
             tappedGray = true,
+            reactionColors = "GAME",    -- NPCs in class mode: GAME (HUF's reaction colours) | CUSTOM (below)
+            hostileColor = C(0.85, 0.20, 0.20), neutralColor = C(0.93, 0.80, 0.20), friendlyColor = C(0.25, 0.78, 0.35),
+            dimOutOfCombat = false,     -- hostile NPCs not in combat at 60% brightness
             bgTexture = "Plain", bgColor = C(0.05, 0.05, 0.06), bgAlpha = 0.85,
             borderSize = 1, borderColor = ns.CopyTable(BORDER),
             targetBorder = true,        -- your target's plate: accent border
@@ -439,8 +443,12 @@ local function BuildDefaults()
             nameColor = "REACTION",     -- REACTION (class / reaction) | WHITE | CUSTOM
             nameCustom = C(1, 1, 1),
             nameGap = 1,                -- space between name and bar
+            namePosition = "ABOVE",     -- ABOVE the bar | LEFT / CENTER: in the bar (name only: centred as ever)
+            levelSep = " ",             -- between level and name ("55E Name" / "55E | Name")
             showLevel = true,           -- "55E" before the name, in difficulty colour
             showHealth = false,         -- health % at the right end of the bar
+            healthTag = "[hp%]",        -- [hp%] | [hp%:nosign] | [hp]
+            healthSize = 0,             -- 0: the name's size - 2
             showElite = true,           -- star right of the bar: elite gold, rare silver, rare elite silver + gold ring, boss red
             eliteSize = 10,
             showQuest = true,           -- quest progress ("2/10") left of the bar
