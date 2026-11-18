@@ -33,17 +33,11 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
         { value = "INSTANCE", text = "In instances" },
     }, Opt("show"))
     L:Slider("Windows", 1, 5, 1, Opt("windowCount"))
-    L:Cycle("Numbers", {
-        { value = "BOTH", text = "Total (per second)" },
-        { value = "TOTAL", text = "Total" },
-        { value = "PERSECOND", text = "Per second" },
-    }, Opt("numbers"))
-    local gr, sr = Opt("showRank")
-    L:Check("Rank before the name", gr, sr)
-    local gp, sp = Opt("threatPets")
-    L:Check("Threat: pets too", gp, sp)
-    local gc, sc = Opt("threatColors")
-    L:Check("Threat: bars in threat colours", gc, sc, "Grey, yellow, orange and red (has aggro) like the game's threat warning, instead of the bar colour.")
+    local gf, sf = Opt("fadeOOC")
+    L:Check("Reduce opacity out of combat", gf, sf, "All windows at the opacity below while out of combat; a window under the mouse is fully visible.")
+    L:Slider("Opacity out of combat", 0, 1, 0.05, function() return D().fadeAlpha end, function(v) D().fadeAlpha = v end, "%.2f")
+    local gh, sh = Opt("hideThreatOOC")
+    L:Check("Hide threat windows out of combat", gh, sh, "A window showing threat appears when a fight starts and goes when it ends. Switched to threat out of combat, it stays until the next fight is over.")
     L:Header("Window")
     L:Slider("Width", 120, 500, 1, Opt("width"))
     L:Slider("Rows", 1, 40, 1, Opt("rows"))
@@ -73,7 +67,16 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
         { value = "OUTLINE", text = "Thin" },
         { value = "THICKOUTLINE", text = "Thick" },
     }, Opt("outline"))
-    R:Note("Names follow Names & MMT. In combat in instances the game hides the meter's names from addons: HUF then shows you, a class only one group member has, or a member it recognised by class and specialisation after an earlier fight; else the class name until the fight ends. It never shows a hidden real name while names are private.")
-    R:Note("Several windows: each has its own list, fight and place (a new one opens left of the last one, with threat or damage); size and look are shared.")
-    R:Note("Title bar: the two dropdowns pick the list and the fight (mouse wheel steps through them), D / H / T switch straight to damage, healing and threat, x resets. Click a row for its breakdown (spells, amounts, share) beside the meter; in combat in instances only for rows HUF recognised (you and your group), else when the fight ends. Drag the title to move. Threat shows your group's threat on your target (or your target's target) in percent.")
+    R:Cycle("Numbers", {
+        { value = "BOTH", text = "Total (per second)" },
+        { value = "TOTAL", text = "Total" },
+        { value = "PERSECOND", text = "Per second" },
+    }, Opt("numbers"))
+    local gr, sr = Opt("showRank")
+    R:Check("Rank before the name", gr, sr)
+    local gp, sp = Opt("threatPets")
+    R:Check("Threat: pets too", gp, sp)
+    local gc, sc = Opt("threatColors")
+    R:Check("Threat: bars in threat colours", gc, sc, "Grey, yellow, orange and red (has aggro) like the game's threat warning.")
+    R:Note("Title bar: list and fight dropdowns, + new window, R reset, x close. Click a row for its breakdown. Names follow Names & MMT; in instance combat the game hides the meter's names: HUF then shows a name it recognised, else the class, never a hidden real name.")
 end, function() return ns.db.damageMeter.enabled end)

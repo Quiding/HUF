@@ -760,17 +760,23 @@ local function NamesPrivate()
     return ns.Bridge and ns.Bridge.Active() and true or false
 end
 
-local instancePending
-function NP.ApplyInstanceNames()
+local instancePending, busy
+-- confirmed: a second look a moment later. Right after a /reload the game can
+-- briefly say "not in an instance" (and MMT's link may not be up yet):
+-- old values only come back after that second look.
+function NP.ApplyInstanceNames(confirmed)
     if not HUFDB or not ns.db then return end
     if InCombatLockdown() then instancePending = true return end
     instancePending = nil
     HUFDB.instanceNames = HUFDB.instanceNames or {}
     local me = ns.CharKey()
     local saved = HUFDB.instanceNames[me] or {}
-    local inside = IsInInstance and IsInInstance()
+    local inInst, itype = false, nil
+    if IsInInstance then inInst, itype = IsInInstance() end
+    local inside = inInst and itype ~= "none"
     local want = ns.db.nameplates.instanceFriends ~= "SHOW" and inside and NamesPrivate()
     if want then
+        busy = true
         for cvar, value in pairs(INSTANCE_CVARS) do
             local cur = GetCV(cvar)
             if cur ~= nil and cur ~= value then
@@ -778,18 +784,41 @@ function NP.ApplyInstanceNames()
                 SetCV(cvar, value)
             end
         end
-    else
-        for cvar, s in pairs(saved) do
-            if type(s) == "table" and GetCV(cvar) == s.set then SetCV(cvar, s.old) end
+        busy = false
+    elseif next(saved) then
+        if not confirmed then
+            C_Timer.After(2, function() NP.ApplyInstanceNames(true) end)
+            return
+        end
+        busy = true
+        for cvar, st in pairs(saved) do
+            if type(st) == "table" and GetCV(cvar) == st.set then SetCV(cvar, st.old) end
             saved[cvar] = nil
         end
+        busy = false
     end
     HUFDB.instanceNames[me] = next(saved) and saved or nil
-    ns.Log("nameplates", "instance names: inside=%s private=%s hide=%s", tostring(inside), tostring(NamesPrivate()), tostring(want and true or false))
+    ns.Log("nameplates", "instance names: inside=%s (%s) private=%s hide=%s%s", tostring(inside), tostring(itype),
+        tostring(NamesPrivate()), tostring(want and true or false), confirmed and " (2nd look)" or "")
 end
-ns.On("PLAYER_ENTERING_WORLD", function() NP.ApplyInstanceNames() end)
+ns.On("PLAYER_ENTERING_WORLD", function()
+    NP.ApplyInstanceNames()
+    -- once more when everything (MMT included) has settled
+    C_Timer.After(3, function() NP.ApplyInstanceNames() end)
+end)
 ns.On("ZONE_CHANGED_NEW_AREA", function() NP.ApplyInstanceNames() end)
 ns.On("PLAYER_REGEN_ENABLED", function() if instancePending then NP.ApplyInstanceNames() end end)
+-- someone else (MMT's "Name above characters", the game) switched one of them
+-- back on inside an instance: off again
+ns.On("CVAR_UPDATE", function(name)
+    if busy or type(name) ~= "string" then return end
+    for cvar in pairs(INSTANCE_CVARS) do
+        if cvar:lower() == name:lower() then
+            C_Timer.After(0.3, function() NP.ApplyInstanceNames() end)
+            return
+        end
+    end
+end)
 ns.OnRefresh(function() NP.ApplyInstanceNames() end)
 
 function NP.Count()

@@ -550,10 +550,7 @@ local function RefreshOne()
     else
         win.empty:SetText("No data yet")
     end
-    for k, b in pairs(win.quick or {}) do
-        local a = ns.ACCENT
-        if k == wc.meterType then b.text:SetTextColor(a[1], a[2], a[3]) else b.text:SetTextColor(0.6, 0.6, 0.6) end
-    end
+    win.addB:SetShown(S().windowCount < MAX_WINDOWS)
     win.offset = math.max(0, math.min(win.offset or 0, n - c.rows))
     local maxAmount = sources[1] and sources[1].totalAmount
     local shown = 0
@@ -813,10 +810,9 @@ local function Layout()
     w.fill:SetColorTexture(0.04, 0.04, 0.05, c.bgAlpha)
     w.title:SetColorTexture(0.08, 0.08, 0.09, math.min(1, c.bgAlpha + 0.15))
     w.line:SetColorTexture(a[1], a[2], a[3], 0.9)
-    for _, fs in ipairs({ w.typeText, w.sessionText, w.resetText }) do
+    for _, fs in ipairs({ w.typeText, w.sessionText, w.resetText, w.closeText, w.addB.text }) do
         ns.ApplyFont(fs, c.font, c.titleSize, c.outline)
     end
-    for _, b in pairs(w.quick) do ns.ApplyFont(b.text, c.font, c.titleSize, c.outline) end
     w.typeB:SetWidth(math.max(70, c.width * 0.42))
     w.typeText:SetTextColor(1, 1, 1)
     w.sessionText:SetTextColor(a[1], a[2], a[3])
@@ -963,6 +959,7 @@ local function Build(index)
         return l
     end, function() return w.cfg.meterType end, function(v)
         w.cfg.meterType = v
+        if v == "Threat" and not InCombatLockdown() then w.keepThreat = true end
         w.offset = 0
         DM.Refresh()
     end, "What the meter shows (damage, healing, taken, interrupts, dispels, deaths, threat). Mouse wheel: step through.")
@@ -972,23 +969,23 @@ local function Build(index)
     w.typeB = typeB
     w.typeText = typeB.text
 
-    -- quick switches: damage, healing, threat
-    w.quick = {}
-    local prev
-    for _, q in ipairs({ { "DamageDone", "D", "Damage done" }, { "HealingDone", "H", "Healing done" }, { "Threat", "T", "Threat on your enemy" } }) do
-        local b = TitleButton(title, function()
-            w.cfg.meterType = q[1]
-            w.offset = 0
-            DM.Refresh()
-        end, q[3])
-        b:SetWidth(14)
-        b.text:SetText(q[2])
-        w.quick[q[1]] = b
-        if prev then b:SetPoint("TOPLEFT", prev, "TOPRIGHT", 2, 0) b:SetPoint("BOTTOMLEFT", prev, "BOTTOMRIGHT", 2, 0)
-        else b:SetPoint("TOPLEFT", typeB, "TOPRIGHT", 4, 0) b:SetPoint("BOTTOMLEFT", typeB, "BOTTOMRIGHT", 4, 0) end
-        prev = b
-    end
-    w.quickLast = prev
+    -- new window
+    local add = TitleButton(title, function() DM.AddWindow() end, "New window (up to 5)")
+    add:SetPoint("TOPLEFT", typeB, "TOPRIGHT", 3, 0)
+    add:SetPoint("BOTTOMLEFT", typeB, "BOTTOMRIGHT", 3, 0)
+    add:SetWidth(14)
+    add.text:SetText("+")
+    w.addB = add
+    w.quickLast = add
+
+    -- close (every window but the first)
+    local close = TitleButton(title, function() DM.CloseWindow(w.index) end, "Close this window")
+    close:SetPoint("TOPRIGHT", -3, 0)
+    close:SetPoint("BOTTOMRIGHT", -3, 0)
+    close:SetWidth(index > 1 and 14 or 0.1)
+    close.text:SetText("x")
+    close:SetShown(index > 1)
+    w.closeText = close.text
 
     local reset = TitleButton(title, function()
         UI.Confirm("Reset all damage meter data?", "Reset", function()
@@ -997,10 +994,10 @@ local function Build(index)
             DM.Refresh()
         end)
     end, "Reset all fights")
-    reset:SetPoint("TOPRIGHT", -4, 0)
-    reset:SetPoint("BOTTOMRIGHT", -4, 0)
-    reset:SetWidth(16)
-    reset.text:SetText("x")
+    reset:SetPoint("TOPRIGHT", close, "TOPLEFT", index > 1 and -2 or 0, 0)
+    reset:SetPoint("BOTTOMRIGHT", close, "BOTTOMLEFT", index > 1 and -2 or 0, 0)
+    reset:SetWidth(14)
+    reset.text:SetText("R")
     w.resetText = reset.text
 
     local sessB = TitleDropdown(title, function()
@@ -1044,6 +1041,38 @@ local function WantShown()
     return true
 end
 
+-- threat windows out of combat (option): hidden. One switched to threat out of
+-- combat stays until the next fight is over, so it doesn't vanish on the spot.
+local function WindowWanted(w)
+    local c = S()
+    if not (c.hideThreatOOC and w.cfg and w.cfg.meterType == "Threat") then return true end
+    if InCombatLockdown() then return true end
+    return w.keepThreat and true or false
+end
+
+-- out of combat (option): all windows at the set opacity, full while the
+-- mouse is over one (checked 10x a second while it matters)
+local fader
+local function Fade()
+    local c = S()
+    local dim = c.fadeOOC and not InCombatLockdown()
+    for _, w in ipairs(wins) do
+        if w:IsShown() then
+            local over = w:IsMouseOver() or (bd.open and bd.win == w and panel and panel:IsShown() and panel:IsMouseOver())
+            local a = (dim and not over) and c.fadeAlpha or 1
+            w:SetAlpha(a)
+            if bd.open and bd.win == w and panel then panel:SetAlpha(a) end
+        end
+    end
+    if dim and not fader then
+        fader = C_Timer.NewTicker(0.1, Fade)
+    elseif not dim and fader then
+        fader:Cancel()
+        fader = nil
+    end
+end
+DM.Fade = Fade
+
 local function HideAll()
     for _, w in ipairs(wins) do w:Hide() end
     DM.CloseBreakdown()
@@ -1059,9 +1088,10 @@ function DM.Apply()
         win.cfg = cfgs[i]
         Layout()
         win.empty:SetText("No data yet")
-        win:Show()
+        win:SetShown(WindowWanted(win))
     end
     for i = count + 1, #wins do wins[i]:Hide() end
+    Fade()
     if bd.open then
         if bd.win and bd.win:IsShown() then win = bd.win LayoutPanel() else DM.CloseBreakdown() end
     end
@@ -1103,9 +1133,12 @@ local ticker
 ns.On("PLAYER_REGEN_DISABLED", function()
     if ticker then ticker:Cancel() end
     ticker = C_Timer.NewTicker(0.5, ThreatSoon)
+    if S().enabled then DM.Apply() end         -- threat windows back, full opacity
 end)
 ns.On("PLAYER_REGEN_ENABLED", function()
     if ticker then ticker:Cancel() ticker = nil end
+    for _, w in ipairs(wins) do w.keepThreat = nil end
+    if S().enabled then DM.Apply() end         -- threat windows away, dimmed
     ThreatSoon()
 end)
 ns.On("GROUP_ROSTER_UPDATE", function() RebuildRoster() DM.Apply() end)
@@ -1113,6 +1146,31 @@ ns.On("PLAYER_ENTERING_WORLD", function() RebuildRoster() Learn() DM.Apply() end
 ns.On("ZONE_CHANGED_NEW_AREA", function() DM.Apply() end)
 ns.OnLogin(function() RebuildRoster() DM.Apply() end)
 ns.OnRefresh(function() if HUFDB then DM.Apply() end end)
+
+function DM.AddWindow()
+    local c = S()
+    if c.windowCount >= MAX_WINDOWS then return end
+    c.windowCount = c.windowCount + 1
+    DM.EnsureWindows()
+    local w = c.windows[c.windowCount]
+    w.keep = true
+    DM.Apply()
+    local nw = wins[c.windowCount]
+    if nw and w.meterType == "Threat" then nw.keepThreat = true nw:Show() end
+    if ns.RefreshConfig then ns.RefreshConfig() end
+end
+
+-- closes window i (not the first): its settings go, the ones after move up
+function DM.CloseWindow(i)
+    local c = S()
+    if i <= 1 or i > c.windowCount then return end
+    if bd.open and bd.win == wins[i] then DM.CloseBreakdown() end
+    table.remove(c.windows, i)
+    c.windowCount = c.windowCount - 1
+    for _, w in ipairs(wins) do w.keepThreat = nil end
+    DM.Apply()
+    if ns.RefreshConfig then ns.RefreshConfig() end
+end
 
 function DM.Toggle()
     S().enabled = not S().enabled

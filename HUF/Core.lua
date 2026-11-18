@@ -9,7 +9,7 @@ _G.HUF = ns                      -- public: other addons (MMT) reach HUF here
 
 ns.name = ADDON
 ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.26"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.27"
 ns.API_VERSION = 1
 ns.MEDIA = "Interface\\AddOns\\HUF\\Media\\"
 ns.LOGO = ns.MEDIA .. "Logo"
@@ -459,6 +459,8 @@ local function BuildDefaults()
             numbers = "BOTH",           -- BOTH "12.3K (845)" | TOTAL | PERSECOND
             threatPets = true,          -- threat view: pets too
             threatColors = true,        -- threat view: bars in the game's threat colours
+            fadeOOC = true, fadeAlpha = 0.4,   -- out of combat: windows at this opacity (full under the mouse)
+            hideThreatOOC = true,       -- windows showing threat: hidden out of combat
         },
         nameplates = {
             enabled = true,
