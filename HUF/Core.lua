@@ -470,6 +470,7 @@ local function BuildDefaults()
             titleAccent = true,         -- the fight in the accent colour (off: white)
             titleIcons = false,         -- the type's name at the left, meter type and fight as icon buttons at the right
             titleIconSize = 18,         -- those icons (may stand out of a lower title bar)
+            titleIconsMuted = true,     -- those icons grey and dimmed, accent colour under the mouse
             breakdownInline = false,    -- a clicked name's breakdown in its window (< back), not beside it
             icons = "NONE",             -- NONE | CLASS: class icon before each bar
             rowBorder = 0,              -- a border around each bar (0: none)

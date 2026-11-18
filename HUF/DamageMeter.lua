@@ -1018,12 +1018,21 @@ local function TitleDropdown(parent, items, get, set, tip)
     b.icon:SetPoint("CENTER")
     b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     b.icon:Hide()
+    -- muted icon: grey and dimmed, the accent colour under the mouse
+    function b:TintIcon()
+        local muted = S().titleIconsMuted ~= false
+        self.icon:SetDesaturated(muted)
+        if not muted then self.icon:SetVertexColor(1, 1, 1)
+        elseif self:IsMouseOver() then local a = ns.ACCENT self.icon:SetVertexColor(a[1], a[2], a[3])
+        else self.icon:SetVertexColor(0.6, 0.6, 0.62) end
+    end
     -- an icon in place of the text, box and arrow (nil: the text again)
     function b:SetIcon(path, size)
         self.iconMode = path ~= nil
         if path then
             self.icon:SetTexture(path)
             self.icon:SetSize(size, size)
+            self:TintIcon()
             self.icon:Show()
             self.text:Hide()
             self.arrow:Hide()
@@ -1060,8 +1069,12 @@ local function TitleDropdown(parent, items, get, set, tip)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(type(tip) == "function" and tip() or tip, 1, 1, 1, 1, true)
         GameTooltip:Show()
+        if self.iconMode then self:TintIcon() end
     end)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    b:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+        if self.iconMode then C_Timer.After(0, function() self:TintIcon() end) end
+    end)
     function b:SetDisabled(off)
         self.disabled = off
         self.arrow:SetShown(not off and not self.iconMode)

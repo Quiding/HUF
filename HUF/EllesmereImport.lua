@@ -646,6 +646,7 @@ local function ConvertDamageMeter(addon, m, notes)
     m.titleLine = Num(G("hdrBottomBorderSize"), 0) > 0 or G("hdrBottomSeparator", false) == true
     m.titleAccent = G("hdrTextUseAccent", true) and true or false
     m.titleIcons = true                 -- Ellesmere's title bar has icon buttons
+    m.titleIconsMuted = true            -- single-coloured there too
     m.titleIconSize = math.max(10, math.min(32, math.floor(Num(G("hdrIconSize"), 22) + 0.5)))
     m.icons = (G("iconStyle", "spec") ~= "none") and "CLASS" or "NONE"
     m.rowBorder = rb
