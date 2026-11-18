@@ -267,9 +267,11 @@ local function ConvertUnit(key, s, uf, u, notes)
     end
 
     -- bars: texture, colours, border
-    local tex = TextureName(uf.healthBarTexture)
+    -- the frame's own texture first, as Ellesmere draws it (health and power alike)
+    local texKey = s.healthBarTexture or uf.healthBarTexture
+    local tex = TextureName(texKey)
     if not tex then
-        notes[#notes + 1] = ("Bar texture \"%s\" is not known to HUF: Flat instead."):format(tostring(uf.healthBarTexture))
+        notes[#notes + 1] = ("Bar texture \"%s\" is not known to HUF: Flat instead."):format(tostring(texKey))
         tex = "Flat"
     end
     local bSize = Num(G("borderSize"), 1)
