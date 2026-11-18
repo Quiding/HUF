@@ -51,11 +51,16 @@ local function GeneralPage(f)
     L:Header("Show")
     L:Cycle("Enemies", MODES, Opt("mode"))
     L:Cycle("Friendly units", FRIENDLY, Opt("friendlyMode"))
+    L:Cycle("Friendly players in instances", {
+        { value = "HIDE", text = "Hide (keeps names private)" },
+        { value = "SHOW", text = "Show Blizzard's (real names)" },
+    }, Opt("instanceFriends"))
     L:Header("Bar")
     L:Slider("Width", 40, 250, 1, Opt("width"))
     L:Slider("Height", 1, 20, 1, Opt("height"))
     L:Cycle("Bar texture", Textures, Opt("texture"))
     L:Slider("Raise / lower", -40, 40, 1, Opt("yOffset"))
+    L:Note("In instances the game protects friendly player nameplates: no addon can draw on them or change their names. \"Hide\" switches them and the names above characters off there while names are private (Names & MMT), and back on outside.")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Colour")

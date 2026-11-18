@@ -9,7 +9,7 @@ _G.HUF = ns                      -- public: other addons (MMT) reach HUF here
 
 ns.name = ADDON
 ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.17"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.18"
 ns.API_VERSION = 1
 ns.MEDIA = "Interface\\AddOns\\HUF\\Media\\"
 ns.LOGO = ns.MEDIA .. "Logo"
@@ -452,6 +452,8 @@ local function BuildDefaults()
             showElite = true,           -- star right of the bar: elite gold, rare silver, rare elite silver + gold ring, boss red
             eliteSize = 10,
             showQuest = true,           -- quest progress ("2/10") left of the bar
+            instanceFriends = "HIDE",   -- in instances friendly player plates are the game's (protected, real names):
+                                        -- HIDE them (and the names above characters) while names are private | SHOW
             questieIcon = "LEFT",       -- Questie's quest icon: LEFT (of the progress / bar) | RIGHT (of the bar) | QUESTIE (its own spot)
             questColor = C(1.00, 0.82, 0.00),
             -- cast bar

@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.3.17.
+Version 0.3.18.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -23,6 +23,9 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   rare star, quest progress ("2/10") left of the bar, cast bar, your debuffs and buffs with time
   left as numbers. Name above or inside the bar, own NPC colours, darker out of combat. Questie's
   quest icon is moved next to HUF's quest progress.
+  In instances the game protects friendly player nameplates (no addon can change their names):
+  while names are private, HUF switches them and the names above characters off there and back
+  on outside (Nameplates > General).
 - **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
   where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
   and debuff icons.

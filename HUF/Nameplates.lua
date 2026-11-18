@@ -732,6 +732,62 @@ ns.OnLogin(function()
     ns.Log("init", "Questie nameplate icons follow HUF's plates")
 end)
 
+---------------------------------------------------------------------------
+-- Instances: the game protects friendly player nameplates there (forbidden
+-- frames): HUF can't draw on them and Blizzard's show the real full name.
+-- While names are private, friendly player plates and the names the game
+-- draws above characters are switched off inside instances and put back
+-- outside. Values before are kept per character (HUFDB.instanceNames) and
+-- only restored if nobody changed them in the meantime.
+---------------------------------------------------------------------------
+local INSTANCE_CVARS = { nameplateShowFriendlyPlayers = "0", nameplateShowFriends = "0", UnitNameFriendlyPlayerName = "0" }
+local function GetCV(name)
+    if C_CVar and C_CVar.GetCVar then return C_CVar.GetCVar(name) end
+    if GetCVar then return GetCVar(name) end
+end
+local function SetCV(name, value)
+    if C_CVar and C_CVar.SetCVar then return pcall(C_CVar.SetCVar, name, value) end
+    if SetCVar then return pcall(SetCVar, name, value) end
+end
+
+-- names on screen differ from the real ones (HUF's setting or MMT's privacy)
+local function NamesPrivate()
+    if ns.db.privacy.mode ~= "FULL" then return true end
+    return ns.Bridge and ns.Bridge.Active() and true or false
+end
+
+local instancePending
+function NP.ApplyInstanceNames()
+    if not HUFDB or not ns.db then return end
+    if InCombatLockdown() then instancePending = true return end
+    instancePending = nil
+    HUFDB.instanceNames = HUFDB.instanceNames or {}
+    local me = ns.CharKey()
+    local saved = HUFDB.instanceNames[me] or {}
+    local inside = IsInInstance and IsInInstance()
+    local want = ns.db.nameplates.instanceFriends ~= "SHOW" and inside and NamesPrivate()
+    if want then
+        for cvar, value in pairs(INSTANCE_CVARS) do
+            local cur = GetCV(cvar)
+            if cur ~= nil and cur ~= value then
+                if not saved[cvar] then saved[cvar] = { old = cur, set = value } end
+                SetCV(cvar, value)
+            end
+        end
+    else
+        for cvar, s in pairs(saved) do
+            if type(s) == "table" and GetCV(cvar) == s.set then SetCV(cvar, s.old) end
+            saved[cvar] = nil
+        end
+    end
+    HUFDB.instanceNames[me] = next(saved) and saved or nil
+    ns.Log("nameplates", "instance names: inside=%s private=%s hide=%s", tostring(inside), tostring(NamesPrivate()), tostring(want and true or false))
+end
+ns.On("PLAYER_ENTERING_WORLD", function() NP.ApplyInstanceNames() end)
+ns.On("ZONE_CHANGED_NEW_AREA", function() NP.ApplyInstanceNames() end)
+ns.On("PLAYER_REGEN_ENABLED", function() if instancePending then NP.ApplyInstanceNames() end end)
+ns.OnRefresh(function() NP.ApplyInstanceNames() end)
+
 function NP.Count()
     local n = 0
     for _ in pairs(NP.plates) do n = n + 1 end
