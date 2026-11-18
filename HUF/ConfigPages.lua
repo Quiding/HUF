@@ -266,7 +266,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
     -- frame Ellesmere has off can be turned on), and while EllesmereUI
     -- Nameplates is loaded, whether to turn it off (two plates otherwise)
     local dlg
-    local MAX_ROWS = 6
+    local MAX_ROWS, MAX_EXTRA = 8, 3
     local function ImportWindow()
         if dlg then return dlg end
         local f = CreateFrame("Frame", "HUFEllesmereImportFrame", UIParent)
@@ -280,13 +280,14 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         f.text:SetPoint("TOPLEFT", 16, -16)
         f.text:SetPoint("TOPRIGHT", -16, -16)
         f.text:SetJustifyH("LEFT")
-        f.rows = {}
-        for i = 1, MAX_ROWS + 1 do
+        f.rows, f.extras = {}, {}
+        local function NewRow()
             local row = { on = false }
             row.check = UI.Check(f, 368, "", function() return row.on end, function(v) row.on = v end)
-            row.check:SetPoint("TOPLEFT", 16, -52 - (i - 1) * (UI.ROW - 2))
-            f.rows[i] = row
+            return row
         end
+        for i = 1, MAX_ROWS do f.rows[i] = NewRow() end
+        for i = 1, MAX_EXTRA do f.extras[i] = NewRow() end
         local function Accept()
             local fn = f.onAccept
             f:Hide()
@@ -294,10 +295,9 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         end
         f.accept = UI.Button(f, 116, "Import", Accept)
         f.accept:SetPoint("BOTTOMLEFT", 16, 14)
-        -- every frame and the nameplates on, whatever Ellesmere has
+        -- every listed part on, whatever Ellesmere has
         f.all = UI.Button(f, 116, "Import all", function()
-            for i = 1, MAX_ROWS do
-                local row = f.rows[i]
+            for _, row in ipairs(f.rows) do
                 if row.part then row.on = true end
             end
             Accept()
@@ -312,62 +312,72 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         return f
     end
 
+    -- parts: { title, tbl (.enabled), on, why, folder (the EllesmereUI module
+    -- drawing the same thing, offered to be turned off while it is loaded) }
     local function EllesmereImport(ok, t, notes, what, parts)
         if not ok then msg:SetText("|cffff6060" .. t .. "|r") return end
         parts = parts or {}
-        local list = table.concat(what, " and ")
+        local list = table.concat(what, ", "):gsub(", ([^,]*)$", " and %1")
         local f = ImportWindow()
         f.text:SetText(("Replace the %s of \"%s\" with EllesmereUI's.\nShow in HUF:"):format(list, ns.CurrentProfileName()))
-        local n = 0
+        local y = -52
+        local function Place(row)
+            row.check:ClearAllPoints()
+            row.check:SetPoint("TOPLEFT", 16, y)
+            row.check.Refresh()
+            row.check:Show()
+            y = y - (UI.ROW - 2)
+        end
         for i, row in ipairs(f.rows) do
-            local part = i <= MAX_ROWS and parts[i]
+            local part = parts[i]
+            row.part = part
             if part then
-                n = i
-                row.part, row.on = part, part.on and true or false
+                row.on = part.on and true or false
                 row.check.label:SetText(part.on and part.title or (part.title .. "  |cff888888(" .. part.why .. ")|r"))
-                row.check.Refresh()
-                row.check:Show()
+                Place(row)
             else
-                row.part = nil
                 row.check:Hide()
             end
         end
-        -- both nameplate addons on = two plates per unit: offer to turn Ellesmere's off
-        local npLoaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("EllesmereUINameplates")
-        local extra = f.rows[MAX_ROWS + 1]
-        extra.part = nil
-        if npLoaded and C_AddOns.DisableAddOn then
-            n = n + 1
-            extra.check:ClearAllPoints()
-            extra.check:SetPoint("TOPLEFT", 16, -52 - (n - 1) * (UI.ROW - 2) - 8)
-            extra.on = true
-            extra.check.label:SetText("Turn off EllesmereUI Nameplates (reloads)")
-            extra.check.Refresh()
-            extra.check:Show()
-        else
-            extra.on = false
-            extra.check:Hide()
+        -- an EllesmereUI module drawing the same thing: offer to turn it off
+        y = y - 8
+        local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
+        local n = 0
+        for _, part in ipairs(parts) do
+            if part.folder and loaded and loaded(part.folder) and C_AddOns.DisableAddOn and n < MAX_EXTRA then
+                n = n + 1
+                local row = f.extras[n]
+                row.part, row.on = part, true
+                row.check.label:SetText(("Turn off %s (reloads)"):format(part.module or part.folder))
+                Place(row)
+            end
         end
-        f:SetHeight(52 + n * (UI.ROW - 2) + 64)
+        for i = n + 1, MAX_EXTRA do
+            f.extras[i].part = nil
+            f.extras[i].check:Hide()
+        end
+        f:SetHeight(-y + 64)
         f.onAccept = function()
-            local npOn = false
-            for i = 1, MAX_ROWS do
-                local row = f.rows[i]
-                if row.part then
-                    row.part.tbl.enabled = row.on
-                    if row.part.title == "Nameplates" then npOn = row.on end
-                end
+            for _, row in ipairs(f.rows) do
+                if row.part then row.part.tbl.enabled = row.on end
             end
             ns.ImportProfile(t)
             area.edit:SetText("")
             msg:SetText(("EllesmereUI %s imported%s"):format(list, #notes > 0 and " (details in chat)." or "."))
             for _, line in ipairs(notes) do ns.Print("Ellesmere import: %s", line) end
-            if extra.check:IsShown() and extra.on then
-                pcall(C_AddOns.DisableAddOn, "EllesmereUINameplates", UnitName("player"))
-                ReloadUI()
-            elseif npLoaded and npOn then
-                ns.Print("EllesmereUI Nameplates is still on: every unit gets two nameplates.")
+            local reload = false
+            for _, row in ipairs(f.extras) do
+                local part = row.part
+                if part and row.check:IsShown() then
+                    if row.on then
+                        pcall(C_AddOns.DisableAddOn, part.folder, UnitName("player"))
+                        reload = true
+                    elseif part.tbl.enabled then
+                        ns.Print("%s is still on next to HUF's %s: both draw it.", part.module or part.folder, part.title:lower())
+                    end
+                end
             end
+            if reload then ReloadUI() end
         end
         f:Show()
     end
@@ -395,7 +405,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
     end
     R:Add(msg, 40)
     R:Note("Import replaces the active profile. To keep it, create a new profile first (left) and import into that one. Click-cast bindings belong to the character and are not part of a profile.")
-    if _G.EllesmereUI then R:Note("EllesmereUI: \"Import from EllesmereUI\" or an EllesmereUI string (!EUI_...) in the box: its unit frames (player, target, target of target, pet, with the font) and nameplates replace HUF's; group frames stay. Close to Ellesmere's look, not identical.") end
+    if _G.EllesmereUI then R:Note("EllesmereUI: \"Import from EllesmereUI\" or an EllesmereUI string (!EUI_...) in the box: its unit frames (player, target, target of target, pet, with the font), nameplates and damage meter replace HUF's; group frames stay. Close to Ellesmere's look, not identical.") end
 end)
 
 ---------------------------------------------------------------------------
