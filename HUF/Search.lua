@@ -59,11 +59,11 @@ local function Walk(f, page, ctx, out, seen, depth)
         local t = Clean(f.title:GetText())
         if t then ctx = { tabs = ctx.tabs, tile = t } end
     end
-    local function Add(text, tip, owner)
+    local function Add(text, tip, owner, region)
         local key = tostring(owner) .. "\001" .. (text or "") .. "\001" .. (tip or "")
         if seen[key] then return end
         seen[key] = true
-        out[#out + 1] = { text = text, tip = tip, frame = owner, page = page, tabs = ctx.tabs, tile = ctx.tile }
+        out[#out + 1] = { text = text, tip = tip, frame = owner, region = region, page = page, tabs = ctx.tabs, tile = ctx.tile }
     end
     local isEdit = f.GetObjectType and f:GetObjectType() == "EditBox"
     local label
@@ -73,7 +73,7 @@ local function Walk(f, page, ctx, out, seen, depth)
                 local t = Clean(r:GetText())
                 if Useful(t) then
                     label = label or t
-                    Add(t, nil, f)
+                    Add(t, nil, f, r)
                 end
             end
         end
@@ -239,7 +239,9 @@ local function Flash(f)
         fill:SetAllPoints()
         fill:SetColorTexture(A[1], A[2], A[3], 0.12)
     end
-    flash:SetParent(f)
+    -- a text (a header on a panel): the flash belongs to its frame
+    local holder = (f.GetObjectType and f:GetObjectType() == "FontString") and f:GetParent() or f
+    flash:SetParent(holder)
     flash:SetFrameStrata("TOOLTIP")
     flash:ClearAllPoints()
     flash:SetPoint("TOPLEFT", f, "TOPLEFT", -3, 3)
@@ -279,7 +281,14 @@ local function Go(e)
     for _, t in ipairs(e.tabs or {}) do pcall(t.show) end
     C_Timer.After(0, function()
         ScrollTo(e.frame)
-        C_Timer.After(0, function() Flash(e.frame) end)
+        -- the setting's own frame, or just the text when that frame is a whole
+        -- panel (a header written straight on it)
+        local target = e.frame
+        if e.region and e.frame.GetHeight and e.region.GetHeight
+            and (e.frame:GetHeight() or 0) > 3 * math.max(1, e.region:GetHeight() or 0) then
+            target = e.region
+        end
+        C_Timer.After(0, function() Flash(target) end)
     end)
 end
 ns.SearchGo = Go
