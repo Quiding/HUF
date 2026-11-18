@@ -30,6 +30,7 @@ local TYPES = {
     { key = "Interrupts", text = "Interrupts", count = true },
     { key = "Dispels", text = "Dispels", count = true },
     { key = "Deaths", text = "Deaths", deaths = true },
+    { key = "Threat", text = "Threat", threat = true },     -- HUF's own: the group's threat on your enemy
 }
 DM.TYPES = TYPES
 local TYPE_BY_KEY = {}
@@ -138,6 +139,7 @@ end
 
 -- the unit (in your group) a meter row belongs to, if HUF can tell
 local function RowUnit(src)
+    if src.unit then return src.unit end
     local own = src.isLocalPlayer
     if Plain(own) and own == true then return "player" end
     local g = src.sourceGUID
@@ -174,6 +176,7 @@ end
 
 -- text and how it was found ("unit", "name", "class", "secret", "npc")
 function DM.RowName(src)
+    if src.pet then return src.name or "?", "pet" end
     local unit = RowUnit(src)
     if unit then return ns.NameText(unit, "PRIVACY"), "unit" end
     local player = IsPlayerRow(src)
@@ -221,6 +224,11 @@ end
 
 local function ValueText(fs, src, t)
     local c = S()
+    if t.threat then
+        local ok = pcall(fs.SetFormattedText, fs, "%d%%", src.threatPct or 0)
+        if not ok then fs:SetText("") end
+        return
+    end
     if t.deaths then
         local secs = src.deathTimeSeconds
         if Plain(secs) and type(secs) == "number" then
@@ -275,10 +283,55 @@ function DM.SessionName(id)
     for _, e in ipairs(DM.Sessions()) do if e.id == id then return e.text end end
 end
 
+---------------------------------------------------------------------------
+-- Threat: every group member's (and pet's) threat on your enemy, read with
+-- UnitDetailedThreatSituation (readable on Forever)
+---------------------------------------------------------------------------
+local function Enemy()
+    for _, u in ipairs({ "target", "targettarget" }) do
+        local okE, e = pcall(UnitExists, u)
+        local okA, a = pcall(UnitCanAttack, "player", u)
+        local okD, d = pcall(UnitIsDead, u)
+        if okE and ns.Bool(e) and okA and ns.Bool(a) and not (okD and ns.Bool(d)) then return u end
+    end
+end
+
+local function ThreatSession()
+    local mob = Enemy()
+    if not mob then return { combatSources = {}, empty = "No enemy targeted" } end
+    local list, sortable = {}, true
+    local units = GroupUnits()
+    local pets = {}
+    for _, u in ipairs(units) do
+        local p = (u == "player") and "pet" or u:gsub("^party", "partypet"):gsub("^raid", "raidpet")
+        pets[#pets + 1] = p
+    end
+    local function Add(u, isPet)
+        local okE, e = pcall(UnitExists, u)
+        if not (okE and ns.Bool(e)) then return end
+        local ok, tanking, status, pct, raw, value = pcall(UnitDetailedThreatSituation, u, mob)
+        if not ok or pct == nil then return end
+        if IsSecret(pct) or IsSecret(value) then sortable = false end
+        local name
+        if isPet then name = ns.Safe(function() return UnitName(u) end) or "Pet" end
+        list[#list + 1] = { unit = (not isPet) and u or nil, pet = isPet, name = name, threatPct = pct,
+            threatValue = value, threatStatus = status, tanking = tanking,
+            classFilename = (not isPet) and ns.Safe(function() return select(2, UnitClass(u)) end) or "" }
+    end
+    for _, u in ipairs(units) do Add(u, false) end
+    if S().threatPets then for _, u in ipairs(pets) do Add(u, true) end end
+    if sortable then
+        table.sort(list, function(a, b) return (a.threatValue or 0) > (b.threatValue or 0) end)
+    end
+    local title = ns.Safe(function() return UnitName(mob) end)
+    return { combatSources = list, title = title }
+end
+
 local function GetSession()
     if not Available() then return nil end
     local c = S()
     local t = TYPE_BY_KEY[c.meterType] or TYPES[1]
+    if t.threat then return ThreatSession(), t end
     local mtype = Enum.DamageMeterType[t.key]
     if mtype == nil then return nil, t end
     local ok, s
@@ -297,6 +350,18 @@ end
 
 local function BarColor(bar, src)
     local c = S()
+    if src.threatStatus ~= nil and c.threatColors then
+        -- the game's threat colours: grey, yellow, orange, red (tanking)
+        local st = src.threatStatus
+        if Plain(st) and GetThreatStatusColor then
+            local ok, r, g, b = pcall(GetThreatStatusColor, st)
+            if ok and r then
+                if st == 0 then r, g, b = 0.55, 0.55, 0.58 end
+                bar:SetStatusBarColor(r, g, b)
+                return
+            end
+        end
+    end
     if c.colorMode == "ACCENT" then
         local a = ns.ACCENT
         bar:SetStatusBarColor(a[1], a[2], a[3])
@@ -342,6 +407,16 @@ function DM.Refresh()
     win.sessionText:SetText(SessionLabel())
     local sources = session and session.combatSources or {}
     local n = #sources
+    if t.threat then
+        win.sessionText:SetText(session and session.title or "")
+        win.empty:SetText(session and session.empty or "No threat yet")
+    else
+        win.empty:SetText("No data yet")
+    end
+    for k, b in pairs(win.quick or {}) do
+        local a = ns.ACCENT
+        if k == c.meterType then b.text:SetTextColor(a[1], a[2], a[3]) else b.text:SetTextColor(0.6, 0.6, 0.6) end
+    end
     win.offset = math.max(0, math.min(win.offset or 0, n - c.rows))
     local maxAmount = sources[1] and sources[1].totalAmount
     local shown = 0
@@ -359,7 +434,10 @@ function DM.Refresh()
                 r.left:SetText(name)
             end
             ValueText(r.right, src, t)
-            if t.deaths or maxAmount == nil then
+            if t.threat then
+                r:SetMinMaxValues(0, 100)
+                if not pcall(r.SetValue, r, src.threatPct or 0) then r:SetValue(0) end
+            elseif t.deaths or maxAmount == nil then
                 r:SetMinMaxValues(0, 1) r:SetValue(1)
             else
                 if not pcall(r.SetMinMaxValues, r, 0, maxAmount) then r:SetMinMaxValues(0, 1) end
@@ -389,6 +467,8 @@ local function Layout()
     for _, fs in ipairs({ w.typeText, w.sessionText, w.resetText }) do
         ns.ApplyFont(fs, c.font, c.titleSize, c.outline)
     end
+    for _, b in pairs(w.quick) do ns.ApplyFont(b.text, c.font, c.titleSize, c.outline) end
+    w.typeText:GetParent():SetWidth(math.max(60, c.width * 0.42))
     w.typeText:SetTextColor(1, 1, 1)
     w.sessionText:SetTextColor(a[1], a[2], a[3])
     local tex = ns.TexturePath(c.texture)
@@ -489,6 +569,24 @@ local function Build()
     typeB.text:SetJustifyH("LEFT")
     w.typeText = typeB.text
 
+    -- quick switches: damage, healing, threat
+    w.quick = {}
+    local prev
+    for _, q in ipairs({ { "DamageDone", "D", "Damage done" }, { "HealingDone", "H", "Healing done" }, { "Threat", "T", "Threat on your enemy" } }) do
+        local b = TitleButton(title, function()
+            S().meterType = q[1]
+            w.offset = 0
+            DM.Refresh()
+        end, q[3])
+        b:SetWidth(14)
+        b.text:SetText(q[2])
+        w.quick[q[1]] = b
+        if prev then b:SetPoint("TOPLEFT", prev, "TOPRIGHT", 2, 0) b:SetPoint("BOTTOMLEFT", prev, "BOTTOMRIGHT", 2, 0)
+        else b:SetPoint("TOPLEFT", typeB, "TOPRIGHT", 4, 0) b:SetPoint("BOTTOMLEFT", typeB, "BOTTOMRIGHT", 4, 0) end
+        prev = b
+    end
+    w.quickLast = prev
+
     local reset = TitleButton(title, function()
         UI.Confirm("Reset all damage meter data?", "Reset", function()
             if Available() and C_DamageMeter.ResetAllCombatSessions then pcall(C_DamageMeter.ResetAllCombatSessions) end
@@ -511,7 +609,7 @@ local function Build()
     end, "Click: next fight, right-click: previous (current, overall, earlier fights)")
     sessB:SetPoint("TOPRIGHT", reset, "TOPLEFT", -4, 0)
     sessB:SetPoint("BOTTOMRIGHT", reset, "BOTTOMLEFT", -4, 0)
-    sessB:SetPoint("LEFT", typeB, "RIGHT", 4, 0)
+    sessB:SetPoint("LEFT", w.quickLast, "RIGHT", 4, 0)
     sessB.text:SetJustifyH("RIGHT")
     w.sessionText = sessB.text
 
@@ -575,6 +673,23 @@ ns.On("DAMAGE_METER_RESET", function() S().session = "CURRENT" Soon() end)
 ns.On("PLAYER_REGEN_ENABLED", function()
     if cvarPending then DM.ApplyBlizzard() end
     C_Timer.After(0.5, function() Learn() DM.Refresh() end)
+end)
+-- threat view: the game's threat events, and twice a second in combat
+local function ThreatSoon()
+    if (TYPE_BY_KEY[S().meterType] or TYPES[1]).threat then Soon() end
+end
+ns.On("UNIT_THREAT_LIST_UPDATE", ThreatSoon)
+ns.On("UNIT_THREAT_SITUATION_UPDATE", ThreatSoon)
+ns.On("PLAYER_TARGET_CHANGED", ThreatSoon)
+ns.On("UNIT_TARGET", function(u) if u == "target" then ThreatSoon() end end)
+local ticker
+ns.On("PLAYER_REGEN_DISABLED", function()
+    if ticker then ticker:Cancel() end
+    ticker = C_Timer.NewTicker(0.5, ThreatSoon)
+end)
+ns.On("PLAYER_REGEN_ENABLED", function()
+    if ticker then ticker:Cancel() ticker = nil end
+    ThreatSoon()
 end)
 ns.On("GROUP_ROSTER_UPDATE", function() RebuildRoster() DM.Apply() end)
 ns.On("PLAYER_ENTERING_WORLD", function() RebuildRoster() Learn() DM.Apply() end)

@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.3.19.
+Version 0.3.20.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -27,7 +27,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   while names are private, HUF switches them and the names above characters off there and back
   on outside (Nameplates > General).
 - **Damage meter**: the game's own meter data (damage, healing, damage taken, interrupts, dispels,
-  deaths; current fight, overall, earlier fights) in a HUF window with privacy names; hides
+  deaths, and HUF's own threat view: your group's threat on your enemy; D / H / T switch to damage,
+  healing and threat; current fight, overall, earlier fights) in a HUF window with privacy names; hides
   Blizzard's meter window. In combat in instances the game hides the meter's names from addons:
   HUF then recognises you, unique classes and members it learned by class + specialisation, else
   shows the class name until the fight ends; never a hidden real name. `/huf meter` toggles it.
