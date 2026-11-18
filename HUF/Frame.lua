@@ -468,6 +468,11 @@ function Frame.LayoutInner(f)
         LayoutTexts(f, which)
     end
     Frame.LayoutHealPred(f)
+    -- power bar right under the health bar: one shared divider (the health
+    -- bar's bottom edge), not two lines eating a thin power bar
+    if showPower and pb.gap <= 0 and (s.health.borderSize or 0) > 0 then
+        f.bars.power.border.lines[1]:Hide()
+    end
     f.textLayer:SetFrameLevel(math.max(h:GetFrameLevel(), pwr:GetFrameLevel()) + 5)
     por.edge:SetFrameLevel(por:GetFrameLevel() + 2)
     Frame.LayoutAuras(f)
