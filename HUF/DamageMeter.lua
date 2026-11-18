@@ -289,6 +289,13 @@ local ROW_POOL = 40
 local MAX_WINDOWS = 5
 
 local function WC() return win.cfg end
+-- rows of the window at hand: its own (windows[i].rows, e.g. from an
+-- EllesmereUI import) or the shared setting
+local function Rows()
+    local r = win and win.cfg and win.cfg.rows
+    if type(r) == "number" and r >= 1 then return r end
+    return S().rows
+end
 
 -- per-window settings; the first window takes over the settings from
 -- before there were several windows
@@ -551,10 +558,10 @@ local function RefreshOne()
         win.empty:SetText("No data yet")
     end
     win.addB:SetShown(S().windowCount < MAX_WINDOWS)
-    win.offset = math.max(0, math.min(win.offset or 0, n - c.rows))
+    win.offset = math.max(0, math.min(win.offset or 0, n - Rows()))
     local maxAmount = sources[1] and sources[1].totalAmount
     local shown = 0
-    for i = 1, c.rows do
+    for i = 1, Rows() do
         local r = Row(i)
         local src = sources[i + win.offset]
         if src then
@@ -585,7 +592,7 @@ local function RefreshOne()
             r:Hide()
         end
     end
-    for i = c.rows + 1, #win.rows do win.rows[i]:Hide() end
+    for i = Rows() + 1, #win.rows do win.rows[i]:Hide() end
     win.empty:SetShown(shown == 0)
 end
 
@@ -722,7 +729,7 @@ local function LayoutPanel()
         r.left:SetPoint("RIGHT", r.right, "LEFT", -4, 0)
         r.right:ClearAllPoints()
         r.right:SetPoint("RIGHT", -4, 0)
-        if i > c.rows then r:Hide() end
+        if i > Rows() then r:Hide() end
     end
 end
 
@@ -754,7 +761,7 @@ function DM.RefreshBreakdown()
     if not ok then panel.head:SetText(t.text) end
     spells = spells or {}
     local n = #spells
-    panel.offset = math.max(0, math.min(panel.offset or 0, n - c.rows))
+    panel.offset = math.max(0, math.min(panel.offset or 0, n - Rows()))
     -- percent of the whole row, when the numbers are readable
     local sum, plain = 0, true
     for _, sp in ipairs(spells) do
@@ -764,7 +771,7 @@ function DM.RefreshBreakdown()
     local max = spells[1] and spells[1].totalAmount
     local col = bd.color and Plain(bd.color) and ns.ClassColor(bd.color)
     local shown = 0
-    for i = 1, c.rows do
+    for i = 1, Rows() do
         local r = PanelRow(i)
         local sp = spells[i + panel.offset]
         if sp then
@@ -793,7 +800,7 @@ function DM.RefreshBreakdown()
             r:Hide()
         end
     end
-    for i = c.rows + 1, #panel.rows do panel.rows[i]:Hide() end
+    for i = Rows() + 1, #panel.rows do panel.rows[i]:Hide() end
     panel.empty:SetText(why or "Nothing in this fight")
     panel.empty:SetShown(shown == 0)
 end
@@ -802,7 +809,7 @@ local function Layout()
     local c = S()
     local w = win
     w:SetScale(c.scale)
-    w:SetSize(c.width, 20 + c.rows * (c.rowHeight + c.rowGap) + 2)
+    w:SetSize(c.width, 20 + Rows() * (c.rowHeight + c.rowGap) + 2)
     local pt = WC().point
     w:ClearAllPoints()
     w:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
@@ -832,7 +839,7 @@ local function Layout()
         r.left:SetPoint("RIGHT", r.right, "LEFT", -4, 0)
         r.right:ClearAllPoints()
         r.right:SetPoint("RIGHT", -4, 0)
-        if i > c.rows then r:Hide() end
+        if i > Rows() then r:Hide() end
     end
     ns.ApplyFont(w.empty, c.font, c.fontSize, c.outline)
 end

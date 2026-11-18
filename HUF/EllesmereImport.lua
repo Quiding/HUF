@@ -556,20 +556,29 @@ local function ConvertDamageMeter(addon, m, notes)
     m.hideBlizzard = true
 
     -- a window's place: unlock format { point, relPoint, x, y } or the older
-    -- { x, y } (its top left from the screen's bottom left)
-    local function Point(pos)
+    -- { x, y } (its top left from the screen's bottom left: taken as its
+    -- bottom left, h below, so windows of other heights keep their bottoms)
+    local function Point(pos, h)
         if type(pos) ~= "table" then return nil end
         local p1, p2 = pos.point or pos[1], pos.relPoint or pos[2]
         local x, y = pos.x or pos[3], pos.y or pos[4]
         if type(p1) == "string" and type(x) == "number" and type(y) == "number" then
             return { p1, type(p2) == "string" and p2 or p1, math.floor(x + 0.5), math.floor(y + 0.5) }
         elseif type(pos.x) == "number" and type(pos.y) == "number" then
-            return { "TOPLEFT", "BOTTOMLEFT", math.floor(pos.x + 0.5), math.floor(pos.y + 0.5) }
+            return { "BOTTOMLEFT", "BOTTOMLEFT", math.floor(pos.x + 0.5), math.floor(pos.y - h + 0.5) }
         end
         return nil
     end
-    -- a window's meter type, when HUF has it (Ellesmere stores the game's enum number)
+    -- a window's meter type, when HUF has it (Ellesmere stores the game's enum
+    -- number, or "threat" for its WoW Forever threat view)
+    local function HasType(key)
+        for _, t in ipairs((ns.DamageMeter and ns.DamageMeter.TYPES) or {}) do
+            if t.key == key then return true end
+        end
+        return false
+    end
     local function MeterType(cur)
+        if cur == "threat" then return HasType("Threat") and "Threat" or nil end
         if type(cur) ~= "number" or not (Enum and type(Enum.DamageMeterType) == "table") then return nil end
         for key, v in pairs(Enum.DamageMeterType) do
             if v == cur then
@@ -586,30 +595,38 @@ local function ConvertDamageMeter(addon, m, notes)
     if Num(G("windowCount"), 1) > 5 then
         notes[#notes + 1] = "Damage meter: HUF has up to 5 windows; the first 5 of Ellesmere's are taken."
     end
+    -- rows of a window from its height (Ellesmere's has the title bar in it)
+    local rowHeight = math.max(8, math.floor(Num(G("barHeight"), 18) + 0.5))
+    local rowGap = math.max(0, math.floor(Num(G("barSpacing"), 2) + 0.5))
+    local function RowsFor(h)
+        local body = h - Num(G("hdrHeight"), 22)
+        return math.max(1, math.min(40, math.floor((body + rowGap) / (rowHeight + rowGap))))
+    end
     local windows = {}
     for i = 1, count do
         local e = type(list[i]) == "table" and list[i] or {}
+        local h = Num(e.height, 150)
         local before = windows[i - 1]
-        local point = Point(e.position)
+        local point = Point(e.position, h)
             or (before and { before.point[1], before.point[2], before.point[3] - Num(w.width, 375) - 8, before.point[4] })
             or ns.CopyTable(m.point)
-        windows[i] = { meterType = MeterType(e.curDMType) or "DamageDone", session = "CURRENT", point = point }
+        -- each window its own height (HUF: windows[i].rows over the shared rows)
+        windows[i] = { meterType = MeterType(e.curDMType) or "DamageDone", session = "CURRENT", point = point,
+                       rows = RowsFor(h) }
     end
     m.windows, m.windowCount = windows, count
     m.point = ns.CopyTable(windows[1].point)
     m.meterType, m.session = windows[1].meterType, "CURRENT"
 
-    -- size: shared by HUF's windows, Ellesmere's first one's (its height has the title bar in it)
+    -- width: shared by HUF's windows, Ellesmere's first one's
     m.width = math.max(100, math.floor(Num(w.width, 375) + 0.5))
-    m.rowHeight = math.max(8, math.floor(Num(G("barHeight"), 18) + 0.5))
-    m.rowGap = math.max(0, math.floor(Num(G("barSpacing"), 2) + 0.5))
-    local body = Num(w.height, 150) - Num(G("hdrHeight"), 22)
-    m.rows = math.max(1, math.min(40, math.floor((body + m.rowGap) / (m.rowHeight + m.rowGap))))
+    m.rowHeight, m.rowGap = rowHeight, rowGap
+    m.rows = windows[1].rows
     m.locked = w.locked and true or false
     for i = 2, count do
         local e = list[i]
-        if type(e) == "table" and (Num(e.width, m.width) ~= Num(w.width, 375) or Num(e.height, 150) ~= Num(w.height, 150)) then
-            notes[#notes + 1] = "Damage meter: HUF's windows share one size; the first window's is taken."
+        if type(e) == "table" and math.abs(Num(e.width, m.width) - m.width) > 4 then
+            notes[#notes + 1] = "Damage meter: HUF's windows share one width; the first window's is taken."
             break
         end
     end
