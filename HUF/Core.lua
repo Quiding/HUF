@@ -9,7 +9,7 @@ _G.HUF = ns                      -- public: other addons (MMT) reach HUF here
 
 ns.name = ADDON
 ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.25"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.26"
 ns.API_VERSION = 1
 ns.MEDIA = "Interface\\AddOns\\HUF\\Media\\"
 ns.LOGO = ns.MEDIA .. "Logo"
@@ -292,7 +292,7 @@ end
 
 local function Bar(colorMode)
     return {
-        texture = "Smooth",
+        texture = "Fade",
         reverse = false,
         colorMode = colorMode,      -- STATIC | GRADIENT | CLASS | STATUS | TYPE
         color = C(0.20, 0.65, 0.30),
@@ -449,11 +449,12 @@ local function BuildDefaults()
             meterType = "DamageDone",
             session = "CURRENT",        -- CURRENT | OVERALL | a fight's session id
             point = { "BOTTOMRIGHT", "BOTTOMRIGHT", -40, 220 },
-            width = 240, rows = 8, rowHeight = 18, rowGap = 1, scale = 1,
+            width = 200, rows = 6, rowHeight = 17, rowGap = 1, scale = 1,
+            windowCount = 1,            -- windows (each its own list, fight, position: windows[i])
             locked = false,
-            texture = "Smooth", colorMode = "CLASS", color = C(0.35, 0.55, 0.85),   -- CLASS | ACCENT | STATIC
+            texture = "Fade", colorMode = "CLASS", color = C(0.35, 0.55, 0.85),   -- CLASS | ACCENT | STATIC
             bgAlpha = 0.75,
-            font = "GLOBAL", fontSize = 11, titleSize = 11, outline = "OUTLINE",
+            font = "GLOBAL", fontSize = 12, titleSize = 11, outline = "OUTLINE",
             showRank = true,
             numbers = "BOTH",           -- BOTH "12.3K (845)" | TOTAL | PERSECOND
             threatPets = true,          -- threat view: pets too
@@ -464,7 +465,7 @@ local function BuildDefaults()
             mode = "NAME_BAR",          -- NAME | NAME_BAR | BAR
             friendlyMode = "NAME",      -- SAME (as enemies) | NAME | NAME_BAR | BAR
             width = 125, height = 10,
-            texture = "Smooth",
+            texture = "Fade",
             colorMode = "CLASS",        -- CLASS (players) / reaction (NPCs) | STATIC | STATUS
             color = C(0.20, 0.65, 0.30),
             high = C(0.20, 0.75, 0.30), mid = C(1.00, 0.70, 0.10), low = C(0.85, 0.15, 0.15),
@@ -859,6 +860,28 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 12
+    end
+    -- 0.3.26: bar texture "Fade" everywhere, damage meter 200 wide, 6 rows of
+    -- 17, font 12 (only where still the old defaults)
+    if HUFDB.dataVersion < 13 then
+        local function Walk(t, depth)
+            if depth > 6 then return end
+            for k, v in pairs(t) do
+                if k == "texture" and v == "Smooth" then t[k] = "Fade"
+                elseif type(v) == "table" then Walk(v, depth + 1) end
+            end
+        end
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            Walk(prof, 0)
+            local d = prof.damageMeter
+            if d then
+                if d.width == 240 then d.width = 200 end
+                if d.rows == 8 then d.rows = 6 end
+                if d.rowHeight == 18 then d.rowHeight = 17 end
+                if d.fontSize == 11 then d.fontSize = 12 end
+            end
+        end
+        HUFDB.dataVersion = 13
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

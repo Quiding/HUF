@@ -280,11 +280,44 @@ end
 ---------------------------------------------------------------------------
 -- Window
 ---------------------------------------------------------------------------
+-- several windows (e.g. damage and threat side by side): each has its own
+-- list, fight and position (S().windows[i]); size and look are shared.
+-- The window code works on `win`, the window at hand.
 local win
+local wins = {}
 local ROW_POOL = 40
+local MAX_WINDOWS = 5
+
+local function WC() return win.cfg end
+
+-- per-window settings; the first window takes over the settings from
+-- before there were several windows
+function DM.EnsureWindows()
+    local c = S()
+    if type(c.windows) ~= "table" then
+        c.windows = { { meterType = c.meterType or "DamageDone", session = c.session or "CURRENT",
+                        point = ns.CopyTable(c.point or { "BOTTOMRIGHT", "BOTTOMRIGHT", -40, 220 }) } }
+    end
+    c.windowCount = math.max(1, math.min(MAX_WINDOWS, c.windowCount or 1))
+    for i = 1, c.windowCount do
+        local w = c.windows[i]
+        if type(w) ~= "table" then
+            -- a new window: left of the one before, threat if that one shows damage
+            local before = c.windows[i - 1]
+            local p = before.point
+            w = { meterType = before.meterType == "Threat" and "DamageDone" or "Threat", session = "CURRENT",
+                  point = { p[1], p[2], p[3] - c.width - 8, p[4] } }
+            c.windows[i] = w
+        end
+        w.meterType = w.meterType or "DamageDone"
+        w.session = w.session or "CURRENT"
+        w.point = w.point or { "BOTTOMRIGHT", "BOTTOMRIGHT", -40, 220 }
+    end
+    return c.windows
+end
 
 local function SessionLabel()
-    local c = S()
+    local c = WC()
     if c.session == "OVERALL" then return "Overall" end
     if type(c.session) == "number" then return DM.SessionName(c.session) or "Earlier fight" end
     return "Current"
@@ -357,7 +390,7 @@ end
 
 local function GetSession()
     if not Available() then return nil end
-    local c = S()
+    local c = WC()
     local t = TYPE_BY_KEY[c.meterType] or TYPES[1]
     if t.threat then return ThreatSession(), t end
     local mtype = Enum.DamageMeterType[t.key]
@@ -395,7 +428,7 @@ local function RowIdentity(src)
 end
 
 local function GetBreakdown()
-    local c = S()
+    local c = (bd.win or win).cfg
     local t = TYPE_BY_KEY[c.meterType] or TYPES[1]
     if t.threat or t.deaths then return nil, t, t.threat and "No breakdown for threat" or "No breakdown for deaths" end
     if not bd.guid and bd.unit then bd.guid = roster.guidOf[bd.unit] end
@@ -482,8 +515,12 @@ local function Row(i)
     r.right:SetJustifyH("RIGHT")
     r.left:SetWordWrap(false)
     r:EnableMouse(true)
+    r.win = win
     r:SetScript("OnMouseUp", function(self, button)
-        if button == "LeftButton" and self.src then DM.OpenBreakdown(self.src, self.name) end
+        if button == "LeftButton" and self.src then
+            win = self.win
+            DM.OpenBreakdown(self.src, self.name)
+        end
     end)
     r:SetScript("OnEnter", function(self)
         if not self.src or self.isThreat then return end
@@ -496,9 +533,10 @@ local function Row(i)
     return r
 end
 
-function DM.Refresh()
+local function RefreshOne()
     if not win or not win:IsShown() then return end
     local c = S()
+    local wc = WC()
     local session, t = GetSession()
     t = t or TYPES[1]
     win.typeText:SetText(t.text)
@@ -514,7 +552,7 @@ function DM.Refresh()
     end
     for k, b in pairs(win.quick or {}) do
         local a = ns.ACCENT
-        if k == c.meterType then b.text:SetTextColor(a[1], a[2], a[3]) else b.text:SetTextColor(0.6, 0.6, 0.6) end
+        if k == wc.meterType then b.text:SetTextColor(a[1], a[2], a[3]) else b.text:SetTextColor(0.6, 0.6, 0.6) end
     end
     win.offset = math.max(0, math.min(win.offset or 0, n - c.rows))
     local maxAmount = sources[1] and sources[1].totalAmount
@@ -552,6 +590,15 @@ function DM.Refresh()
     end
     for i = c.rows + 1, #win.rows do win.rows[i]:Hide() end
     win.empty:SetShown(shown == 0)
+end
+
+function DM.Refresh()
+    local keep = win
+    for _, w in ipairs(wins) do
+        win = w
+        RefreshOne()
+    end
+    win = keep
     if bd.open then DM.RefreshBreakdown() end
 end
 
@@ -683,12 +730,12 @@ local function LayoutPanel()
 end
 
 function DM.OpenBreakdown(src, name)
-    local t = TYPE_BY_KEY[S().meterType] or TYPES[1]
+    local t = TYPE_BY_KEY[WC().meterType] or TYPES[1]
     if t.threat then return end
     if bd.open and bd.src == src then DM.CloseBreakdown() return end
     local guid, cid = RowIdentity(src)
     bd = { open = true, src = src, guid = guid, cid = cid, name = name, unit = RowUnit(src),
-           color = src.classFilename }
+           color = src.classFilename, win = win }
     BuildPanel()
     LayoutPanel()
     panel.offset = 0
@@ -703,6 +750,7 @@ end
 
 function DM.RefreshBreakdown()
     if not (bd.open and panel and panel:IsShown()) then return end
+    win = bd.win or win
     local c = S()
     local spells, t, why = GetBreakdown()
     local ok = pcall(panel.head.SetFormattedText, panel.head, "%s - %s", bd.name or "?", t.text)
@@ -758,8 +806,9 @@ local function Layout()
     local w = win
     w:SetScale(c.scale)
     w:SetSize(c.width, 20 + c.rows * (c.rowHeight + c.rowGap) + 2)
+    local pt = WC().point
     w:ClearAllPoints()
-    w:SetPoint(c.point[1], UIParent, c.point[2], c.point[3], c.point[4])
+    w:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
     local a = ns.ACCENT
     w.fill:SetColorTexture(0.04, 0.04, 0.05, c.bgAlpha)
     w.title:SetColorTexture(0.08, 0.08, 0.09, math.min(1, c.bgAlpha + 0.15))
@@ -863,9 +912,11 @@ TitleButton = function(parent, onClick, tip)
     return b
 end
 
-local function Build()
-    if win then return end
-    local w = CreateFrame("Frame", "HUF_DamageMeter", UIParent)
+local function Build(index)
+    if wins[index] then win = wins[index] return end
+    local w = CreateFrame("Frame", index == 1 and "HUF_DamageMeter" or ("HUF_DamageMeter" .. index), UIParent)
+    wins[index] = w
+    w.index = index
     win = w
     w:SetFrameStrata("MEDIUM")
     w:SetClampedToScreen(true)
@@ -892,10 +943,12 @@ local function Build()
         local from = w.dragFrom
         if not from then return end
         w.dragFrom = nil
-        local p = S().point
+        local p = w.cfg.point
         p[3] = math.floor(p[3] + (w:GetLeft() or 0) - from[1] + 0.5)
         p[4] = math.floor(p[4] + (w:GetTop() or 0) - from[2] + 0.5)
+        win = w
         Layout()
+        if bd.open and bd.win == w then LayoutPanel() end
     end)
     w.title = title:CreateTexture(nil, "BORDER")
     w.title:SetAllPoints()
@@ -908,8 +961,8 @@ local function Build()
         local l = {}
         for _, t in ipairs(TYPES) do l[#l + 1] = { value = t.key, text = t.text } end
         return l
-    end, function() return S().meterType end, function(v)
-        S().meterType = v
+    end, function() return w.cfg.meterType end, function(v)
+        w.cfg.meterType = v
         w.offset = 0
         DM.Refresh()
     end, "What the meter shows (damage, healing, taken, interrupts, dispels, deaths, threat). Mouse wheel: step through.")
@@ -924,7 +977,7 @@ local function Build()
     local prev
     for _, q in ipairs({ { "DamageDone", "D", "Damage done" }, { "HealingDone", "H", "Healing done" }, { "Threat", "T", "Threat on your enemy" } }) do
         local b = TitleButton(title, function()
-            S().meterType = q[1]
+            w.cfg.meterType = q[1]
             w.offset = 0
             DM.Refresh()
         end, q[3])
@@ -940,7 +993,7 @@ local function Build()
     local reset = TitleButton(title, function()
         UI.Confirm("Reset all damage meter data?", "Reset", function()
             if Available() and C_DamageMeter.ResetAllCombatSessions then pcall(C_DamageMeter.ResetAllCombatSessions) end
-            S().session = "CURRENT"
+            for _, o in ipairs(wins) do if o.cfg then o.cfg.session = "CURRENT" end end
             DM.Refresh()
         end)
     end, "Reset all fights")
@@ -954,8 +1007,8 @@ local function Build()
         local l = {}
         for _, e in ipairs(DM.Sessions()) do l[#l + 1] = { value = e.id, text = e.text } end
         return l
-    end, function() return S().session end, function(v)
-        S().session = v
+    end, function() return w.cfg.session end, function(v)
+        w.cfg.session = v
         w.offset = 0
         DM.Refresh()
     end, "Which fight: current, overall or an earlier one. Mouse wheel: step through.")
@@ -991,23 +1044,27 @@ local function WantShown()
     return true
 end
 
+local function HideAll()
+    for _, w in ipairs(wins) do w:Hide() end
+    DM.CloseBreakdown()
+end
+
 function DM.Apply()
     DM.ApplyBlizzard()
-    if panel and panel:IsShown() then
-        if WantShown() and win then LayoutPanel() else DM.CloseBreakdown() end
+    if not Available() or not WantShown() then HideAll() return end
+    local cfgs = DM.EnsureWindows()
+    local count = S().windowCount
+    for i = 1, count do
+        Build(i)
+        win.cfg = cfgs[i]
+        Layout()
+        win.empty:SetText("No data yet")
+        win:Show()
     end
-    if not Available() then
-        if win then win:Hide() end
-        return
+    for i = count + 1, #wins do wins[i]:Hide() end
+    if bd.open then
+        if bd.win and bd.win:IsShown() then win = bd.win LayoutPanel() else DM.CloseBreakdown() end
     end
-    if not WantShown() then
-        if win then win:Hide() end
-        return
-    end
-    Build()
-    Layout()
-    win.empty:SetText("No data yet")
-    win:Show()
     DM.Refresh()
 end
 
@@ -1024,14 +1081,19 @@ end
 
 ns.On("DAMAGE_METER_COMBAT_SESSION_UPDATED", Soon)
 ns.On("DAMAGE_METER_CURRENT_SESSION_UPDATED", Soon)
-ns.On("DAMAGE_METER_RESET", function() S().session = "CURRENT" Soon() end)
+ns.On("DAMAGE_METER_RESET", function()
+    for _, w in ipairs(wins) do if w.cfg then w.cfg.session = "CURRENT" end end
+    Soon()
+end)
 ns.On("PLAYER_REGEN_ENABLED", function()
     if cvarPending then DM.ApplyBlizzard() end
     C_Timer.After(0.5, function() Learn() DM.Refresh() end)
 end)
 -- threat view: the game's threat events, and twice a second in combat
 local function ThreatSoon()
-    if (TYPE_BY_KEY[S().meterType] or TYPES[1]).threat then Soon() end
+    for _, w in ipairs(wins) do
+        if w:IsShown() and w.cfg and (TYPE_BY_KEY[w.cfg.meterType] or TYPES[1]).threat then Soon() return end
+    end
 end
 ns.On("UNIT_THREAT_LIST_UPDATE", ThreatSoon)
 ns.On("UNIT_THREAT_SITUATION_UPDATE", ThreatSoon)
@@ -1061,9 +1123,15 @@ end
 -- debug report: what the meter hands out right now
 function DM.Report(add)
     local c = S()
-    add(("damage meter: available=%s enabled=%s shown=%s type=%s session=%s blizzard cvar=%s saved=%s"):format(
-        tostring(Available()), tostring(c.enabled), tostring(win and win:IsShown()), tostring(c.meterType),
-        tostring(c.session), tostring(GetCV("damageMeterEnabled")), tostring(HUFDB.damageMeterCVar and HUFDB.damageMeterCVar.old)))
+    add(("damage meter: available=%s enabled=%s windows=%s blizzard cvar=%s saved=%s"):format(
+        tostring(Available()), tostring(c.enabled), tostring(c.windowCount),
+        tostring(GetCV("damageMeterEnabled")), tostring(HUFDB.damageMeterCVar and HUFDB.damageMeterCVar.old)))
+    for i, w in ipairs(wins) do
+        add(("  window %d: shown=%s type=%s session=%s"):format(i, tostring(w:IsShown()),
+            tostring(w.cfg and w.cfg.meterType), tostring(w.cfg and w.cfg.session)))
+    end
+    win = wins[1]
+    if not win or not win.cfg then return end
     local session = GetSession()
     local srcs = session and session.combatSources
     if type(srcs) ~= "table" then return end

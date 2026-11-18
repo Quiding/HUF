@@ -32,11 +32,7 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
         { value = "GROUP", text = "In a group" },
         { value = "INSTANCE", text = "In instances" },
     }, Opt("show"))
-    L:Cycle("List", function()
-        local l = {}
-        for _, t in ipairs(ns.DamageMeter.TYPES) do l[#l + 1] = { value = t.key, text = t.text } end
-        return l
-    end, Opt("meterType"))
+    L:Slider("Windows", 1, 5, 1, Opt("windowCount"))
     L:Cycle("Numbers", {
         { value = "BOTH", text = "Total (per second)" },
         { value = "TOTAL", text = "Total" },
@@ -78,5 +74,6 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
         { value = "THICKOUTLINE", text = "Thick" },
     }, Opt("outline"))
     R:Note("Names follow Names & MMT. In combat in instances the game hides the meter's names from addons: HUF then shows you, a class only one group member has, or a member it recognised by class and specialisation after an earlier fight; else the class name until the fight ends. It never shows a hidden real name while names are private.")
+    R:Note("Several windows: each has its own list, fight and place (a new one opens left of the last one, with threat or damage); size and look are shared.")
     R:Note("Title bar: the two dropdowns pick the list and the fight (mouse wheel steps through them), D / H / T switch straight to damage, healing and threat, x resets. Click a row for its breakdown (spells, amounts, share) beside the meter; in combat in instances only for rows HUF recognised (you and your group), else when the fight ends. Drag the title to move. Threat shows your group's threat on your target (or your target's target) in percent.")
 end, function() return ns.db.damageMeter.enabled end)
