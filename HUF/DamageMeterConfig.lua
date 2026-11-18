@@ -60,6 +60,8 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
     L:Check("Accent line under it", gt, st)
     local ga, sa = Opt("titleAccent")
     L:Check("Fight in the accent colour", ga, sa)
+    local gi, si = Opt("titleIcons")
+    L:Check("Icons for meter type and fight", gi, si, "Small icon buttons (their names in the tooltip) and the meter type's name in the middle of the title bar.")
 
     local R = UI.Column(page, COL2_X, -30, COL_W)
     R:Header("Bars")

@@ -468,6 +468,7 @@ local function BuildDefaults()
             titleColor = C(0.08, 0.08, 0.09), titleAlpha = -1,   -- -1: the background's opacity + 0.15
             titleLine = true,           -- accent line under the title bar
             titleAccent = true,         -- the fight in the accent colour (off: white)
+            titleIcons = false,         -- meter type and fight as icons (names in their tooltips), the type's name in the middle
             icons = "NONE",             -- NONE | CLASS: class icon before each bar
             rowBorder = 0,              -- a border around each bar (0: none)
             barBgColor = C(0, 0, 0), barBgAlpha = 0.35,          -- the empty part of each bar

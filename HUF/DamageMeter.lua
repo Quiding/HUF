@@ -33,6 +33,23 @@ local TYPES = {
     { key = "Threat", text = "Threat", threat = true },     -- HUF's own: the group's threat on your enemy
 }
 DM.TYPES = TYPES
+-- title bar icons (setting "titleIcons")
+local TYPE_ICONS = {
+    DamageDone = "Interface\\Icons\\INV_Sword_04",
+    HealingDone = "Interface\\Icons\\Spell_Holy_FlashHeal",
+    DamageTaken = "Interface\\Icons\\INV_Shield_06",
+    AvoidableDamageTaken = "Interface\\Icons\\Spell_Fire_Fire",
+    EnemyDamageTaken = "Interface\\Icons\\Ability_DualWield",
+    Interrupts = "Interface\\Icons\\Ability_Kick",
+    Dispels = "Interface\\Icons\\Spell_Holy_DispelMagic",
+    Deaths = "Interface\\Icons\\Ability_Rogue_FeignDeath",
+    Threat = "Interface\\Icons\\Spell_Nature_Reincarnation",
+}
+local SESSION_ICONS = {
+    CURRENT = "Interface\\Icons\\Spell_Holy_BorrowedTime",      -- this fight
+    OVERALL = "Interface\\Icons\\INV_Misc_PocketWatch_01",      -- all fights
+    EARLIER = "Interface\\Icons\\INV_Misc_Note_01",              -- an earlier fight
+}
 local TYPE_BY_KEY = {}
 for i, t in ipairs(TYPES) do t.index = i TYPE_BY_KEY[t.key] = t end
 
@@ -571,6 +588,17 @@ local function RefreshOne()
     t = t or TYPES[1]
     win.typeText:SetText(t.text)
     win.sessionText:SetText(SessionLabel())
+    if c.titleIcons then
+        local size = math.max(8, (c.titleHeight or 20) - 6)
+        win.typeB:SetIcon(TYPE_ICONS[t.key] or TYPE_ICONS.DamageDone, size)
+        local sk = (wc.session == "OVERALL" and "OVERALL") or (type(wc.session) == "number" and "EARLIER") or "CURRENT"
+        win.sessB:SetIcon(not t.threat and SESSION_ICONS[sk] or nil, size)    -- threat: the enemy's name
+        win.label:SetText(t.text)
+    else
+        win.typeB:SetIcon(nil)
+        win.sessB:SetIcon(nil)
+        win.label:SetText("")
+    end
     local sources = session and session.combatSources or {}
     local n = #sources
     win.sessB:SetDisabled(t.threat and true or false)    -- threat: the enemy's name stands there
@@ -853,7 +881,24 @@ local function Layout()
     for _, fs in ipairs({ w.typeText, w.sessionText, w.resetText, w.closeText, w.addB.text }) do
         ns.ApplyFont(fs, c.font, c.titleSize, c.outline)
     end
-    w.typeB:SetWidth(math.max(70, c.width * 0.42))
+    ns.ApplyFont(w.label, c.font, c.titleSize, c.outline)
+    w.label:SetTextColor(1, 1, 1)
+    w.sessB:ClearAllPoints()
+    w.sessB:SetPoint("TOPRIGHT", w.resetText:GetParent(), "TOPLEFT", -3, 0)
+    w.sessB:SetPoint("BOTTOMRIGHT", w.resetText:GetParent(), "BOTTOMLEFT", -3, 0)
+    w.label:ClearAllPoints()
+    if c.titleIcons then
+        local bw = math.max(8, th - 6) + 16       -- icon + arrow
+        w.typeB:SetWidth(bw)
+        w.sessB:SetWidth(bw)
+        w.label:SetPoint("LEFT", w.quickLast, "RIGHT", 6, 0)
+        w.label:SetPoint("RIGHT", w.sessB, "LEFT", -6, 0)
+        w.label:Show()
+    else
+        w.typeB:SetWidth(math.max(70, c.width * 0.42))
+        w.sessB:SetPoint("LEFT", w.quickLast, "RIGHT", 4, 0)
+        w.label:Hide()
+    end
     w.typeText:SetTextColor(1, 1, 1)
     if c.titleAccent == false then w.sessionText:SetTextColor(1, 1, 1)
     else w.sessionText:SetTextColor(a[1], a[2], a[3]) end
@@ -908,6 +953,22 @@ local function TitleDropdown(parent, items, get, set, tip)
     b.text:SetPoint("RIGHT", b.arrow, "LEFT", -3, 0)
     b.text:SetJustifyH("LEFT")
     b.text:SetWordWrap(false)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetPoint("LEFT", 3, 0)
+    b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    b.icon:Hide()
+    -- an icon in place of the text (nil: the text again)
+    function b:SetIcon(path, size)
+        if path then
+            self.icon:SetTexture(path)
+            self.icon:SetSize(size, size)
+            self.icon:Show()
+            self.text:Hide()
+        else
+            self.icon:Hide()
+            self.text:Show()
+        end
+    end
     b:SetScript("OnClick", function(self)
         if self.disabled then return end
         GameTooltip:Hide()
@@ -927,7 +988,7 @@ local function TitleDropdown(parent, items, get, set, tip)
     b:SetScript("OnEnter", function(self)
         if self.disabled then return end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+        GameTooltip:SetText(type(tip) == "function" and tip() or tip, 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1011,7 +1072,10 @@ local function Build(index)
         if v == "Threat" and not InCombatLockdown() then w.keepThreat = true end
         w.offset = 0
         DM.Refresh()
-    end, "What the meter shows (damage, healing, taken, interrupts, dispels, deaths, threat). Mouse wheel: step through.")
+    end, function()
+        local t = TYPE_BY_KEY[w.cfg.meterType] or TYPES[1]
+        return t.text .. "\n|cffaaaaaaWhat the meter shows (damage, healing, taken, interrupts, dispels, deaths, threat). Mouse wheel: step through.|r"
+    end)
     typeB:SetPoint("TOPLEFT", 3, 0)
     typeB:SetPoint("BOTTOMLEFT", 3, 0)
     typeB:SetWidth(120)
@@ -1057,12 +1121,22 @@ local function Build(index)
         w.cfg.session = v
         w.offset = 0
         DM.Refresh()
-    end, "Which fight: current, overall or an earlier one. Mouse wheel: step through.")
+    end, function()
+        local prev = win
+        win = w
+        local label = SessionLabel()
+        win = prev
+        return label .. "\n|cffaaaaaaWhich fight: current, overall or an earlier one. Mouse wheel: step through.|r"
+    end)
     sessB:SetPoint("TOPRIGHT", reset, "TOPLEFT", -3, 0)
     sessB:SetPoint("BOTTOMRIGHT", reset, "BOTTOMLEFT", -3, 0)
     sessB:SetPoint("LEFT", w.quickLast, "RIGHT", 4, 0)
     w.sessB = sessB
     w.sessionText = sessB.text
+    -- icon title bar: the meter type's name between the buttons
+    w.label = title:CreateFontString(nil, "OVERLAY")
+    w.label:SetJustifyH("LEFT")
+    w.label:SetWordWrap(false)
 
     w.body = CreateFrame("Frame", nil, w)
     w.body:SetPoint("TOPLEFT", 1, -21)
