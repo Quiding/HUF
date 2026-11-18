@@ -567,6 +567,9 @@ local function Row(i)
         if button == "LeftButton" and self.src then
             win = self.win
             DM.OpenBreakdown(self.src, self.name)
+        elseif button == "RightButton" and S().breakdownInline then
+            win = self.win
+            DM.OpenTypes()
         end
     end)
     r:SetScript("OnEnter", function(self)
@@ -681,6 +684,10 @@ local function PanelRow(i)
     r.bar = CreateFrame("StatusBar", nil, r)
     r.bar:SetPoint("TOPLEFT", r.icon, "TOPRIGHT", 1, 0)
     r.bar:SetPoint("BOTTOMRIGHT")
+    r.edge = CreateFrame("Frame", nil, r)
+    r.edge:SetAllPoints()
+    r.edge:SetFrameLevel(r.bar:GetFrameLevel() + 2)
+    r.border = ns.Frame.MakeBorder(r.edge)
     r.bg = r.bar:CreateTexture(nil, "BACKGROUND")
     r.bg:SetAllPoints()
     r.left = r.bar:CreateFontString(nil, "OVERLAY")
@@ -698,8 +705,19 @@ local function PanelRow(i)
         if pcall(GameTooltip.SetSpellByID, GameTooltip, id) then GameTooltip:Show() end
     end)
     r:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    r:SetScript("OnMouseUp", function(_, button)
-        if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown() end
+    r:SetScript("OnMouseUp", function(self, button)
+        if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown()
+        elseif button == "LeftButton" and self.typeKey and bd.types then
+            -- meter list: this meter in the window
+            local w = bd.win
+            DM.CloseBreakdown()
+            if w and w.cfg then
+                w.cfg.meterType = self.typeKey
+                if self.typeKey == "Threat" and not InCombatLockdown() then w.keepThreat = true end
+                w.offset = 0
+                DM.Refresh()
+            end
+        end
     end)
     panel.rows[i] = r
     return r
@@ -820,7 +838,15 @@ local function LayoutPanel()
         r:SetHeight(c.rowHeight)
         r.icon:SetWidth(c.rowHeight)
         r.bar:SetStatusBarTexture(tex)
-        r.bg:SetColorTexture(0, 0, 0, 0.35)
+        -- inside the window: drawn like the meter's rows (icon flush, the same
+        -- border and empty-bar colour); beside it as before
+        local bb = c.barBgColor or { r = 0, g = 0, b = 0 }
+        r.bar:ClearAllPoints()
+        r.bar:SetPoint("TOPLEFT", r.icon, "TOPRIGHT", inline and 0 or 1, 0)
+        r.bar:SetPoint("BOTTOMRIGHT")
+        if inline then r.bg:SetColorTexture(bb.r, bb.g, bb.b, c.barBgAlpha or 0.35)
+        else r.bg:SetColorTexture(0, 0, 0, 0.35) end
+        ns.Frame.LayoutBorder(r.border, r.edge, inline and (c.rowBorder or 0) or 0, { r = 0, g = 0, b = 0 }, 1)
         ns.ApplyFont(r.left, c.font, c.fontSize, c.outline)
         ns.ApplyFont(r.right, c.font, c.fontSize, c.outline)
         r.left:ClearAllPoints()
@@ -830,6 +856,49 @@ local function LayoutPanel()
         r.right:SetPoint("RIGHT", -4, 0)
         if i > Rows() then r:Hide() end
     end
+end
+
+-- meter list inside the window (right-click on the names): a row per meter
+-- type, the current one lit; a click picks it, a right-click goes back
+function DM.OpenTypes()
+    bd = { open = true, types = true, win = win }
+    BuildPanel()
+    LayoutPanel()
+    panel.offset = 0
+    panel:Show()
+    DM.RefreshBreakdown()
+end
+
+local function RefreshTypes()
+    local c = S()
+    local cur = bd.win and bd.win.cfg and bd.win.cfg.meterType
+    panel.head:SetText("Meters")
+    panel.offset = math.max(0, math.min(panel.offset or 0, #TYPES - Rows()))
+    local muted = c.titleIconsMuted ~= false
+    local a = ns.ACCENT
+    local shown = 0
+    for i = 1, Rows() do
+        local r = PanelRow(i)
+        local t = TYPES[i + (panel.offset or 0)]
+        if t then
+            shown = shown + 1
+            r.typeKey, r.spellID = t.key, nil
+            r.icon:SetTexture(TYPE_ICONS[t.key] or TYPE_ICONS.DamageDone)
+            r.icon:SetDesaturated(muted)
+            if muted then r.icon:SetVertexColor(0.75, 0.75, 0.77) else r.icon:SetVertexColor(1, 1, 1) end
+            r.left:SetText(t.text)
+            r.right:SetText(t.key == cur and "<" or "")
+            r.bar:SetMinMaxValues(0, 1)
+            r.bar:SetValue(t.key == cur and 1 or 0)
+            r.bar:SetStatusBarColor(a[1], a[2], a[3])
+            r:Show()
+        else
+            r.typeKey = nil
+            r:Hide()
+        end
+    end
+    for i = Rows() + 1, #panel.rows do panel.rows[i]:Hide() end
+    panel.empty:SetShown(shown == 0)
 end
 
 function DM.OpenBreakdown(src, name)
@@ -854,6 +923,12 @@ end
 function DM.RefreshBreakdown()
     if not (bd.open and panel and panel:IsShown()) then return end
     win = bd.win or win
+    if bd.types then RefreshTypes() return end
+    for _, r in ipairs(panel.rows) do
+        r.typeKey = nil
+        r.icon:SetDesaturated(false)
+        r.icon:SetVertexColor(1, 1, 1)
+    end
     local c = S()
     local spells, t, why = GetBreakdown()
     local ok = pcall(panel.head.SetFormattedText, panel.head, "%s - %s", bd.name or "?", t.text)
@@ -1238,6 +1313,14 @@ local function Build(index)
     w.body:SetScript("OnMouseWheel", function(_, delta)
         w.offset = math.max(0, (w.offset or 0) - delta)
         DM.Refresh()
+    end)
+    -- inside-the-window navigation: right-click the names for the meter list
+    w.body:EnableMouse(true)
+    w.body:SetScript("OnMouseUp", function(_, button)
+        if button == "RightButton" and S().breakdownInline then
+            win = w
+            DM.OpenTypes()
+        end
     end)
     w.empty = w.body:CreateFontString(nil, "OVERLAY")
     ns.ApplyFont(w.empty, "GLOBAL", 11, "OUTLINE")
