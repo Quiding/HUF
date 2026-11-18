@@ -1,0 +1,70 @@
+# HUF - Hivemind Unitframes
+
+Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
+multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
+Version 0.3.16.
+
+## Install
+Download the repository (Code > Download ZIP) and copy the `HUF` folder into
+`World of Warcraft/_forever_/Interface/AddOns/`. A new or updated addon with new files needs a
+full game restart (not just /reload). Type `/huf` in game for the settings.
+
+## Frames
+- **Player, Target, Target of target, Pet**: health and power bar, each with a thin dark border.
+  Player / Target 175 x 24, Target of target (health only) and Pet hang off the target and
+  player frame. Every frame can be anchored to the screen or to another HUF frame.
+- **Group (party)**: real secure unit frames (SecureGroupHeader), so `[@mouseover]` macros and
+  click-casting work on them. Show myself or not, sort by name / Blizzard's party order / class,
+  vertical or horizontal in either direction, adjustable padding. Missing health in health-status
+  colour (hidden at full health), name, level and power on the power bar, your buffs (HoTs) top
+  left, debuffs top right. Offline members: light grey bar and "Offline". Hidden alone and in a
+  raid (raid frames are planned).
+- **Nameplates**: name only / name + bar / bar only (friendly units separately), level, elite /
+  rare star, quest progress ("2/10") left of the bar, cast bar, your debuffs and buffs.
+- **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
+  where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
+  and debuff icons.
+- Blizzard's player, target, target of target, pet and party frames are hidden while HUF's are on.
+
+## Look and texts
+- Accent colour blue / purple / bronze / custom, dark backgrounds and textures, several bar
+  textures, portraits (off by default).
+- Fonts: **Barlow Condensed** (default) and **Roboto Condensed** come with HUF; with EllesmereUI
+  installed its fonts (Expressway, ...) and textures are in the lists too.
+- Bar colours: static, gradient (2 colours), class, status (>75% / >40% / below), type.
+- 9 text anchors per bar (top / middle / bottom x left / center / right), each with its own
+  template, font, size, outline, colour (incl. health status) and offset. Values like `[name]`,
+  `[hp]`, `[hp%]`, `[hp:missing]`, `[mp]`, `[mp%]`, `[level]`, `[levelclass:color]`, `[status]`.
+
+## Click-cast
+General > Click-cast: pick a spell (typed or from the spellbook), press a key or mouse button
+(with Shift / Ctrl / Alt, wheel too) and choose when it works: always, in combat, out of combat.
+Over a HUF frame it casts on that unit like a `[@mouseover]` macro
+(`/cast [@mouseover,combat] Spell`). Bindings belong to the character.
+
+## Names and privacy (MMT)
+Characters have a first and a last name. HUF always uses the full real name internally
+(targeting, menus, macros, addon messages); what you see follows HUF's name setting
+(first name by default, last name, full name, "Class X", "Slot X"). With MMT installed, your
+team shows the way MMT > Team > Privacy says ("MMT's privacy for my team": always / only while
+MMT hides names outside MMT / never). HUF uses MMT's documented privacy API (top of
+`MMT/Privacy.lua`, `MMT.PRIVACY_API`, version 1) and warns if MMT ever moves to a newer one.
+
+## Profiles
+Account-wide profiles chosen per character. General > Profiles: create, copy, reset, and
+**export / import** a profile as one line of text (copy & paste to another account).
+
+## For addon authors
+`_G.HUF`: `HUF.API_VERSION` (1), `HUF.RegisterNameProvider(id, fn)` (`fn(unit, first, last)`
+returns the name to show or nil), `HUF.RefreshNames()`, `HUF.Refresh()`, `HUF.ToggleConfig([page])`,
+`HUF.Bridge.Status()`.
+
+## Help and debugging
+`/huf help`: debug log (also a full report to copy), data recorder (`/huf rec on|off|now`) that
+shows what the game hides (secret values) about names, values and auras, and the command list.
+Unlock frames (`/huf unlock`) shows made-up characters to place and preview the frames.
+
+## Licence
+HUF is released under the GNU General Public License v3.0 (see [LICENSE](LICENSE)).
+The fonts in `HUF/Media/Fonts` are under the SIL Open Font License 1.1
+(`OFL-BarlowCondensed.txt`, `OFL-RobotoCondensed.txt`).

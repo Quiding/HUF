@@ -1,0 +1,163 @@
+-- HUF: settings page for nameplates (FRAMES > Nameplates).
+
+local _, ns = ...
+local UI = ns.UI
+local COL_W, COL2_X, TOP = 330, 366, -36
+
+local function N() return ns.db.nameplates end
+local function Opt(k) return function() return N()[k] end, function(v) N()[k] = v end end
+
+local MODES = {
+    { value = "NAME", text = "Name only" },
+    { value = "NAME_BAR", text = "Name + bar" },
+    { value = "BAR", text = "Bar only" },
+}
+local FRIENDLY = { { value = "SAME", text = "Same as enemies" } }
+for _, m in ipairs(MODES) do FRIENDLY[#FRIENDLY + 1] = m end
+
+local OUTLINES = {
+    { value = "GLOBAL", text = "General outline" },
+    { value = "NONE", text = "None" },
+    { value = "OUTLINE", text = "Thin" },
+    { value = "THICKOUTLINE", text = "Thick" },
+    { value = "MONOCHROME,OUTLINE", text = "Mono" },
+}
+
+local function Fonts()
+    local l = { { value = "GLOBAL", text = "General font" } }
+    for _, f in ipairs(ns.fonts) do l[#l + 1] = { value = f.name, text = f.name } end
+    return l
+end
+local function Textures()
+    local l = {}
+    for _, t in ipairs(ns.textures) do l[#l + 1] = { value = t.name, text = t.name } end
+    return l
+end
+local function Backgrounds()
+    local l = {}
+    for _, b in ipairs(ns.backgrounds) do l[#l + 1] = { value = b.name, text = b.name } end
+    return l
+end
+
+local function SubFrame(page)
+    local f = CreateFrame("Frame", nil, page)
+    f:SetPoint("TOPLEFT", 0, TOP - 16)
+    f:SetSize(ns.PAGE_W, ns.PAGE_H + TOP - 16)
+    return f
+end
+
+local function GeneralPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Show")
+    L:Cycle("Enemies", MODES, Opt("mode"))
+    L:Cycle("Friendly units", FRIENDLY, Opt("friendlyMode"))
+    L:Header("Bar")
+    L:Slider("Width", 40, 250, 1, Opt("width"))
+    L:Slider("Height", 1, 20, 1, Opt("height"))
+    L:Cycle("Bar texture", Textures, Opt("texture"))
+    L:Slider("Raise / lower", -40, 40, 1, Opt("yOffset"))
+
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Colour")
+    R:Cycle("Colour by", {
+        { value = "CLASS", text = "Class / reaction" },
+        { value = "STATIC", text = "Static colour" },
+        { value = "STATUS", text = "Status (>75% / >40% / below)" },
+    }, Opt("colorMode"))
+    R:Color("Static colour", Opt("color"))
+    R:Check("Grey when tapped by others", Opt("tappedGray"))
+    R:Header("Background and border")
+    R:Cycle("Background", Backgrounds, Opt("bgTexture"))
+    R:Color("Background colour", Opt("bgColor"))
+    R:Slider("Border", 0, 3, 0.5, function() return N().borderSize end, function(v) N().borderSize = v end, "%.1f")
+    R:Color("Border colour", Opt("borderColor"))
+    local gt, st = Opt("targetBorder")
+    R:Check("Accent border on my target", gt, st)
+end
+
+local function NamePage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Name")
+    L:Cycle("Font", Fonts, Opt("font"))
+    L:Slider("Size", 6, 20, 1, Opt("fontSize"))
+    L:Cycle("Outline", OUTLINES, Opt("outline"))
+    L:Cycle("Colour", {
+        { value = "REACTION", text = "Class / reaction" },
+        { value = "WHITE", text = "White" },
+        { value = "CUSTOM", text = "Custom" },
+    }, Opt("nameColor"))
+    L:Color("Custom colour", Opt("nameCustom"))
+    L:Slider("Space to the bar", -10, 10, 1, Opt("nameGap"))
+
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Extras")
+    local gl, sl = Opt("showLevel")
+    R:Check("Show the level", gl, sl, "Level and classification before the name (\"55E Northshire Guard\"), in difficulty colour.")
+    local gh, sh = Opt("showHealth")
+    R:Check("Health % on the bar", gh, sh)
+    local ge, se = Opt("showElite")
+    R:Check("Elite / rare star right of the bar", ge, se, "Gold star: elite. Silver: rare. Silver with a gold ring: rare elite. Red with a gold ring: boss.")
+    R:Slider("Star size", 6, 24, 1, Opt("eliteSize"))
+    local gq, sq = Opt("showQuest")
+    R:Check("Quest progress left of the bar", gq, sq, "For mobs you need for a quest (kills or quest item drops): your progress, e.g. 2/10, like Blizzard's plates show it.")
+    R:Color("Quest progress colour", Opt("questColor"))
+    R:Note("Names follow the privacy setting (Names & MMT), so your MMT team shows the way MMT says.")
+end
+
+local function CastPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Cast bar")
+    L:Check("Show the cast bar", Opt("showCast"))
+    L:Slider("Height", 1, 12, 1, Opt("castHeight"))
+    L:Slider("Space to the bar", 0, 10, 1, Opt("castGap"))
+    L:Color("Colour", Opt("castColor"))
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Details")
+    R:Check("Spell icon", Opt("castIcon"))
+    R:Check("Spell name", Opt("castText"))
+    R:Slider("Spell name size", 6, 14, 1, Opt("castFontSize"))
+end
+
+local function AuraPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Icons above the name")
+    L:Check("Show debuffs", Opt("showDebuffs"))
+    local gm, sm = Opt("debuffsMine")
+    L:Check("Only my debuffs", gm, sm)
+    L:Check("Show buffs", Opt("showBuffs"))
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Size")
+    R:Slider("Icon size", 6, 30, 1, Opt("auraSize"))
+    R:Slider("Icons per row", 1, 10, 1, Opt("auraMax"))
+    R:Slider("Rows", 1, 4, 1, Opt("auraRows"))
+    R:Slider("Space", 0, 6, 1, Opt("auraGap"))
+    R:Note("Debuffs start at the left, buffs at the right. Shown by the game's own aura display, so they also work where addons may not read auras.")
+end
+
+ns.RegisterPage("nameplates", "Nameplates", "frames", function(page)
+    local on = UI.Check(page, 260, "Use HUF's nameplates", function() return N().enabled end, function(v)
+        N().enabled = v
+    end, "Off: Blizzard's nameplates come back.")
+    on:SetPoint("TOPLEFT", 0, 4)
+    local reset = UI.Button(page, 100, "Reset", function()
+        UI.Confirm("Reset every nameplate setting?", "Reset", function()
+            ns.db.nameplates = ns.CopyTable(ns.DEFAULTS.nameplates)
+            ns.Refresh(true)
+        end)
+    end)
+    reset:SetPoint("TOPRIGHT", 0, 4)
+    local tabs = { { "general", "General" }, { "name", "Name & level" }, { "cast", "Cast bar" }, { "auras", "Buffs & debuffs" } }
+    local subs, strip = {}, nil
+    local function Show(k)
+        for n, sf in pairs(subs) do sf:SetShown(n == k) end
+        strip:Select(k)
+    end
+    strip = UI.SubTabs(page, tabs, Show)
+    strip:SetPoint("TOPLEFT", 0, -22)
+    strip:SetPoint("TOPRIGHT", 0, -22)
+    subs.general = SubFrame(page); GeneralPage(subs.general)
+    subs.name = SubFrame(page); NamePage(subs.name)
+    subs.cast = SubFrame(page); CastPage(subs.cast)
+    subs.auras = SubFrame(page); AuraPage(subs.auras)
+    Show("general")
+end, function() return ns.db.nameplates.enabled end)
