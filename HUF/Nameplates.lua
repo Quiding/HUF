@@ -662,13 +662,17 @@ function NP.PlaceQuestie(p)
         if where == "QUESTIE" then
             QuestieHome(f)
         else
+            -- always (and only) the LEFT point, as Questie sets it: when
+            -- Questie moves the frame to another nameplate, its SetPoint
+            -- replaces ours instead of tying the frame to two nameplates
+            -- ("anchor family connection")
             f:ClearAllPoints()
             if where == "RIGHT" then
                 -- after the elite star's spot, clear of the bar
                 f:SetPoint("LEFT", p.elite, "RIGHT", 1, 0)
             else
                 -- left of the quest progress ("0/6"), or of the bar without it
-                f:SetPoint("RIGHT", p.quest, "LEFT", -2, 0)
+                f:SetPoint("LEFT", p.quest, "LEFT", -((f:GetWidth() or 16) + 2), 0)
             end
         end
     end
