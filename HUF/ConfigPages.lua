@@ -276,13 +276,23 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
             row.check:SetPoint("TOPLEFT", 16, -52 - (i - 1) * (UI.ROW - 2))
             f.rows[i] = row
         end
-        f.accept = UI.Button(f, 170, "Import", function()
+        local function Accept()
             local fn = f.onAccept
             f:Hide()
             if fn then fn() end
-        end)
+        end
+        f.accept = UI.Button(f, 116, "Import", Accept)
         f.accept:SetPoint("BOTTOMLEFT", 16, 14)
-        f.cancel = UI.Button(f, 170, "Cancel", function() f:Hide() end)
+        -- every frame and the nameplates on, whatever Ellesmere has
+        f.all = UI.Button(f, 116, "Import all", function()
+            for i = 1, MAX_ROWS do
+                local row = f.rows[i]
+                if row.part then row.on = true end
+            end
+            Accept()
+        end)
+        f.all:SetPoint("BOTTOM", 0, 14)
+        f.cancel = UI.Button(f, 116, "Cancel", function() f:Hide() end)
         f.cancel:SetPoint("BOTTOMRIGHT", -16, 14)
         f:SetScript("OnHide", function() f.onAccept = nil end)
         UI.CloseOnEscape(f)
