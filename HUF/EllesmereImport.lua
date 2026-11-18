@@ -295,7 +295,16 @@ local function ConvertUnit(key, s, uf, u, notes)
             or Color(s.customFillColor, h.color)
     end
     if s.bgClassColored then notes[#notes + 1] = title .. ": class coloured background is a plain colour." end
-    u.power.colorMode = "TYPE"
+    -- power fill: Ellesmere's power colours by type (the import sets them
+    -- globally), a custom fill with "power colour" off, or the class colour
+    if s.powerPercentPowerColor == false then
+        u.power.colorMode = "STATIC"
+        u.power.color = Color(s.customPowerFillColor, { r = 0, g = 0, b = 1 })
+    elseif s.powerClassColored then
+        u.power.colorMode = "CLASS"
+    else
+        u.power.colorMode = "TYPE"
+    end
 
     -- texts on the health bar: left / center / right, and the extra text
     -- (its own alignment). Ellesmere sets them 5 px in from the bar's edge
@@ -539,6 +548,20 @@ local function Convert(prof, uf, np, npOn)
 
     -- font and outline (Ellesmere's Unit Frames font, else its global one)
     if not uf then return true, out, Unique(notes), what, parts end
+
+    -- power colours by type: Ellesmere's palette (its defaults + the profile's own)
+    local EUI = _G.EllesmereUI
+    local defaults = type(EUI) == "table" and type(EUI.DEFAULT_POWER_COLORS) == "table" and EUI.DEFAULT_POWER_COLORS or {}
+    local own = type(prof.customColors) == "table" and type(prof.customColors.power) == "table" and prof.customColors.power or {}
+    local any = false
+    for _, k in ipairs({ "MANA", "RAGE", "ENERGY", "FOCUS", "RUNIC_POWER" }) do
+        local c = own[k] or defaults[k]
+        if type(c) == "table" and type(c.r) == "number" then
+            out.global.customPower[k] = Color(c, out.global.customPower[k])
+            any = true
+        end
+    end
+    if any then out.global.powerColors = "CUSTOM" end
     local fonts = type(prof.fonts) == "table" and prof.fonts or {}
     local fontName, outline = fonts.global, fonts.outlineMode
     for _, e in ipairs(type(fonts.moduleFonts) == "table" and fonts.moduleFonts or {}) do

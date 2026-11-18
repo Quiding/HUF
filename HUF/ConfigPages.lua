@@ -87,6 +87,15 @@ ns.RegisterPage("general", "General", "general", function(page)
     local gs, ss = Opt(G, "statusText")
     L:Check("Dead, Ghost, Offline instead of health", gs, ss)
 
+    L:Header("Power colours")
+    L:Cycle("Power bars by type", {
+        { value = "GAME", text = "The game's colours" },
+        { value = "CUSTOM", text = "My colours (below)" },
+    }, Opt(G, "powerColors"))
+    for _, p in ipairs({ { "MANA", "Mana" }, { "RAGE", "Rage" }, { "ENERGY", "Energy" }, { "FOCUS", "Focus" } }) do
+        L:Color(p[2], function() return G().customPower[p[1]] end, function(c) G().customPower[p[1]] = c end)
+    end
+
     local R = UI.Column(page, COL2_X, 0, COL_W)
     R:Header("Frames")
     R:Button("Unlock frames (move, preview)", function() ns.Movers.Toggle() end)
