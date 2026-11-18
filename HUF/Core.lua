@@ -9,7 +9,7 @@ _G.HUF = ns                      -- public: other addons (MMT) reach HUF here
 
 ns.name = ADDON
 ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.21"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "0.3.22"
 ns.API_VERSION = 1
 ns.MEDIA = "Interface\\AddOns\\HUF\\Media\\"
 ns.LOGO = ns.MEDIA .. "Logo"
@@ -330,7 +330,7 @@ local function UnitDefaults(point)
         buffs = AuraRow(false, "ABOVE_LEFT"),
         -- incoming heals on the health bar: semi-transparent green after the
         -- filled part, may run past the bar's end by up to `overheal` %
-        healPred = { enabled = true, color = C(0.25, 0.95, 0.45), alpha = 0.45, overheal = 50 },
+        healPred = { enabled = true, color = C(0.25, 0.95, 0.45), alpha = 0.45, overheal = 10 },
     }
     u.power.enabled = true
     u.power.size = 9                -- health = height - power - gap = 14
@@ -840,6 +840,17 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 11
+    end
+    -- 0.3.22: incoming heals at most 10% past the bar's end (where still 50)
+    if HUFDB.dataVersion < 12 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            for _, s in pairs(prof.units or {}) do
+                if type(s) == "table" and type(s.healPred) == "table" and s.healPred.overheal == 50 then
+                    s.healPred.overheal = 10
+                end
+            end
+        end
+        HUFDB.dataVersion = 12
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}
