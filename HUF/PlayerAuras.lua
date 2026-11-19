@@ -1,22 +1,21 @@
 -- HUF: buff bar and debuff bar (replacing Blizzard's icons at the top right).
--- Each bar is the game's SecureAuraHeaderTemplate for the player: it makes
--- the icons (HUFAuraButtonTemplate, PlayerAuras.xml), lays them out and
--- keeps them current, also in combat; a right-click cancels a buff. HUF
--- dresses each icon: zoom, border, swipe, time left, stacks.
--- Settings: ns.db.auraBars.buffs / .debuffs. Header attributes only change
--- out of combat (else queued).
+-- Forever has no SecureAuraHeaderTemplate, so HUF draws the icons itself
+-- from your own auras (readable on yourself): C_UnitAuras by index on
+-- UNIT_AURA, plus weapon enchants on the buff bar. Plain frames, nothing
+-- secure: they update in combat too. Right-click cancels a buff out of
+-- combat (the game allows addons to cancel buffs only then).
+-- Settings: ns.db.auraBars.buffs / .debuffs.
 
 local _, ns = ...
 local PA = {}
 ns.PlayerAuras = PA
 
 local A = ns.ACCENT
-local FLAT = "Interface\\Buttons\\WHITE8X8"
 local function IsSecret(v) return issecretvalue and issecretvalue(v) or false end
 local function Plain(v) return v ~= nil and not IsSecret(v) end
 
 local KINDS = { buffs = "HELPFUL", debuffs = "HARMFUL" }
-local headers = {}               -- kind -> header
+local bars = {}                  -- kind -> bar frame with .icons
 local movers = {}
 
 local function S(kind) return ns.db.auraBars[kind] end
@@ -27,9 +26,8 @@ local DEBUFF_COLORS = {
 }
 
 ---------------------------------------------------------------------------
--- Layout: growth direction -> header attributes
+-- Layout: growth direction -> where icon n goes
 ---------------------------------------------------------------------------
--- the first icon's corner, the step to the next icon and to the next line
 local function Geometry(s)
     local step = s.size + s.padding
     local lineStep = s.size + s.padding + ((s.timer and s.timerPos == "BELOW") and (s.timerSize + 2) or 0)
@@ -47,7 +45,6 @@ local function Geometry(s)
     else -- UP
         t.point, t.x, t.y, t.wx, t.wy = "BOTTOMLEFT", 0, lineStep, step, 0
     end
-    -- the whole area (for the header's size and the unlock box)
     if g == "LEFT" or g == "RIGHT" then
         t.w = t.perLine * step - s.padding
         t.h = t.lines * lineStep - s.padding
@@ -59,10 +56,8 @@ local function Geometry(s)
 end
 PA.Geometry = Geometry
 
-local SORT = { TIME = "TIME", NAME = "NAME", INDEX = "INDEX" }
-
 ---------------------------------------------------------------------------
--- One icon
+-- Time text
 ---------------------------------------------------------------------------
 local function FormatTime(sec, fmt)
     if sec >= 3600 then
@@ -83,17 +78,76 @@ local function OnUpdate(b, elapsed)
     if b.tick < 0.1 then return end
     b.tick = 0
     local exp = b.expires
-    if not exp or exp == 0 then b.time:SetText("") return end
+    if not exp then b.time:SetText("") return end
     local left = exp - GetTime()
     if left <= 0 then b.time:SetText("") return end
-    local s = S(b.kind)
-    b.time:SetText(FormatTime(left, s.timerFormat))
+    b.time:SetText(FormatTime(left, S(b.kind).timerFormat))
     if left < 5 then b.time:SetTextColor(1, 0.3, 0.3) else b.time:SetTextColor(1, 1, 1) end
 end
 
--- the icon's look (size and position belong to the header)
-local function Dress(b)
-    local s = S(b.kind)
+---------------------------------------------------------------------------
+-- One icon
+---------------------------------------------------------------------------
+local function OnEnter(b)
+    GameTooltip:SetOwner(b, "ANCHOR_BOTTOMLEFT")
+    local d = b.data
+    if not d then return end
+    if d.slot then
+        GameTooltip:SetInventoryItem("player", d.slot)
+    elseif d.instance and GameTooltip.SetUnitAuraByAuraInstanceID then
+        pcall(GameTooltip.SetUnitAuraByAuraInstanceID, GameTooltip, "player", d.instance)
+    else
+        pcall(GameTooltip.SetUnitAura, GameTooltip, "player", d.index, KINDS[b.kind])
+    end
+    if b.kind == "buffs" then GameTooltip:AddLine("Right-click: cancel (out of combat)", 0.6, 0.6, 0.6) end
+    GameTooltip:Show()
+end
+
+local function OnClick(b, button)
+    if button ~= "RightButton" or b.kind ~= "buffs" or not b.data then return end
+    if InCombatLockdown() then
+        ns.Print("Buffs can only be cancelled out of combat.")
+        return
+    end
+    local d = b.data
+    if d.slot then
+        pcall(CancelItemTempEnchantment, d.slot - 15)
+    elseif d.instance and C_UnitAuras and C_UnitAuras.CancelAuraByAuraInstanceID
+        and pcall(C_UnitAuras.CancelAuraByAuraInstanceID, "player", d.instance) then
+        -- done
+    elseif CancelUnitBuff then
+        pcall(CancelUnitBuff, "player", d.index, "HELPFUL")
+    end
+end
+
+local function NewIcon(bar)
+    local b = CreateFrame("Button", nil, bar)
+    b.kind = bar.kind
+    b:RegisterForClicks("RightButtonUp")
+    b.border = b:CreateTexture(nil, "BACKGROUND")
+    b.border:SetAllPoints()
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.cd = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
+    b.cd:SetAllPoints(b.icon)
+    b.cd:SetReverse(true)
+    b.cd:SetDrawEdge(false)
+    if b.cd.SetHideCountdownNumbers then b.cd:SetHideCountdownNumbers(true) end
+    local layer = CreateFrame("Frame", nil, b)
+    layer:SetAllPoints()
+    layer:SetFrameLevel(b.cd:GetFrameLevel() + 2)
+    b.time = layer:CreateFontString(nil, "OVERLAY")
+    b.count = layer:CreateFontString(nil, "OVERLAY")
+    b:SetScript("OnUpdate", OnUpdate)
+    b:SetScript("OnEnter", OnEnter)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    b:SetScript("OnClick", OnClick)
+    b:Hide()
+    return b
+end
+
+-- the icon's look
+local function Dress(b, s)
+    b:SetSize(s.size, s.size)
     local z = math.max(0, math.min(0.4, s.zoom))
     b.icon:SetTexCoord(z, 1 - z, z, 1 - z)
     local bs = s.borderSize
@@ -101,8 +155,6 @@ local function Dress(b)
     b.icon:SetPoint("TOPLEFT", bs, -bs)
     b.icon:SetPoint("BOTTOMRIGHT", -bs, bs)
     b.border:SetShown(bs > 0)
-    b.cd:SetDrawSwipe(s.swipe)
-    b.cd:SetShown(s.swipe)
     ns.ApplyFont(b.time, s.font, s.timerSize, s.outline)
     ns.ApplyFont(b.count, s.font, s.countSize, s.outline)
     b.time:ClearAllPoints()
@@ -113,159 +165,89 @@ local function Dress(b)
     b.count:SetPoint("TOPRIGHT", b, "TOPRIGHT", -1, -1)
 end
 
-local function SetBorderColor(b, r, g, bl)
-    b.border:SetColorTexture(r, g, bl, 1)
-end
-
-local function Update(b)
-    local header = b:GetParent()
-    local kind = header and header.kind
-    if not kind then return end
-    b.kind = kind
-    local s = S(kind)
-    local slot = b:GetAttribute("target-slot")
-    local index = b:GetAttribute("index")
-    local icon, count, duration, expires, dispel
-    if slot then
-        -- weapon enchant (main hand 16, off hand 17)
-        local hasMain, mainExp, mainCharges, _, hasOff, offExp, offCharges = GetWeaponEnchantInfo()
-        local ms, charges
-        if slot == 16 then ms, charges = hasMain and mainExp, mainCharges
-        else ms, charges = hasOff and offExp, offCharges end
-        icon = GetInventoryItemTexture("player", slot)
-        count = charges
-        expires = ms and (GetTime() + ms / 1000) or nil
-        duration = 0
-        b.auraInstance = nil
-    elseif index then
-        local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, "player", index, header:GetAttribute("filter"))
-        if not ok or not a then b.icon:SetTexture(nil) b.expires = nil return end
-        icon, count, duration, expires, dispel = a.icon, a.applications, a.duration, a.expirationTime, a.dispelName
-        b.auraInstance = a.auraInstanceID
-    else
-        return
-    end
-    pcall(b.icon.SetTexture, b.icon, icon)
-    -- stacks
+local function Fill(b, d, s)
+    b.data = d
+    pcall(b.icon.SetTexture, b.icon, d.icon)
+    local count = d.count
     if Plain(count) and count > 1 then b.count:SetText(count)
     elseif IsSecret(count) then pcall(b.count.SetText, b.count, count)
     else b.count:SetText("") end
-    -- time left (readable on yourself; a secret one leaves only the swipe)
-    if Plain(expires) and expires > 0 then b.expires = expires else b.expires = nil b.time:SetText("") end
-    if s.swipe and Plain(duration) and Plain(expires) and duration > 0 and expires > 0 then
-        b.cd:SetCooldown(expires - duration, duration)
+    if Plain(d.expires) and d.expires > 0 then b.expires = d.expires else b.expires = nil b.time:SetText("") end
+    b.tick = 1
+    if s.swipe and Plain(d.duration) and Plain(d.expires) and d.duration > 0 and d.expires > 0 then
+        b.cd:SetCooldown(d.expires - d.duration, d.duration)
         b.cd:Show()
-    elseif s.swipe and (IsSecret(duration) or IsSecret(expires)) then
-        local ok = pcall(function() b.cd:SetCooldown(expires - duration, duration) end)
-        b.cd:SetShown(ok)
     else
         b.cd:Clear()
         b.cd:Hide()
     end
-    -- border: debuffs by type, else the setting's colour
-    local c = s.borderColor
-    if s.borderAccent then c = { r = A[1], g = A[2], b = A[3] } end
-    if kind == "debuffs" and s.typeColors then
-        local t = Plain(dispel) and DEBUFF_COLORS[dispel] or DEBUFF_COLORS.none
-        SetBorderColor(b, t[1], t[2], t[3])
+    local c = s.borderAccent and { r = A[1], g = A[2], b = A[3] } or s.borderColor
+    if b.kind == "debuffs" and s.typeColors then
+        local t = Plain(d.dispel) and DEBUFF_COLORS[d.dispel] or DEBUFF_COLORS.none
+        b.border:SetColorTexture(t[1], t[2], t[3], 1)
     else
-        SetBorderColor(b, c.r, c.g, c.b)
+        b.border:SetColorTexture(c.r, c.g, c.b, 1)
     end
-    -- more than "max": invisible (the header fills rows x columns)
-    local over = (b.pos or 1) > s.max
-    b:SetAlpha(over and 0 or 1)
-    if not InCombatLockdown() then b:EnableMouse(not over) end
-end
-
-local function OnEnter(b)
-    if b:GetAlpha() == 0 then return end
-    GameTooltip:SetOwner(b, "ANCHOR_BOTTOMLEFT")
-    local slot = b:GetAttribute("target-slot")
-    if slot then
-        GameTooltip:SetInventoryItem("player", slot)
-    elseif b.auraInstance and GameTooltip.SetUnitAuraByAuraInstanceID then
-        pcall(GameTooltip.SetUnitAuraByAuraInstanceID, GameTooltip, "player", b.auraInstance)
-    else
-        local index = b:GetAttribute("index")
-        if index then pcall(GameTooltip.SetUnitAura, GameTooltip, "player", index, b:GetParent():GetAttribute("filter")) end
-    end
-    GameTooltip:Show()
-end
-
--- called by the template's OnLoad for every icon the header makes
-function HUF_AuraButton_OnLoad(b)
-    local header = b:GetParent()
-    b.kind = header and header.kind
-    header.hufCount = (header.hufCount or 0) + 1
-    b.pos = header.hufCount
-    b:RegisterForClicks("RightButtonUp")
-    b.border = b:CreateTexture(nil, "BACKGROUND")
-    b.border:SetAllPoints()
-    b.icon = b:CreateTexture(nil, "ARTWORK")
-    b.cd = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
-    b.cd:SetAllPoints(b.icon)
-    b.cd:SetReverse(true)
-    b.cd:SetDrawEdge(false)
-    if b.cd.SetHideCountdownNumbers then b.cd:SetHideCountdownNumbers(true) end
-    local textLayer = CreateFrame("Frame", nil, b)
-    textLayer:SetAllPoints()
-    textLayer:SetFrameLevel(b.cd:GetFrameLevel() + 2)
-    b.time = textLayer:CreateFontString(nil, "OVERLAY")
-    b.count = textLayer:CreateFontString(nil, "OVERLAY")
-    ns.ApplyFont(b.time, "GLOBAL", 12)
-    ns.ApplyFont(b.count, "GLOBAL", 12)
-    b:SetScript("OnAttributeChanged", function(self, name)
-        if name == "index" or name == "target-slot" then Update(self) end
-    end)
-    b:SetScript("OnUpdate", OnUpdate)
-    b:SetScript("OnEnter", OnEnter)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    if b.kind then
-        Dress(b)
-        local s = S(b.kind)
-        if not InCombatLockdown() then b:SetSize(s.size, s.size) else PA.pendingSize = true end
-    end
+    b:Show()
 end
 
 ---------------------------------------------------------------------------
--- Headers
+-- Reading your auras
 ---------------------------------------------------------------------------
-local function Children(h)
-    local list, i = {}, 1
-    while true do
-        local c = h:GetAttribute("child" .. i)
-        if not c then break end
-        list[#list + 1] = c
-        i = i + 1
+local function Collect(kind)
+    local list = {}
+    local filter = KINDS[kind]
+    local now = GetTime()
+    if kind == "buffs" and GetWeaponEnchantInfo then
+        local ok, hasMain, mainExp, mainCharges, _, hasOff, offExp, offCharges = pcall(GetWeaponEnchantInfo)
+        if ok then
+            if hasMain then list[#list + 1] = { slot = 16, icon = GetInventoryItemTexture("player", 16), count = mainCharges,
+                expires = mainExp and now + mainExp / 1000, duration = 0, order = 0, name = "" } end
+            if hasOff then list[#list + 1] = { slot = 17, icon = GetInventoryItemTexture("player", 17), count = offCharges,
+                expires = offExp and now + offExp / 1000, duration = 0, order = 0, name = "" } end
+        end
     end
-    -- weapon enchant icons
-    for _, k in ipairs({ "tempEnchant1", "tempEnchant2", "tempEnchant3" }) do
-        local c = h:GetAttribute(k)
-        if c then list[#list + 1] = c end
+    for i = 1, 80 do
+        local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, "player", i, filter)
+        if not ok or not a then break end
+        list[#list + 1] = { index = i, instance = a.auraInstanceID, icon = a.icon, count = a.applications,
+            duration = a.duration, expires = a.expirationTime, dispel = a.dispelName, name = a.name, order = i }
     end
     return list
 end
 
-local function BuildHeader(kind)
-    if headers[kind] then return headers[kind] end
-    local ok, h = pcall(CreateFrame, "Frame", "HUF_" .. (kind == "buffs" and "Buffs" or "Debuffs"), UIParent,
-        "SecureAuraHeaderTemplate")
-    if not ok or not h then
-        ns.LogError("aura bar", "SecureAuraHeaderTemplate missing: " .. tostring(h))
-        return nil
+local function SortList(list, s)
+    local desc = s.sortDir ~= "+"
+    local function key(d)
+        if s.sort == "NAME" then return Plain(d.name) and d.name or "" end
+        if s.sort == "TIME" then
+            -- no end (permanent) counts as the longest
+            if Plain(d.expires) and d.expires > 0 then return d.expires end
+            return math.huge
+        end
+        return d.order
     end
-    h.kind = kind
-    h:SetFrameStrata("LOW")
-    h:SetAttribute("unit", "player")
-    h:SetAttribute("filter", KINDS[kind])
-    h:SetAttribute("template", "HUFAuraButtonTemplate")
-    if kind == "buffs" then
-        h:SetAttribute("includeWeapons", 1)
-        h:SetAttribute("weaponTemplate", "HUFAuraButtonTemplate")
-    end
-    h:SetClampedToScreen(true)
-    h:SetMovable(true)
-    headers[kind] = h
+    local ok = pcall(table.sort, list, function(a, b)
+        local ka, kb = key(a), key(b)
+        if ka == kb then return a.order < b.order end
+        if desc then return ka > kb end
+        return ka < kb
+    end)
+    if not ok then table.sort(list, function(a, b) return a.order < b.order end) end
+end
+
+---------------------------------------------------------------------------
+-- Bars
+---------------------------------------------------------------------------
+local function BuildBar(kind)
+    if bars[kind] then return bars[kind] end
+    local bar = CreateFrame("Frame", "HUF_" .. (kind == "buffs" and "Buffs" or "Debuffs"), UIParent)
+    bar.kind = kind
+    bar.icons = {}
+    bar:SetFrameStrata("LOW")
+    bar:SetClampedToScreen(true)
+    bar:SetMovable(true)
+    bars[kind] = bar
 
     -- unlock mode: drag box
     local m = CreateFrame("Button", nil, UIParent)
@@ -279,77 +261,83 @@ local function BuildHeader(kind)
     m.label:SetPoint("CENTER")
     m.label:SetText(kind == "buffs" and "Buffs" or "Debuffs")
     m:SetScript("OnDragStart", function()
-        if InCombatLockdown() then return end
-        m.from = { h:GetLeft(), h:GetTop() }
-        h:StartMoving()
+        m.from = { bar:GetLeft(), bar:GetTop() }
+        bar:StartMoving()
     end)
     m:SetScript("OnDragStop", function()
-        h:StopMovingOrSizing()
-        if h.SetUserPlaced then h:SetUserPlaced(false) end
+        bar:StopMovingOrSizing()
+        if bar.SetUserPlaced then bar:SetUserPlaced(false) end
         local from = m.from
         if not from then return end
         m.from = nil
         local p = S(kind).point
-        p[3] = math.floor((p[3] or 0) + (h:GetLeft() or 0) - (from[1] or 0) + 0.5)
-        p[4] = math.floor((p[4] or 0) + (h:GetTop() or 0) - (from[2] or 0) + 0.5)
+        p[3] = math.floor((p[3] or 0) + (bar:GetLeft() or 0) - (from[1] or 0) + 0.5)
+        p[4] = math.floor((p[4] or 0) + (bar:GetTop() or 0) - (from[2] or 0) + 0.5)
         PA.Apply()
     end)
     m:SetScript("OnClick", function() if ns.ToggleConfig then ns.ToggleConfig("aurabars", true) end end)
     m:Hide()
     movers[kind] = m
-    return h
+    return bar
 end
 
-local function ApplyHeader(kind)
+function PA.Update(kind)
+    local bar = bars[kind]
+    if not bar or not bar:IsShown() then return end
     local s = S(kind)
-    local h = headers[kind]
+    local g = bar.geo or Geometry(s)
+    local list = Collect(kind)
+    SortList(list, s)
+    local n = math.min(#list, s.max, g.perLine * g.lines)
+    for i = 1, n do
+        local b = bar.icons[i]
+        if not b then
+            b = NewIcon(bar)
+            bar.icons[i] = b
+            Dress(b, s)
+        end
+        local line = math.floor((i - 1) / g.perLine)
+        local col = (i - 1) % g.perLine
+        b:ClearAllPoints()
+        b:SetPoint(g.point, bar, g.point, col * g.x + line * g.wx, col * g.y + line * g.wy)
+        Fill(b, list[i], s)
+    end
+    for i = n + 1, #bar.icons do
+        bar.icons[i].data = nil
+        bar.icons[i]:Hide()
+    end
+    bar.count = n
+end
+
+local function ApplyBar(kind)
+    local s = S(kind)
     if not s.enabled then
-        if h then h:Hide() end
+        if bars[kind] then bars[kind]:Hide() end
         if movers[kind] then movers[kind]:Hide() end
         return
     end
-    h = h or BuildHeader(kind)
-    if not h then return end
+    local bar = BuildBar(kind)
     local g = Geometry(s)
-    h:ClearAllPoints()
-    h:SetPoint(s.point[1], UIParent, s.point[2], s.point[3], s.point[4])
-    h:SetSize(g.w, g.h)
-    h:SetScale(s.scale)
-    h:SetAttribute("point", g.point)
-    h:SetAttribute("xOffset", g.x)
-    h:SetAttribute("yOffset", g.y)
-    h:SetAttribute("wrapAfter", g.perLine)
-    h:SetAttribute("maxWraps", g.lines)
-    h:SetAttribute("wrapXOffset", g.wx)
-    h:SetAttribute("wrapYOffset", g.wy)
-    h:SetAttribute("minWidth", g.w)
-    h:SetAttribute("minHeight", g.h)
-    h:SetAttribute("sortMethod", SORT[s.sort] or "TIME")
-    h:SetAttribute("sortDirection", s.sortDir == "+" and "+" or "-")
-    -- the icons' first anchor point follows the growth corner
-    for _, c in ipairs(Children(h)) do
-        c:SetSize(s.size, s.size)
-        Dress(c)
-        Update(c)
-    end
-    h:Show()
-    -- (never SecureAuraHeader_Update from here: calling it taints the header,
-    -- and its own updates in combat get blocked; the attribute changes above
-    -- make it lay the icons out again)
+    bar.geo = g
+    bar:ClearAllPoints()
+    bar:SetPoint(s.point[1], UIParent, s.point[2], s.point[3], s.point[4])
+    bar:SetSize(g.w, g.h)
+    bar:SetScale(s.scale)
+    for _, b in ipairs(bar.icons) do Dress(b, s) end
+    bar:Show()
+    PA.Update(kind)
     local m = movers[kind]
     m:ClearAllPoints()
-    m:SetAllPoints(h)
+    m:SetAllPoints(bar)
     m:SetScale(s.scale)
     m:SetShown(ns.unlocked and true or false)
 end
 
 function PA.Apply()
     if not (HUFDB and ns.db) then return end
-    ns.RunOOC("aurabars", function()
-        ApplyHeader("buffs")
-        ApplyHeader("debuffs")
-        if ns.Units and ns.Units.HideBlizzardBars then ns.Units.HideBlizzardBars() end
-    end)
+    ApplyBar("buffs")
+    ApplyBar("debuffs")
+    if ns.Units and ns.Units.HideBlizzardBars then ns.Units.HideBlizzardBars() end
 end
 
 function PA.SetUnlocked(on)
@@ -357,16 +345,41 @@ function PA.SetUnlocked(on)
 end
 
 function PA.Report(add)
-    for kind in pairs(KINDS) do
-        local s, h = S(kind), headers[kind]
-        add(("aura bar %s: enabled=%s header=%s shown=%s icons=%d grow=%s max=%d %dx%d size=%d"):format(kind,
-            tostring(s.enabled), tostring(h ~= nil), tostring(h and h:IsShown()), h and #Children(h) or 0,
+    for _, kind in ipairs({ "buffs", "debuffs" }) do
+        local s, bar = S(kind), bars[kind]
+        add(("aura bar %s: enabled=%s shown=%s icons=%d grow=%s max=%d %dx%d size=%d"):format(kind,
+            tostring(s.enabled), tostring(bar and bar:IsShown()), bar and bar.count or 0,
             s.grow, s.max, s.columns, s.rows, s.size))
     end
 end
 
+---------------------------------------------------------------------------
+-- Events
+---------------------------------------------------------------------------
+local ev = CreateFrame("Frame")
+ev:SetScript("OnEvent", function(_, event)
+    if not (HUFDB and ns.db) then return end
+    if event == "UNIT_AURA" then
+        PA.Update("buffs")
+        PA.Update("debuffs")
+    else
+        PA.Update("buffs")
+    end
+end)
+pcall(ev.RegisterUnitEvent, ev, "UNIT_AURA", "player")
+pcall(ev.RegisterUnitEvent, ev, "UNIT_INVENTORY_CHANGED", "player")
+pcall(ev.RegisterEvent, ev, "WEAPON_ENCHANT_CHANGED")
+-- weapon enchants come and go without an event on some clients
+C_Timer.NewTicker(2, function()
+    if HUFDB and ns.db and S("buffs").enabled and GetWeaponEnchantInfo then
+        local ok, hasMain, _, _, _, hasOff = pcall(GetWeaponEnchantInfo)
+        local state = ok and (tostring(hasMain) .. tostring(hasOff)) or ""
+        if state ~= PA.weaponState then
+            PA.weaponState = state
+            PA.Update("buffs")
+        end
+    end
+end)
+
 ns.OnLogin(PA.Apply)
 ns.OnRefresh(PA.Apply)
-ns.On("PLAYER_REGEN_ENABLED", function()
-    if PA.pendingSize then PA.pendingSize = false PA.Apply() end
-end)

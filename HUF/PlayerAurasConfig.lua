@@ -36,7 +36,7 @@ local function BarPage(f, kind)
     L:Check("Use HUF's " .. title .. " bar", ge, function(v)
         se(v)
         if not v then ns.Print("Blizzard's " .. title .. "s come back after /reload.") end
-    end, "Replaces Blizzard's " .. title .. " icons at the top right. Right-click a buff to cancel it.")
+    end, "Replaces Blizzard's " .. title .. " icons at the top right. Right-click a buff to cancel it (out of combat).")
     L:Cycle("Growth direction", GROW, Opt("grow"))
     L:Slider("Most icons", 1, 40, 1, Opt("max"))
     L:Slider("Rows", 1, 10, 1, Opt("rows"))
