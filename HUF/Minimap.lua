@@ -242,6 +242,7 @@ end
 -- back on the map where the addon had it
 local function ToMap(b)
     local d = known[b]
+    Unsquare(b)
     if b:GetParent() == Minimap and not d.inBar then return end
     d.inBar = nil
     b:SetParent(Minimap)
@@ -257,6 +258,85 @@ local function ToMap(b)
     b:ClearAllPoints()
     for _, p in ipairs(d.points) do b:SetPoint(p[1], p[2] or Minimap, p[3], p[4], p[5]) end
     if b.RegisterForDrag then b:RegisterForDrag("LeftButton") end
+end
+
+---------------------------------------------------------------------------
+-- Square buttons in the bar (setting barSquare): the round frame and
+-- background the minimap button library draws are hidden (recognised by the
+-- game's own minimap button textures), the icon fills a dark square with a
+-- thin outline. Everything comes back when the button leaves the bar.
+---------------------------------------------------------------------------
+local RING_FILES = { [136430] = true, [136467] = true, [136477] = true }
+local RING_PATHS = { "MiniMap%-TrackingBorder", "UI%-Minimap%-Background", "UI%-Minimap%-ZoomButton%-Highlight" }
+local function IsRing(r)
+    if not (r and r.IsObjectType and r:IsObjectType("Texture")) then return false end
+    local id = r.GetTextureFileID and r:GetTextureFileID()
+    if id and RING_FILES[id] then return true end
+    local path = r:GetTexture()
+    if type(path) == "string" then
+        for _, pat in ipairs(RING_PATHS) do if path:find(pat) then return true end end
+    end
+    return false
+end
+
+-- the button's picture: the library's .icon, else the first texture left
+local function IconOf(b)
+    local i = rawget(b, "icon")
+    if type(i) == "table" and i.IsObjectType and i:IsObjectType("Texture") then return i end
+    for _, r in ipairs({ b:GetRegions() }) do
+        if r:IsObjectType("Texture") and not IsRing(r) and r ~= b.hufSqBg and r:GetDrawLayer() ~= "HIGHLIGHT" then return r end
+    end
+end
+
+local function Square(b)
+    local d = known[b]
+    if d.sq then return end
+    local sq = { hidden = {} }
+    for _, r in ipairs({ b:GetRegions() }) do
+        if IsRing(r) then
+            sq.hidden[#sq.hidden + 1] = { r = r, a = r:GetAlpha() }
+            r:SetAlpha(0)
+        end
+    end
+    local hl = b.GetHighlightTexture and b:GetHighlightTexture()
+    if hl and IsRing(hl) then sq.hidden[#sq.hidden + 1] = { r = hl, a = hl:GetAlpha() } hl:SetAlpha(0) end
+    local icon = IconOf(b)
+    if icon then
+        sq.icon = icon
+        sq.points = {}
+        for i = 1, icon:GetNumPoints() do sq.points[i] = { icon:GetPoint(i) } end
+        sq.w, sq.h = icon:GetSize()
+        sq.coords = { icon:GetTexCoord() }
+        icon:ClearAllPoints()
+        icon:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+        icon:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    end
+    if not b.hufSqBg then
+        b.hufSqBg = b:CreateTexture(nil, "BACKGROUND", nil, -8)
+        b.hufSqBg:SetAllPoints()
+        b.hufSqBg:SetColorTexture(0.04, 0.04, 0.05, 0.95)
+        b.hufSqBorder = ns.UI.Border(b, 0, 0, 0, 1)
+    end
+    b.hufSqBg:Show()
+    b.hufSqBorder:SetShown(true)
+    d.sq = sq
+end
+
+local function Unsquare(b)
+    local d = known[b]
+    local sq = d and d.sq
+    if not sq then return end
+    for _, h in ipairs(sq.hidden) do h.r:SetAlpha(h.a or 1) end
+    local icon = sq.icon
+    if icon then
+        icon:ClearAllPoints()
+        for _, p in ipairs(sq.points) do icon:SetPoint(p[1], p[2], p[3], p[4], p[5]) end
+        if sq.w and sq.w > 0 then icon:SetSize(sq.w, sq.h) end
+        if sq.coords[1] then icon:SetTexCoord(unpack(sq.coords)) end
+    end
+    if b.hufSqBg then b.hufSqBg:Hide() b.hufSqBorder:SetShown(false) end
+    d.sq = nil
 end
 
 local function ToBar(b)
@@ -279,6 +359,7 @@ local function ToBar(b)
     b:SetFrameStrata(bar:GetFrameStrata())
     b:SetFrameLevel(bar:GetFrameLevel() + 3)
     if b.RegisterForDrag then b:RegisterForDrag() end   -- no dragging it round the map from inside the bar
+    if S().barSquare then Square(b) else Unsquare(b) end
 end
 
 function MM.ApplyButtons()
@@ -356,28 +437,45 @@ function MM.LayoutBar()
         grow = (x * barButton:GetEffectiveScale() / UIParent:GetEffectiveScale()) > w / 2 and "LEFT" or "RIGHT"
     end
     local vertical = grow == "UP" or grow == "DOWN"
-    local n = 0
+    local grid = s.barLayout == "GRID"
+    local list = {}
     for _, b in ipairs(buttons) do
-        if b:IsShown() and known[b].inBar then
-            local bw = math.max(1, b:GetWidth() or size)
-            local sc = size / bw
-            b:SetScale(sc)
-            b:ClearAllPoints()
-            local off = pad + n * (size + gap)
-            if vertical then
-                b:SetPoint("TOP", bar, "TOP", 0, -off / sc)
-            else
-                b:SetPoint("LEFT", bar, "LEFT", off / sc, 0)
-            end
-            b:SetAlpha(1)
-            n = n + 1
-        end
+        if b:IsShown() and known[b].inBar then list[#list + 1] = b end
     end
-    local len = pad * 2 + math.max(1, n) * size + math.max(0, n - 1) * gap
-    if vertical then bar:SetSize(size + pad * 2, len) else bar:SetSize(len, size + pad * 2) end
+    local n = #list
+    local cols = grid and math.max(1, math.min(n, s.barColumns or 4)) or (vertical and 1 or math.max(1, n))
+    local rows = grid and math.max(1, math.ceil(n / cols)) or (vertical and math.max(1, n) or 1)
+    for i, b in ipairs(list) do
+        local bw = math.max(1, b:GetWidth() or size)
+        local sc = size / bw
+        b:SetScale(sc)
+        b:ClearAllPoints()
+        local col, row = (i - 1) % cols, math.floor((i - 1) / cols)
+        if not grid and vertical then col, row = 0, i - 1 end
+        b:SetPoint("TOPLEFT", bar, "TOPLEFT", (pad + col * (size + gap)) / sc, -(pad + row * (size + gap)) / sc)
+        b:SetAlpha(1)
+    end
+    bar:SetSize(pad * 2 + cols * size + (cols - 1) * gap, pad * 2 + rows * size + (rows - 1) * gap)
     bar:SetScale(holder:GetEffectiveScale() / UIParent:GetEffectiveScale())
     bar:ClearAllPoints()
-    if grow == "LEFT" then bar:SetPoint("RIGHT", barButton, "LEFT", -3, 0)
+    if grid then
+        -- a grid opens beside the button, towards the screen's middle
+        -- (up from a button in the lower half, down from one in the upper)
+        local _, y = barButton:GetCenter()
+        local h = UIParent:GetHeight() or 0
+        local low = ((y or 0) * barButton:GetEffectiveScale() / UIParent:GetEffectiveScale()) < h / 2
+        local side = (grow == "LEFT") and "LEFT" or (grow == "RIGHT" and "RIGHT")
+        if not side then
+            local x = barButton:GetCenter() or 0
+            local w = UIParent:GetWidth() or 0
+            side = (x * barButton:GetEffectiveScale() / UIParent:GetEffectiveScale()) > w / 2 and "LEFT" or "RIGHT"
+        end
+        if side == "LEFT" then
+            bar:SetPoint(low and "BOTTOMRIGHT" or "TOPRIGHT", barButton, low and "BOTTOMLEFT" or "TOPLEFT", -3, 0)
+        else
+            bar:SetPoint(low and "BOTTOMLEFT" or "TOPLEFT", barButton, low and "BOTTOMRIGHT" or "TOPRIGHT", 3, 0)
+        end
+    elseif grow == "LEFT" then bar:SetPoint("RIGHT", barButton, "LEFT", -3, 0)
     elseif grow == "RIGHT" then bar:SetPoint("LEFT", barButton, "RIGHT", 3, 0)
     elseif grow == "UP" then bar:SetPoint("BOTTOM", barButton, "TOP", 0, 3)
     else bar:SetPoint("TOP", barButton, "BOTTOM", 0, -3) end

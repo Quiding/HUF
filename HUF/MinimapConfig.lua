@@ -136,6 +136,13 @@ local function ButtonsPage(f, page)
         { value = "LEFT", text = "To the left" }, { value = "RIGHT", text = "To the right" },
         { value = "UP", text = "Upwards" }, { value = "DOWN", text = "Downwards" },
     }, Opt(M, "barGrow"))
+    L:Cycle("Layout", {
+        { value = "ROW", text = "One row" },
+        { value = "GRID", text = "Grid" },
+    }, Opt(M, "barLayout"))
+    L:Slider("Grid columns", 1, 10, 1, Opt(M, "barColumns"))
+    local gq, sq = Opt(M, "barSquare")
+    L:Check("Square buttons", gq, sq, "The buttons in the bar as square icons on a dark background, without their round frame. On the map they look as the addon draws them.")
     L:Slider("Icon size in the bar", 14, 40, 1, Opt(M, "barIconSize"))
     L:Slider("Closes after", 3, 30, 1, function() return M().barTimeout end, function(v) M().barTimeout = v end, "%d s")
     Element(L, "Addon bar button", function() return M().icons.addonbar end)

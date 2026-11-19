@@ -915,6 +915,10 @@ local function ConvertMinimap(addon, m, notes)
     if not G("hideAddonButtons", false) then
         m.addonBar = true
         m.barIconSize = math.max(16, math.floor(Num(G("addonBtnSize"), 24) + 0.5))
+        -- Ellesmere's flyout: a grid, 4 wide, square buttons on dark backgrounds
+        m.barLayout = G("flyoutAsList", false) and "ROW" or "GRID"
+        m.barColumns = 4
+        m.barSquare = G("btnBackgrounds", true) and true or false
     else
         m.addonBar, m.buttonMode = false, "NEVER"
     end

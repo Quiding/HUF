@@ -521,6 +521,9 @@ local function BuildDefaults()
             addonBar = false,           -- every addon button in one "addon bar" button
             barGrow = "AUTO",           -- AUTO (towards the screen's middle) | LEFT | RIGHT | UP | DOWN
             barIconSize = 26, barTimeout = 10,
+            barLayout = "ROW",          -- ROW (one line) | GRID (barColumns wide)
+            barColumns = 4,
+            barSquare = false,          -- buttons in the bar as square icons on a dark background
         },
         -- data bars: for now the minimap data bar (DataBars.lua)
         dataBars = {
