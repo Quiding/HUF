@@ -138,7 +138,9 @@ function DB.Update()
     -- the blocks side by side, centred: icon, then the count (SIDE), or the
     -- count above a small icon (STACK)
     local stack = s.layout == "STACK"
-    local size = stack and math.max(8, s.height - s.fontSize - 1) or math.max(8, s.height - 6)
+    -- STACK: the icon takes ~60% of the bar; the count sits tight on top (a
+    -- font string has empty room under its digits, so it may overlap a little)
+    local size = stack and math.max(8, math.floor(s.height * 0.6 + 0.5)) or math.max(8, s.height - 6)
     local widths, total = {}, 0
     for i, b in ipairs(shown) do
         local iw = math.floor(size * (b.icon.aspect or 1) + 0.5)
@@ -148,7 +150,7 @@ function DB.Update()
         local w
         if stack then
             b.icon:SetPoint("BOTTOM", b, "BOTTOM", 0, 1)
-            b.text:SetPoint("BOTTOM", b.icon, "TOP", 0, 0)
+            b.text:SetPoint("BOTTOM", b.icon, "TOP", 0, -3)
             w = math.max(iw, b.text:GetStringWidth() or 0)
         else
             b.icon:SetPoint("LEFT", b, "LEFT", 0, 0)
