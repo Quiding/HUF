@@ -979,6 +979,22 @@ ns.On("ADDON_LOADED", function(name)
         end
         HUFDB.dataVersion = 14
     end
+    -- 15: minimap tracking under the map's left edge, the addon button bag in
+    -- its lower left (only where still the old defaults)
+    if HUFDB.dataVersion < 15 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local ic = prof.minimap and prof.minimap.icons
+            local t = ic and ic.tracking
+            if t and t.mode == "HOVER" and t.pos == "LEFT" and t.x == 2 and t.y == 0 then
+                t.mode, t.pos, t.x, t.y = "ALWAYS", "BELOW_LEFT", 0, -2
+            end
+            local ab = ic and ic.addonbar
+            if ab and ab.pos == "RIGHT" and ab.x == -4 and ab.y == 28 then
+                ab.pos, ab.x, ab.y = "BOTTOMLEFT", 2, 2
+            end
+        end
+        HUFDB.dataVersion = 15
+    end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}
     Activate(ns.CurrentProfileName())

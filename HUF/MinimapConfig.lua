@@ -146,6 +146,7 @@ local function ButtonsPage(f, page)
     L:Slider("Icon size in the bar", 14, 40, 1, Opt(M, "barIconSize"))
     L:Slider("Closes after", 3, 30, 1, function() return M().barTimeout end, function(v) M().barTimeout = v end, "%d s")
     Element(L, "Addon bar button", function() return M().icons.addonbar end)
+    L:Note("In unlock mode (/huf unlock) the tracking button and this button can be dragged anywhere.")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("On the map (addon bar off)")

@@ -785,6 +785,7 @@ local function Build()
         p[3] = math.floor((p[3] or 0) + (holder:GetLeft() or 0) - (from[1] or 0) + 0.5)
         p[4] = math.floor((p[4] or 0) + (holder:GetTop() or 0) - (from[2] or 0) + 0.5)
         MM.Apply()
+        C_Timer.After(0, function() MM.SetUnlocked(true) end)   -- the icon movers follow
     end)
     mover:SetScript("OnClick", function() if ns.ToggleConfig then ns.ToggleConfig("minimap", true) end end)
     mover:Hide()
@@ -894,8 +895,72 @@ function MM.Report(add)
     add("minimap addon buttons: " .. table.concat(names, " "))
 end
 
+-- unlock mode: the tracking button and the addon button bag can be dragged
+-- anywhere, on the map or off it (saved as an offset from the map's centre)
+local iconMovers = {}
+local DRAGGABLE = {
+    { key = "tracking", label = "Tracking", get = function() local i = ICON_BY_KEY.tracking return i and Tbl((i.get())) end },
+    { key = "addonbar", label = "Bag", get = function() return barButton end },
+}
+local function IconMover(info)
+    local m = iconMovers[info.key]
+    if m then return m end
+    m = CreateFrame("Button", nil, UIParent)
+    m:SetFrameStrata("DIALOG")
+    m:SetMovable(true)
+    m:SetClampedToScreen(true)
+    m:EnableMouse(true)
+    m:RegisterForDrag("LeftButton")
+    ns.UI.Fill(m, A[1], A[2], A[3], 0.35)
+    ns.UI.Border(m, A[1], A[2], A[3], 1)
+    m.label = m:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    m.label:SetPoint("BOTTOM", m, "TOP", 0, 2)
+    m.label:SetText(info.label)
+    m:SetScript("OnDragStart", function(self) if not InCombatLockdown() then self:StartMoving() end end)
+    m:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        if self.SetUserPlaced then self:SetUserPlaced(false) end
+        -- the offset in the map's units (the icons are placed relative to it)
+        local sx, sy = self:GetCenter()
+        local mx, my = Minimap:GetCenter()
+        if not (sx and mx) then return end
+        local se, me = self:GetEffectiveScale(), Minimap:GetEffectiveScale()
+        local cfg = S().icons[info.key]
+        cfg.pos = "CENTER"
+        cfg.x = math.floor((sx * se - mx * me) / me + 0.5)
+        cfg.y = math.floor((sy * se - my * me) / me + 0.5)
+        if cfg.mode == "NEVER" then cfg.mode = "ALWAYS" end
+        MM.Apply()
+        C_Timer.After(0, function() MM.SetUnlocked(true) end)
+    end)
+    m:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(info.label)
+        GameTooltip:AddLine("Drag it anywhere, on the map or off it.", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    m:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    iconMovers[info.key] = m
+    return m
+end
+
 function MM.SetUnlocked(on)
     if mover and MM.active then mover:SetShown(on and true or false) end
+    for _, info in ipairs(DRAGGABLE) do
+        local m = iconMovers[info.key]
+        local f = MM.active and on and info.get()
+        if f and f.GetCenter and f:GetCenter() then
+            m = IconMover(info)
+            local x, y = f:GetCenter()
+            local fe, ue = f:GetEffectiveScale(), UIParent:GetEffectiveScale()
+            m:ClearAllPoints()
+            m:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x * fe / ue, y * fe / ue)
+            m:SetSize(math.max(16, (f:GetWidth() or 16) * fe / ue), math.max(16, (f:GetHeight() or 16) * fe / ue))
+            m:Show()
+        elseif m then
+            m:Hide()
+        end
+    end
 end
 
 ---------------------------------------------------------------------------
