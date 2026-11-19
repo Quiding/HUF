@@ -548,6 +548,8 @@ local function BuildDefaults()
                 friends = true, guild = true,
                 fontSize = 12, spacing = 16,
                 layout = "SIDE",            -- SIDE: icon, then the count | STACK: the count above a small icon
+                iconColor = "MONO",         -- MONO (flat light grey) | GAME (the art's colours) | CLASS | ACCENT | CUSTOM
+                iconCustom = C(0.85, 0.85, 0.88),
             },
         },
         nameplates = {

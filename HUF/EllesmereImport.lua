@@ -990,6 +990,12 @@ local function ConvertDataBar(addon, d, notes)
             local st = type(blk.settings) == "table" and blk.settings or {}
             social = social or st.social == true
             guild = guild or st.guild == true
+            -- its icon colour: class / accent / own; otherwise HUF's flat grey
+            if blk.useIconClassColor then d.iconColor = "CLASS"
+            elseif blk.useIconAccentColor then d.iconColor = "ACCENT"
+            elseif not blk.useIconDefaultColor and type(blk.iconColor) == "table" then
+                d.iconColor, d.iconCustom = "CUSTOM", Color(blk.iconColor, d.iconCustom)
+            else d.iconColor = "MONO" end
         end
     end
     d.friends, d.guild = social, guild

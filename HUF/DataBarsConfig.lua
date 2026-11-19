@@ -35,6 +35,14 @@ ns.RegisterPage("databars", "Data bars", "frames", function(page)
         { value = "SIDE", text = "Icon, then the count" },
         { value = "STACK", text = "Count above a small icon" },
     }, Opt("layout"))
+    R:Cycle("Icon colour", {
+        { value = "MONO", text = "Flat grey" },
+        { value = "GAME", text = "The game's colours" },
+        { value = "CLASS", text = "Class colour" },
+        { value = "ACCENT", text = "Accent colour" },
+        { value = "CUSTOM", text = "Own colour" },
+    }, Opt("iconColor"))
+    R:Color("Own icon colour", Opt("iconCustom"))
     R:Slider("Text size", 8, 20, 1, Opt("fontSize"))
     R:Slider("Space between them", 0, 40, 1, Opt("spacing"))
     R:Note("The tracking button sits on the bar's left end when Minimap > Icons > Tracking is at \"Below, left\".")

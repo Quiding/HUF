@@ -59,6 +59,31 @@ local function GuildOnline()
     return ok and type(online) == "number" and online or 0
 end
 
+-- the icons' colour: flat (the art greyed, then tinted) or the art's own;
+-- the accent while the mouse is on it
+local function IconColor(b, hover)
+    local s = S()
+    local mode = s.iconColor or "MONO"
+    b.icon:SetDesaturated(mode ~= "GAME" or hover)
+    if hover then
+        local a = ns.ACCENT
+        b.icon:SetVertexColor(a[1], a[2], a[3])
+    elseif mode == "GAME" then
+        b.icon:SetVertexColor(1, 1, 1)
+    elseif mode == "CLASS" then
+        local _, cls = UnitClass("player")
+        local c = cls and RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]
+        b.icon:SetVertexColor(c and c.r or 1, c and c.g or 1, c and c.b or 1)
+    elseif mode == "ACCENT" then
+        local a = ns.ACCENT
+        b.icon:SetVertexColor(a[1], a[2], a[3])
+    elseif mode == "CUSTOM" and s.iconCustom then
+        b.icon:SetVertexColor(s.iconCustom.r, s.iconCustom.g, s.iconCustom.b)
+    else
+        b.icon:SetVertexColor(0.85, 0.85, 0.88)
+    end
+end
+
 local BLOCKS = {
     { key = "friends", title = "Friends online", atlas = "socialqueuing-icon-group",
       file = "Interface\\FriendsFrame\\UI-Toast-FriendOnlineIcon", count = FriendsOnline,
@@ -96,13 +121,14 @@ local function Build()
         b:RegisterForClicks("LeftButtonUp")
         b:SetScript("OnClick", function() info.click() end)
         b:SetScript("OnEnter", function(self)
+            IconColor(self, true)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(info.title)
             GameTooltip:AddLine(tostring(info.count() or 0), 1, 1, 1)
             GameTooltip:AddLine("Click to open", 0.7, 0.7, 0.7)
             GameTooltip:Show()
         end)
-        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        b:SetScript("OnLeave", function(self) IconColor(self) GameTooltip:Hide() end)
         blocks[info.key] = b
     end
     bar:Hide()
@@ -150,7 +176,7 @@ function DB.Update()
         local w
         if stack then
             b.icon:SetPoint("BOTTOM", b, "BOTTOM", 0, 1)
-            b.text:SetPoint("BOTTOM", b.icon, "TOP", 0, -3)
+            b.text:SetPoint("BOTTOM", b.icon, "TOP", 0, -1)
             w = math.max(iw, b.text:GetStringWidth() or 0)
         else
             b.icon:SetPoint("LEFT", b, "LEFT", 0, 0)
@@ -205,7 +231,10 @@ function DB.Apply()
     local c = s.bgColor
     bar.bg:SetColorTexture(c.r, c.g, c.b, s.bgAlpha)
     bar.border:SetShown((s.borderSize or 0) > 0)
-    for _, b in pairs(blocks) do ns.ApplyFont(b.text, "GLOBAL", s.fontSize, "GLOBAL") end
+    for _, b in pairs(blocks) do
+        ns.ApplyFont(b.text, "GLOBAL", s.fontSize, "GLOBAL")
+        IconColor(b)
+    end
     bar:Show()
     DB.Update()
     -- the tracking button follows (into the slot or out of it)
