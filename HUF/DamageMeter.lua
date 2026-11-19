@@ -451,24 +451,40 @@ local function RowIdentity(src)
     end
 end
 
+local function FetchSource(c, mtype, guid, cid)
+    local ok, s
+    if type(c.session) == "number" and C_DamageMeter.GetCombatSessionSourceFromID then
+        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromID, c.session, mtype, guid, cid)
+    elseif C_DamageMeter.GetCombatSessionSourceFromType then
+        local st = c.session == "OVERALL" and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromType, st, mtype, guid, cid)
+    end
+    if ok and type(s) == "table" and s.combatSpells ~= nil then return s.combatSpells end
+end
+
+-- The row's own GUID / creature ID first, also when they are secret (the
+-- game accepts the values it handed out itself, as EllesmereUI does it);
+-- then the plain GUID of the group member HUF recognised.
 local function GetBreakdown()
     local c = (bd.win or win).cfg
     local t = TYPE_BY_KEY[c.meterType] or TYPES[1]
     if t.threat or t.deaths then return nil, t, t.threat and "No breakdown for threat" or "No breakdown for deaths" end
     if not bd.guid and bd.unit then bd.guid = roster.guidOf[bd.unit] end
-    if not bd.guid and not bd.cid then return nil, t, "Available when the fight ends" end
     local mtype = Enum.DamageMeterType[t.key]
-    local ok, s
-    if type(c.session) == "number" and C_DamageMeter.GetCombatSessionSourceFromID then
-        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromID, c.session, mtype, bd.guid, bd.cid)
-    elseif C_DamageMeter.GetCombatSessionSourceFromType then
-        local st = c.session == "OVERALL" and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
-        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromType, st, mtype, bd.guid, bd.cid)
-    end
-    if not ok or type(s) ~= "table" or type(s.combatSpells) ~= "table" then
+    local spells
+    if bd.rawGuid ~= nil or bd.rawCid ~= nil then spells = FetchSource(c, mtype, bd.rawGuid, bd.rawCid) end
+    if spells == nil and (bd.guid or bd.cid) then spells = FetchSource(c, mtype, bd.guid, bd.cid) end
+    if spells == nil then
+        bd.fails = (bd.fails or 0) + 1
+        if bd.fails == 1 then
+            ns.Log("meter", ("breakdown: nothing (combat=%s raw guid %s cid %s, plain guid %s)"):format(
+                tostring(InCombatLockdown()), IsSecret(bd.rawGuid) and "secret" or tostring(bd.rawGuid ~= nil),
+                IsSecret(bd.rawCid) and "secret" or tostring(bd.rawCid), tostring(bd.guid ~= nil)))
+        end
         return nil, t, InCombatLockdown() and "Available when the fight ends" or "Nothing in this fight"
     end
-    return s.combatSpells, t
+    bd.fails = nil
+    return spells, t
 end
 
 local function SpellInfo(id)
@@ -1120,6 +1136,7 @@ function DM.OpenBreakdown(src, name)
     if bd.open and bd.src == src then DM.CloseBreakdown() return end
     local guid, cid = RowIdentity(src)
     bd = { open = true, src = src, guid = guid, cid = cid, name = name, unit = RowUnit(src),
+           rawGuid = src.sourceGUID, rawCid = src.sourceCreatureID,
            color = src.classFilename, win = win }
     win.bd = bd
     BuildPanel()
