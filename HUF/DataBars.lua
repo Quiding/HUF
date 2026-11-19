@@ -213,20 +213,29 @@ function DB.Apply()
     end
     Build()
     -- under (or over) the map, as wide as it is, outside its border
+    -- as wide as the map's border (drawn outside the map); touching the map,
+    -- the bar's own line lies on the map's bottom line (one line, not two)
     local mm = ns.db.minimap
-    local edge = (mm and mm.enabled and mm.borderSize or 0) + (s.gap or 0)
+    local mb = mm and mm.enabled and mm.borderSize or 0
+    local bs = s.borderSize or 0
+    local edge = mb + (s.gap or 0)
+    if (s.gap or 0) == 0 and mb > 0 and bs > 0 then edge = mb - math.min(mb, bs) end
     local holder = Minimap:GetParent() or UIParent
     bar:SetParent(holder)
     bar:SetFrameStrata(Minimap:GetFrameStrata())
     bar:SetFrameLevel(Minimap:GetFrameLevel() + 4)      -- under HUF's minimap icons (tracking on its end)
     bar:ClearAllPoints()
     if s.position == "ABOVE" then
-        bar:SetPoint("BOTTOMLEFT", Minimap, "TOPLEFT", 0, edge)
-        bar:SetPoint("BOTTOMRIGHT", Minimap, "TOPRIGHT", 0, edge)
+        bar:SetPoint("BOTTOMLEFT", Minimap, "TOPLEFT", -mb, edge)
+        bar:SetPoint("BOTTOMRIGHT", Minimap, "TOPRIGHT", mb, edge)
     else
-        bar:SetPoint("TOPLEFT", Minimap, "BOTTOMLEFT", 0, -edge)
-        bar:SetPoint("TOPRIGHT", Minimap, "BOTTOMRIGHT", 0, -edge)
+        bar:SetPoint("TOPLEFT", Minimap, "BOTTOMLEFT", -mb, -edge)
+        bar:SetPoint("TOPRIGHT", Minimap, "BOTTOMRIGHT", mb, -edge)
     end
+    -- the bar's line as thick as set (top, bottom, left, right)
+    local e = bar.border.edges
+    e[1]:SetHeight(math.max(1, bs)); e[2]:SetHeight(math.max(1, bs))
+    e[3]:SetWidth(math.max(1, bs)); e[4]:SetWidth(math.max(1, bs))
     bar:SetHeight(s.height)
     local c = s.bgColor
     bar.bg:SetColorTexture(c.r, c.g, c.b, s.bgAlpha)
