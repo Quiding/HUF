@@ -12,10 +12,31 @@ local function S() return ns.db.dataBars.minimap end
 local bar
 local blocks = {}
 
--- the game's micro menu art; a plain texture where the client has no atlas
-local function SetIcon(tex, atlas, file)
-    if not (atlas and pcall(tex.SetAtlas, tex, atlas)) or not tex:GetAtlas() then
+-- the game's own art, drawn from its sheet so it can be cropped. trim: the
+-- share of the art's width kept (micro menu art has a wide empty border, which
+-- at 10 px leaves only a smudge); the height is cut to keep it square. Sets
+-- tex.aspect (width / height of what is shown). A plain file where the client
+-- has no such atlas.
+local function SetIcon(tex, atlas, file, trim)
+    local info = atlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas)
+    local sheet = info and (info.file or info.filename)
+    if sheet and info.width and info.width > 0 and info.height and info.height > 0 then
+        local l, r, t, b = info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord
+        local aspect = info.width / info.height
+        if trim then
+            local sy = math.min(1, trim * aspect)        -- the same pixels both ways
+            local cx, cy = (l + r) / 2, (t + b) / 2
+            local hw, hh = (r - l) * trim / 2, (b - t) * sy / 2
+            l, r, t, b = cx - hw, cx + hw, cy - hh, cy + hh
+            aspect = 1
+        end
+        tex:SetTexture(sheet)
+        tex:SetTexCoord(l, r, t, b)
+        tex.aspect = aspect
+    else
         tex:SetTexture(file)
+        tex:SetTexCoord(0, 1, 0, 1)
+        tex.aspect = 1
     end
 end
 
@@ -39,11 +60,11 @@ local function GuildOnline()
 end
 
 local BLOCKS = {
-    { key = "friends", title = "Friends online", atlas = "UI-HUD-MicroMenu-SocialJournal-Up",
-      file = "Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon", count = FriendsOnline,
+    { key = "friends", title = "Friends online", atlas = "socialqueuing-icon-group",
+      file = "Interface\\FriendsFrame\\UI-Toast-FriendOnlineIcon", count = FriendsOnline,
       click = function() if ToggleFriendsFrame then ToggleFriendsFrame() end end },
-    { key = "guild", title = "Guild members online", atlas = "UI-HUD-MicroMenu-GuildCommunities-Up",
-      file = "Interface\\FriendsFrame\\UI-Toast-FriendOnlineIcon", count = GuildOnline,
+    { key = "guild", title = "Guild members online", atlas = "UI-HUD-MicroMenu-GuildCommunities-Up", trim = 0.62,
+      file = "Interface\\GossipFrame\\TabardGossipIcon", count = GuildOnline,
       click = function()
           if ToggleGuildFrame then ToggleGuildFrame()
           elseif ToggleCommunitiesFrame then ToggleCommunitiesFrame() end
@@ -70,7 +91,7 @@ local function Build()
         local b = CreateFrame("Button", nil, bar)
         b.info = info
         b.icon = b:CreateTexture(nil, "ARTWORK")
-        SetIcon(b.icon, info.atlas, info.file)
+        SetIcon(b.icon, info.atlas, info.file, info.trim)
         b.text = b:CreateFontString(nil, "OVERLAY")
         b:RegisterForClicks("LeftButtonUp")
         b:SetScript("OnClick", function() info.click() end)
@@ -117,21 +138,22 @@ function DB.Update()
     -- the blocks side by side, centred: icon, then the count (SIDE), or the
     -- count above a small icon (STACK)
     local stack = s.layout == "STACK"
-    local size = stack and math.max(6, math.floor(s.height * 0.45)) or math.max(8, s.height - 6)
+    local size = stack and math.max(8, s.height - s.fontSize - 1) or math.max(8, s.height - 6)
     local widths, total = {}, 0
     for i, b in ipairs(shown) do
-        b.icon:SetSize(size, size)
+        local iw = math.floor(size * (b.icon.aspect or 1) + 0.5)
+        b.icon:SetSize(iw, size)
         b.icon:ClearAllPoints()
         b.text:ClearAllPoints()
         local w
         if stack then
             b.icon:SetPoint("BOTTOM", b, "BOTTOM", 0, 1)
             b.text:SetPoint("BOTTOM", b.icon, "TOP", 0, 0)
-            w = math.max(size, b.text:GetStringWidth() or 0)
+            w = math.max(iw, b.text:GetStringWidth() or 0)
         else
             b.icon:SetPoint("LEFT", b, "LEFT", 0, 0)
             b.text:SetPoint("LEFT", b.icon, "RIGHT", 2, 0)
-            w = size + 2 + math.max(6, b.text:GetStringWidth() or 0)
+            w = iw + 2 + math.max(6, b.text:GetStringWidth() or 0)
         end
         widths[i] = w
         total = total + w + (i > 1 and s.spacing or 0)
