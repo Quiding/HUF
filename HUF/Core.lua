@@ -524,6 +524,10 @@ local function BuildDefaults()
             barLayout = "ROW",          -- ROW (one line) | GRID (barColumns wide)
             barColumns = 4,
             barSquare = false,          -- buttons in the bar as square icons on a dark background
+            -- buttons[name] = "PIN": kept out of the bag, in a line from the bag button
+            pinGrow = "UP",             -- UP | RIGHT | DOWN | LEFT
+            pinGap = 2,
+            pinOrder = {},              -- name -> place in the line (else by name)
         },
         -- data bars: for now the minimap data bar (DataBars.lua)
         dataBars = {

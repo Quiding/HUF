@@ -922,8 +922,17 @@ local function ConvertMinimap(addon, m, notes)
     else
         m.addonBar, m.buttonMode = false, "NEVER"
     end
-    if type(G("ungroupedButtons")) == "table" and next(G("ungroupedButtons")) then
-        notes[#notes + 1] = "Minimap: buttons Ellesmere keeps outside its flyout are in HUF's addon bar with the others."
+    -- the buttons Ellesmere keeps out of its flyout: pinned by the bag, in its order
+    local ung = G("ungroupedButtons")
+    if type(ung) == "table" then
+        m.pinOrder = m.pinOrder or {}
+        for name, place in pairs(ung) do
+            if type(name) == "string" and name ~= "EllesmereUIMinimapButton" then
+                m.buttons[name] = "PIN"
+                m.pinOrder[name] = Num(place, 99)
+            end
+        end
+        m.pinGrow = "UP"
     end
 end
 

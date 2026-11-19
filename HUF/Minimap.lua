@@ -248,12 +248,15 @@ end
 
 local function ButtonMode(b)
     local s = S()
-    return s.buttons[known[b].name] or s.buttonMode
+    local m = s.buttons[known[b].name] or s.buttonMode
+    if m == "PIN" then m = "ALWAYS" end         -- pinned (bag off): on the map
+    return m
 end
 
 -- back on the map where the addon had it
 local function ToMap(b)
     local d = known[b]
+    d.pin = nil
     Unsquare(b)
     if b:GetParent() == Minimap and not d.inBar then return end
     d.inBar = nil
@@ -374,12 +377,57 @@ local function ToBar(b)
     if S().barSquare then Square(b) else Unsquare(b) end
 end
 
+-- a pinned button (buttons[name] = "PIN"): out of the bag, in a line that
+-- starts at the bag button, styled like the bag's buttons
+local function ToPin(b)
+    local d = known[b]
+    ToBar(b)                    -- saves where the addon had it (once), squares it
+    d.pin = true
+    if b:GetParent() ~= iconLayer then b:SetParent(iconLayer) end
+    b:SetFrameStrata(iconLayer:GetFrameStrata())
+    b:SetFrameLevel(iconLayer:GetFrameLevel() + 2)
+end
+
+function MM.LayoutPins()
+    if not (barButton and MM.active) then return end
+    local s = S()
+    local list = {}
+    for _, b in ipairs(buttons) do
+        if known[b].pin then list[#list + 1] = b end
+    end
+    local order = s.pinOrder or {}
+    table.sort(list, function(a, b)
+        local oa, ob = order[known[a].name], order[known[b].name]
+        if oa and ob and oa ~= ob then return oa < ob end
+        if oa and not ob then return true end
+        if ob and not oa then return false end
+        return known[a].name < known[b].name
+    end)
+    local size, gap, grow = s.barIconSize, s.pinGap or 2, s.pinGrow or "UP"
+    local show = s.addonBar and Wanted(s.icons.addonbar.mode)
+    for i, b in ipairs(list) do
+        local sc = size / math.max(1, b:GetWidth() or size)
+        b:SetScale(sc)
+        b:ClearAllPoints()
+        local off = gap + (i - 1) * (size + gap)
+        if grow == "RIGHT" then b:SetPoint("BOTTOMLEFT", barButton, "BOTTOMRIGHT", off / sc, 0)
+        elseif grow == "LEFT" then b:SetPoint("BOTTOMRIGHT", barButton, "BOTTOMLEFT", -off / sc, 0)
+        elseif grow == "DOWN" then b:SetPoint("TOPLEFT", barButton, "BOTTOMLEFT", 0, -off / sc)
+        else b:SetPoint("BOTTOMLEFT", barButton, "TOPLEFT", 0, off / sc) end
+        b:SetAlpha(show and 1 or 0)
+        b:EnableMouse(show and known[b].mouse)
+    end
+end
+
 function MM.ApplyButtons()
     if not MM.active then return end
     local s = S()
     for _, b in ipairs(buttons) do
-        if s.addonBar then
+        if s.addonBar and s.buttons[known[b].name] == "PIN" then
+            ToPin(b)
+        elseif s.addonBar then
             ToBar(b)
+            known[b].pin = nil
             b:SetAlpha(1)
             b:EnableMouse(known[b].mouse)
         else
@@ -391,6 +439,7 @@ function MM.ApplyButtons()
         end
     end
     if barButton then barButton:SetShown(s.addonBar and #buttons > 0 and Wanted(s.icons.addonbar.mode)) end
+    MM.LayoutPins()
     if bar and bar:IsShown() then MM.LayoutBar() end
 end
 
@@ -452,7 +501,7 @@ function MM.LayoutBar()
     local grid = s.barLayout == "GRID"
     local list = {}
     for _, b in ipairs(buttons) do
-        if b:IsShown() and known[b].inBar then list[#list + 1] = b end
+        if b:IsShown() and known[b].inBar and not known[b].pin then list[#list + 1] = b end
     end
     local n = #list
     local cols = grid and math.max(1, math.min(n, s.barColumns or 4)) or (vertical and 1 or math.max(1, n))
@@ -879,6 +928,7 @@ function MM.Apply()
     barButton:ClearAllPoints()
     local p = POS[ab.pos] or POS.RIGHT
     barButton:SetPoint(p[1], Minimap, p[2], ab.x or 0, ab.y or 0)
+    if MM.LayoutPins then MM.LayoutPins() end
     barButton.border:SetColor(A[1], A[2], A[3], 1)
     for _, t in ipairs(barButton.dots) do t:SetColorTexture(A[1], A[2], A[3], 1) end
     bar.border:SetColor(A[1], A[2], A[3], 0.9)

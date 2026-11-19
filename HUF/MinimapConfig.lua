@@ -144,12 +144,16 @@ local function ButtonsPage(f, page)
     local gq, sq = Opt(M, "barSquare")
     L:Check("Square buttons", gq, sq, "The buttons in the bar as square icons on a dark background, without their round frame. On the map they look as the addon draws them.")
     L:Slider("Icon size in the bar", 14, 40, 1, Opt(M, "barIconSize"))
+    L:Cycle("Pinned buttons go", {
+        { value = "UP", text = "Up from the bag button" }, { value = "RIGHT", text = "Right of it" },
+        { value = "DOWN", text = "Down from it" }, { value = "LEFT", text = "Left of it" },
+    }, Opt(M, "pinGrow"))
     L:Slider("Closes after", 3, 30, 1, function() return M().barTimeout end, function(v) M().barTimeout = v end, "%d s")
     Element(L, "Addon bar button", function() return M().icons.addonbar end)
     L:Note("In unlock mode (/huf unlock) the tracking button and this button can be dragged anywhere.")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
-    R:Header("On the map (addon bar off)")
+    R:Header("Each addon button")
     R:Cycle("Every addon button", ns.Minimap.MODES, Opt(M, "buttonMode"))
     -- one row per addon button found on the map (filled when the page shows)
     local list = CreateFrame("Frame", nil, f)
@@ -159,7 +163,8 @@ local function ButtonsPage(f, page)
     list.empty = UI.Label(list, "No addon buttons found on the minimap.")
     list.empty:SetPoint("TOPLEFT")
     list.empty:SetTextColor(0.6, 0.6, 0.6)
-    local CHOICES = { { value = "DEFAULT", text = "Like every button" } }
+    local CHOICES = { { value = "DEFAULT", text = "Like every button" },
+        { value = "PIN", text = "Pinned by the bag" } }
     for _, m in ipairs(ns.Minimap.MODES) do CHOICES[#CHOICES + 1] = m end
     list.Refresh = function()
         local l = ns.Minimap.Buttons()
