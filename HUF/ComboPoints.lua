@@ -98,10 +98,18 @@ function Combo.SetValue(row, v)
     for i = 1, row.max or 5 do row.pips[i]:SetValue(v) end
 end
 
--- shown? (an empty row hides when the number can be read)
+-- Switching targets almost always loses the points, but the number is
+-- secret: after a target change the rows stay hidden until the game reports
+-- a change of the combo points (a builder landed). Reports right after the
+-- switch are the reset to 0 and don't count.
+local confirmed, changedAt = false, 0
+local RESET_WINDOW = 0.3
+
+-- shown? (with a readable number: empty hides with hideEmpty)
 local function Wanted(cfg, v)
     if not (cfg.enabled and Combo.Applies() and HostileTarget()) then return false end
-    if cfg.hideEmpty and not IsSecret(v) and v == 0 then return false end
+    if IsSecret(v) then return confirmed end
+    if cfg.hideEmpty and v == 0 then return false end
     return true
 end
 
@@ -203,7 +211,13 @@ end
 local ev = CreateFrame("Frame")
 local function Soon() C_Timer.After(0, Combo.Update) end
 ev:SetScript("OnEvent", function(_, event, unit, powerType)
-    if (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") and powerType ~= "COMBO_POINTS" then return end
+    local power = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+    if power and powerType ~= "COMBO_POINTS" then return end
+    if event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_ENTERING_WORLD" then
+        confirmed, changedAt = false, GetTime()
+    elseif (power or event == "PLAYER_COMBO_POINTS") and GetTime() - changedAt > RESET_WINDOW then
+        confirmed = true
+    end
     if event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" or event == "PLAYER_TARGET_CHANGED" then
         Soon()       -- after HUF's plates attached / detached
     else
