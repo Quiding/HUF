@@ -228,6 +228,31 @@ local function ComboPage(f)
     R:Note("As wide as the bar. The target frame's combo points: Target > Combo points.")
 end
 
+local function ThreatPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Threat")
+    L:Cycle("Show", {
+        { value = "OFF", text = "Nothing" },
+        { value = "PERCENT", text = "Your threat in %" },
+        { value = "GLOW", text = "Glow when it is about to switch to you" },
+        { value = "BOTH", text = "Both" },
+    }, Opt("threatMode"))
+    L:Note("Enemies only, on plates with a bar. The glow needs a group or your pet: alone you always hold the mob.")
+    L:Header("Percent")
+    L:Cycle("Where", { { value = "RIGHT", text = "In the bar, right" }, { value = "LEFT", text = "In the bar, left" },
+        { value = "CENTER", text = "In the bar, centre" }, { value = "OUTSIDE", text = "Right of the bar" } }, Opt("threatPos"))
+    L:Slider("Size", 6, 16, 1, Opt("threatSize"))
+    local gc, sc = Opt("threatColors")
+    L:Check("In threat colours (grey, yellow, orange, red)", gc, sc)
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Glow")
+    R:Slider("Width", 2, 12, 1, Opt("threatGlowSize"))
+    R:Color("About to switch to you", Opt("threatGlowColor"))
+    local ga, sa = Opt("threatGlowAggro")
+    R:Check("Also while it attacks you", ga, sa, "Off: only the warning before it switches (best for damage and healers). On: tanks see which mobs they hold.")
+    R:Color("Attacks you", Opt("threatAggroColor"))
+end
+
 local function AuraPage(f)
     local L = UI.Column(f, 0, 0, COL_W)
     L:Header("Icons above the name")
@@ -259,7 +284,7 @@ ns.RegisterPage("nameplates", "Nameplates", "frames", function(page)
         end)
     end)
     reset:SetPoint("TOPRIGHT", 0, 4)
-    local tabs = { { "general", "General" }, { "name", "Name & level" }, { "cast", "Cast bar" }, { "combo", "Combo points" }, { "auras", "Buffs & debuffs" }, { "numbers", "Damage numbers" } }
+    local tabs = { { "general", "General" }, { "name", "Name & level" }, { "cast", "Cast bar" }, { "combo", "Combo points" }, { "threat", "Threat" }, { "auras", "Buffs & debuffs" }, { "numbers", "Damage numbers" } }
     local subs, strip = {}, nil
     local function Show(k)
         for n, sf in pairs(subs) do sf:SetShown(n == k) end
@@ -272,6 +297,7 @@ ns.RegisterPage("nameplates", "Nameplates", "frames", function(page)
     subs.name = SubFrame(page); NamePage(subs.name)
     subs.cast = SubFrame(page); CastPage(subs.cast)
     subs.combo = SubFrame(page); ComboPage(subs.combo)
+    subs.threat = SubFrame(page); ThreatPage(subs.threat)
     subs.auras = SubFrame(page); AuraPage(subs.auras)
     subs.numbers = SubFrame(page); CombatTextPage(subs.numbers)
     strip:Bind(subs, Show)

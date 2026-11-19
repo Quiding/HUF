@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.13.
+Version 0.4.14.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -24,7 +24,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   grey bar and "Offline". Hidden alone and in a raid (raid frames are planned). Player, target
   and pet frames can show the same cast bar (off by default).
 - **Nameplates**: name only / name + bar / bar only (friendly units separately), level, elite /
-  rare star, quest progress ("2/10") left of the bar, cast bar ("Interrupted!" for a moment when
+  rare star, quest progress ("2/10") left of the bar, threat (your % in threat colours and / or a
+  glow when the mob is about to switch to you), cast bar ("Interrupted!" for a moment when
   someone interrupts the cast), your debuffs and buffs with time
   left as numbers. Name above or inside the bar, own NPC colours, darker out of combat. Questie's
   quest icon is moved next to HUF's quest progress.

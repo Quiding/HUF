@@ -620,6 +620,10 @@ local function BuildDefaults()
             castIcon = true,
             castInterrupt = true,       -- "Interrupted!" for a moment when someone interrupts the cast
             castInterruptColor = C(0.85, 0.15, 0.15), castInterruptTime = 1,
+            -- threat: OFF | PERCENT (your threat %) | GLOW (about to pull) | BOTH
+            threatMode = "GLOW", threatSize = 10, threatPos = "RIGHT", threatColors = true,
+            threatGlowSize = 5, threatGlowColor = C(1.00, 0.60, 0.00),
+            threatGlowAggro = false, threatAggroColor = C(1.00, 0.15, 0.15),
             -- combo points (rogue, cat druid) under your target's plate
             comboShow = true, comboHeight = 4, comboGap = 2, comboSpace = 2,
             comboColor = C(1.00, 0.82, 0.10), comboHideEmpty = true,

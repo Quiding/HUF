@@ -91,6 +91,15 @@ local function Build()
     p.elite.ring:SetAllPoints()
     p.elite.ring:SetTexture(ns.MEDIA .. "Icons\\StarRing")
 
+    -- threat: percent text and a glow round the bar
+    p.threat = NewFont(p.text, 9)
+    p.threat:Hide()
+    p.glow = CreateFrame("Frame", nil, p)
+    p.glow:SetFrameLevel(math.max(0, p.health:GetFrameLevel() - 1))
+    p.glow.edges = {}
+    for i = 1, 4 do p.glow.edges[i] = p.glow:CreateTexture(nil, "BACKGROUND") end
+    p.glow:Hide()
+
     p.cast = CreateFrame("StatusBar", nil, p)
     p.cast.bg = p.cast:CreateTexture(nil, "BACKGROUND")
     p.cast.bg:SetAllPoints()
@@ -214,6 +223,7 @@ local function Layout(p)
         c:SetWidth(s.width - iconW)
     end
     c:SetHeight(s.castHeight)
+    if NP.LayoutThreat then NP.LayoutThreat(p) end
     c:SetStatusBarTexture(ns.TexturePath(s.texture))
     c:SetStatusBarColor(s.castColor.r, s.castColor.g, s.castColor.b)
     Frame.LayoutBorder(c.border, c, bs, s.borderColor, 1)
@@ -497,6 +507,96 @@ local function UpdateCast(p)
     Cast.Start(p.cast, p.unit)
 end
 
+
+---------------------------------------------------------------------------
+-- Threat on the plate's unit: your percent (as the damage meter's threat
+-- view) and / or a glow round the bar when the mob is about to switch to you
+-- (the game's threat situation 2; 3 = it attacks you, glow optional). Solo
+-- without a pet you always hold it: no glow then. Percent and situation may
+-- be secret: the percent goes straight into the text, a secret situation
+-- shows nothing.
+---------------------------------------------------------------------------
+local function ThreatShared()
+    if IsInGroup and IsInGroup() then return true end
+    local ok, e = pcall(UnitExists, "pet")
+    return ok and Bool(e)
+end
+
+local function LayoutThreat(p)
+    local s = S()
+    local t = p.threat
+    ns.ApplyFont(t, s.font, s.threatSize, "OUTLINE")
+    t:ClearAllPoints()
+    local pos = s.threatPos
+    if pos == "LEFT" then t:SetPoint("LEFT", p.health, "LEFT", 2, 0) t:SetJustifyH("LEFT")
+    elseif pos == "CENTER" then t:SetPoint("CENTER", p.health, "CENTER", 0, 0) t:SetJustifyH("CENTER")
+    elseif pos == "OUTSIDE" then t:SetPoint("LEFT", p.health, "RIGHT", 4 + (s.eliteSize or 0), 0) t:SetJustifyH("LEFT")
+    else t:SetPoint("RIGHT", p.health, "RIGHT", -2, 0) t:SetJustifyH("RIGHT") end
+    -- glow: soft edges outside the bar
+    local g, w = p.glow, s.threatGlowSize
+    g:ClearAllPoints()
+    g:SetPoint("TOPLEFT", p.health, "TOPLEFT", -w, w)
+    g:SetPoint("BOTTOMRIGHT", p.health, "BOTTOMRIGHT", w, -w)
+    local e = g.edges
+    for i = 1, 4 do e[i]:ClearAllPoints() e[i]:SetTexture("Interface\\Buttons\\WHITE8X8") end
+    e[1]:SetPoint("TOPLEFT") e[1]:SetPoint("TOPRIGHT") e[1]:SetHeight(w)               -- top
+    e[2]:SetPoint("BOTTOMLEFT") e[2]:SetPoint("BOTTOMRIGHT") e[2]:SetHeight(w)         -- bottom
+    e[3]:SetPoint("TOPLEFT", 0, -w) e[3]:SetPoint("BOTTOMLEFT", 0, w) e[3]:SetWidth(w) -- left
+    e[4]:SetPoint("TOPRIGHT", 0, -w) e[4]:SetPoint("BOTTOMRIGHT", 0, w) e[4]:SetWidth(w)
+end
+
+local function GlowColor(p, c)
+    local e = p.glow.edges
+    local a = 0.9
+    if CreateColor and e[1].SetGradient then
+        local solid, clear = CreateColor(c.r, c.g, c.b, a), CreateColor(c.r, c.g, c.b, 0)
+        e[1]:SetGradient("VERTICAL", solid, clear)
+        e[2]:SetGradient("VERTICAL", clear, solid)
+        e[3]:SetGradient("HORIZONTAL", clear, solid)
+        e[4]:SetGradient("HORIZONTAL", solid, clear)
+        for i = 1, 4 do e[i]:SetVertexColor(1, 1, 1, 1) end
+    else
+        for i = 1, 4 do e[i]:SetVertexColor(c.r, c.g, c.b, a * 0.6) end
+    end
+end
+
+local function UpdateThreat(p)
+    local s = S()
+    local mode = s.threatMode
+    local unit = p.unit
+    local showPct = (mode == "PERCENT" or mode == "BOTH") and p.mode ~= "NAME"
+    local showGlow = (mode == "GLOW" or mode == "BOTH") and p.mode ~= "NAME"
+    local friendly = IsFriendly(unit)
+    if friendly or not unit then p.threat:Hide() p.glow:Hide() return end
+    if showPct then
+        local ok, tanking, status, pct = pcall(UnitDetailedThreatSituation, "player", unit)
+        if ok and pct ~= nil and (IsSecret(pct) or type(pct) == "number") then
+            pcall(p.threat.SetFormattedText, p.threat, "%.0f%%", pct)
+            if s.threatColors and ok and status ~= nil and not IsSecret(status) and GetThreatStatusColor then
+                p.threat:SetTextColor(GetThreatStatusColor(status))
+            else
+                p.threat:SetTextColor(1, 1, 1)
+            end
+            p.threat:Show()
+        else
+            p.threat:Hide()
+        end
+    else
+        p.threat:Hide()
+    end
+    if showGlow and ThreatShared() then
+        local ok, status = pcall(UnitThreatSituation, "player", unit)
+        if ok and status ~= nil and not IsSecret(status) and (status == 2 or (status == 3 and s.threatGlowAggro)) then
+            GlowColor(p, status == 3 and s.threatAggroColor or s.threatGlowColor)
+            p.glow:Show()
+            return
+        end
+    end
+    p.glow:Hide()
+end
+NP.UpdateThreat = UpdateThreat
+NP.LayoutThreat = LayoutThreat
+
 ---------------------------------------------------------------------------
 -- Auras: Auras.lua (the game's aura containers, they watch UNIT_AURA)
 ---------------------------------------------------------------------------
@@ -513,6 +613,7 @@ local function UpdateAll(p)
     UpdateAuras(p)
     UpdateCast(p)
     UpdateQuest(p)
+    UpdateThreat(p)
 end
 NP.UpdateAll = UpdateAll
 
@@ -524,12 +625,14 @@ for _, e in ipairs(Cast.EVENTS) do CAST_EVENT[e] = true end
 local UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION", "UNIT_FLAGS",
     "UNIT_CLASSIFICATION_CHANGED",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_UPDATE",
-    "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP" }
+    "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP",
+    "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
 
 local function OnUnitEvent(ev, event, _, castGUID, spellID, interruptedBy)
     local p = ev.plate
     if not p.unit then return end
     if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then UpdateHealth(p)
+    elseif event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then UpdateThreat(p)
     elseif CAST_EVENT[event] then
         if not S().showCast then StopCast(p) return end
         CastSetup(p)
