@@ -212,6 +212,22 @@ local function CastPage(f)
         function(v) N().castInterruptTime = v end, "%.1f s")
 end
 
+local function ComboPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Combo points")
+    local gs, ss = Opt("comboShow")
+    L:Check("Show combo points", gs, ss, "Rogues, and druids in cat form: a row of points under your target's plate (the cast bar moves down to make room).")
+    local gh, sh = Opt("comboHideEmpty")
+    L:Check("Hide with no points", gh, sh, "Only where the game lets addons read the number.")
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Look")
+    R:Slider("Height", 2, 12, 1, Opt("comboHeight"))
+    R:Slider("Space between points", 0, 8, 1, Opt("comboGap"))
+    R:Slider("Space to the bar", 0, 10, 1, Opt("comboSpace"))
+    R:Color("Colour", Opt("comboColor"))
+    R:Note("As wide as the bar. The target frame's combo points: Target > Combo points.")
+end
+
 local function AuraPage(f)
     local L = UI.Column(f, 0, 0, COL_W)
     L:Header("Icons above the name")
@@ -243,7 +259,7 @@ ns.RegisterPage("nameplates", "Nameplates", "frames", function(page)
         end)
     end)
     reset:SetPoint("TOPRIGHT", 0, 4)
-    local tabs = { { "general", "General" }, { "name", "Name & level" }, { "cast", "Cast bar" }, { "auras", "Buffs & debuffs" }, { "numbers", "Damage numbers" } }
+    local tabs = { { "general", "General" }, { "name", "Name & level" }, { "cast", "Cast bar" }, { "combo", "Combo points" }, { "auras", "Buffs & debuffs" }, { "numbers", "Damage numbers" } }
     local subs, strip = {}, nil
     local function Show(k)
         for n, sf in pairs(subs) do sf:SetShown(n == k) end
@@ -255,6 +271,7 @@ ns.RegisterPage("nameplates", "Nameplates", "frames", function(page)
     subs.general = SubFrame(page); GeneralPage(subs.general)
     subs.name = SubFrame(page); NamePage(subs.name)
     subs.cast = SubFrame(page); CastPage(subs.cast)
+    subs.combo = SubFrame(page); ComboPage(subs.combo)
     subs.auras = SubFrame(page); AuraPage(subs.auras)
     subs.numbers = SubFrame(page); CombatTextPage(subs.numbers)
     strip:Bind(subs, Show)

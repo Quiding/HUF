@@ -205,11 +205,12 @@ local function Layout(p)
     local c = p.cast
     c:ClearAllPoints()
     local iconW = s.castIcon and (s.castHeight + 4 + bs) or 0
+    local room = ns.Combo and ns.Combo.PlateRoom() or 0      -- combo points between bar and cast bar
     if showBar then
-        c:SetPoint("TOPLEFT", p, "BOTTOMLEFT", iconW, -(s.castGap + bs * 2))
-        c:SetPoint("TOPRIGHT", p, "BOTTOMRIGHT", 0, -(s.castGap + bs * 2))
+        c:SetPoint("TOPLEFT", p, "BOTTOMLEFT", iconW, -(s.castGap + bs * 2 + room))
+        c:SetPoint("TOPRIGHT", p, "BOTTOMRIGHT", 0, -(s.castGap + bs * 2 + room))
     else
-        c:SetPoint("TOP", p.name, "BOTTOM", iconW / 2, -(s.castGap + bs * 2))
+        c:SetPoint("TOP", p.name, "BOTTOM", iconW / 2, -(s.castGap + bs * 2 + room))
         c:SetWidth(s.width - iconW)
     end
     c:SetHeight(s.castHeight)

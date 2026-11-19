@@ -3,7 +3,7 @@
 --   * look: a border (accent colour by default) and a dark shade outside
 --   * texts placed on or around it: zone, clock, coordinates, FPS / latency
 --   * the game's icons (tracking, calendar, mail, crafting orders, instance
---     difficulty, expansion summary, addon compartment, zoom) placed anywhere
+--     difficulty, expansion summary, zoom) placed anywhere
 --     on or around it, each shown always, on mouseover or never
 --   * addon buttons: on the map (always / on mouseover / never, each button
 --     its own), or all in the "addon bar": one button that opens a small bar
@@ -98,7 +98,6 @@ MM.ICONS = {
         local c = Cluster()
         return (c and c.InstanceDifficulty) or _G.MiniMapInstanceDifficulty end },
     { key = "landing", title = "Expansion summary", get = function() return _G.ExpansionLandingPageMinimapButton end },
-    { key = "compartment", title = "Addon compartment", get = function() return _G.AddonCompartmentFrame end },
     { key = "zoom", title = "Zoom buttons", get = function()
         return Minimap.ZoomIn or _G.MinimapZoomIn, Minimap.ZoomOut or _G.MinimapZoomOut end },
 }
@@ -247,6 +246,14 @@ local function ToMap(b)
     d.inBar = nil
     b:SetParent(Minimap)
     b:SetScale(d.scale or 1)
+    if d.strata then
+        if b.SetFixedFrameStrata then b:SetFixedFrameStrata(false) end
+        if b.SetFixedFrameLevel then b:SetFixedFrameLevel(false) end
+        b:SetFrameStrata(d.strata)
+        b:SetFrameLevel(d.level or 1)
+        if d.fixedStrata and b.SetFixedFrameStrata then b:SetFixedFrameStrata(true) end
+        if d.fixedLevel and b.SetFixedFrameLevel then b:SetFixedFrameLevel(true) end
+    end
     b:ClearAllPoints()
     for _, p in ipairs(d.points) do b:SetPoint(p[1], p[2] or Minimap, p[3], p[4], p[5]) end
     if b.RegisterForDrag then b:RegisterForDrag("LeftButton") end
@@ -259,9 +266,18 @@ local function ToBar(b)
         d.points = {}
         for i = 1, b:GetNumPoints() do d.points[i] = { b:GetPoint(i) } end
         d.scale = b:GetScale()
+        d.strata, d.level = b:GetFrameStrata(), b:GetFrameLevel()
+        d.fixedStrata = b.IsFrameStrataFixed and b:IsFrameStrataFixed() or false
+        d.fixedLevel = b.IsFrameLevelFixed and b:IsFrameLevelFixed() or false
     end
     d.inBar = true
     if b:GetParent() ~= bar then b:SetParent(bar) end
+    -- LibDBIcon fixes its buttons to MEDIUM strata: they'd sit behind the
+    -- bar's background (DIALOG) and miss the clicks
+    if b.SetFixedFrameStrata then b:SetFixedFrameStrata(false) end
+    if b.SetFixedFrameLevel then b:SetFixedFrameLevel(false) end
+    b:SetFrameStrata(bar:GetFrameStrata())
+    b:SetFrameLevel(bar:GetFrameLevel() + 3)
     if b.RegisterForDrag then b:RegisterForDrag() end   -- no dragging it round the map from inside the bar
 end
 

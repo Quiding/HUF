@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.1.
+Version 0.4.2.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -43,11 +43,13 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
 - **Minimap**: square or round, any size and scale, moved in unlock mode. A border (accent colour
   by default) and a soft dark shade outside. Zone name, clock, coordinates and FPS / latency, each
   placed inside or around the map with its own size and colour. The game's icons (tracking,
-  calendar, mail, crafting orders, instance difficulty, expansion summary, addon compartment, zoom)
+  calendar, mail, crafting orders, instance difficulty, expansion summary, zoom)
   placed anywhere, each shown always, on mouseover or never; addon buttons the same (all or one by
   one). Or the **addon bar**: one button that opens a small bar with every addon button; it closes
   after a click on one of them or after 10 seconds. Turning it off gives the minimap back to
   Blizzard after /reload.
+- **Combo points** (rogues, druids in cat form): a row of points above the target frame and under
+  your target's nameplate (on by default; position, size, colour adjustable).
 - **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
   where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
   and debuff icons.

@@ -763,6 +763,28 @@ local function CastPage(f, key)
     R:Color("Colour", Opt(C, "interruptColor"))
 end
 
+-- Combo points (target frame)
+local function ComboPage(f, key)
+    local C = function() return U(key).combo end
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Combo points")
+    local ge, se = Opt(C, "enabled")
+    L:Check("Show combo points", ge, se, "Rogues, and druids in cat form: a row of points at the target frame.")
+    local gh, sh = Opt(C, "hideEmpty")
+    L:Check("Hide with no points", gh, sh, "Only where the game lets addons read the number; else the empty row shows while you have an enemy targeted.")
+    L:Cycle("Position", ns.Combo.POSITIONS, Opt(C, "pos"))
+    L:Slider("Horizontal offset", -200, 200, 1, Opt(C, "x"))
+    L:Slider("Vertical offset", -100, 100, 1, Opt(C, "y"))
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Look")
+    R:Slider("Width (0: the frame's width)", 0, 400, 1, Opt(C, "width"))
+    R:Slider("Height", 2, 20, 1, Opt(C, "height"))
+    R:Slider("Space between points", 0, 10, 1, Opt(C, "gap"))
+    R:Color("Colour", Opt(C, "color"))
+    R:Slider("Background opacity", 0, 1, 0.05, function() return C().bgAlpha end, function(v) C().bgAlpha = v end, "%.2f")
+    R:Note("The nameplate's combo points: Nameplates > Combo points.")
+end
+
 local function UnitPage(key)
     return function(page)
         local info = ns.UNIT_BY_KEY[key]
@@ -796,6 +818,7 @@ local function UnitPage(key)
         }
         if not info.noAuras then tabs[#tabs + 1] = { "auras", "Buffs & debuffs" } end
         if not info.polled then tabs[#tabs + 1] = { "cast", "Cast bar" } end
+        if key == "target" then tabs[#tabs + 1] = { "combo", "Combo points" } end
         local subs = {}
         local strip
         local function Show(k)
@@ -811,6 +834,7 @@ local function UnitPage(key)
         subs.texts = SubFrame(page); TextsPage(subs.texts, key, page)
         if not info.noAuras then subs.auras = SubFrame(page); AuraPage(subs.auras, key) end
         if not info.polled then subs.cast = SubFrame(page); CastPage(subs.cast, key) end
+        if key == "target" then subs.combo = SubFrame(page); ComboPage(subs.combo, key) end
         strip:Bind(subs, Show)
         Show("frame")
     end

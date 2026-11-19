@@ -363,6 +363,9 @@ local function BuildDefaults()
     u.target.health.gradEndAccent = false
     u.target.texts.health = Texts({ BOTTOMRIGHT = { "[hp] ([hp%])", 24 } })
     u.target.texts.power = Texts({ BOTTOMLEFT = { "[levelclass:color] | [name]", 12 } })
+    -- combo points (rogue, cat druid): a row of points above the frame
+    u.target.combo = { enabled = true, pos = "ABOVE", x = 0, y = 2, width = 0, height = 5, gap = 2,
+                       color = C(1.00, 0.82, 0.10), bgAlpha = 0.6, hideEmpty = true }
 
     -- Target of target: at the bottom right of the target frame, health only
     u.targettarget = UnitDefaults({ "TOPLEFT", "BOTTOMRIGHT", -20, -5 })
@@ -510,7 +513,6 @@ local function BuildDefaults()
                 crafting    = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = -26 },
                 difficulty  = { mode = "ALWAYS", pos = "TOPLEFT", x = 2, y = -2 },
                 landing     = { mode = "HOVER", pos = "LEFT", x = 2, y = -30 },
-                compartment = { mode = "HOVER", pos = "TOPRIGHT", x = -4, y = -32 },
                 zoom        = { mode = "NEVER", pos = "BOTTOMRIGHT", x = -2, y = 24 },
                 addonbar    = { mode = "ALWAYS", pos = "RIGHT", x = -4, y = 28 },
             },
@@ -571,6 +573,9 @@ local function BuildDefaults()
             castIcon = true,
             castInterrupt = true,       -- "Interrupted!" for a moment when someone interrupts the cast
             castInterruptColor = C(0.85, 0.15, 0.15), castInterruptTime = 1,
+            -- combo points (rogue, cat druid) under your target's plate
+            comboShow = true, comboHeight = 4, comboGap = 2, comboSpace = 2,
+            comboColor = C(1.00, 0.82, 0.10), comboHideEmpty = true,
             -- auras (small icons above the name)
             showBuffs = false, showDebuffs = true,
             debuffsMine = true,         -- only the debuffs you cast

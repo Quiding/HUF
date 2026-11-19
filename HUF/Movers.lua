@@ -108,6 +108,7 @@ local function Layout(key)
     f:SetSize(s.width, s.height)
     Frame.LayoutInner(f)
     Frame.Update(f)
+    if key == "target" and ns.Combo then ns.Combo.Preview(f) end
     f:SetShown(ns.unlocked and s.enabled)
 end
 
