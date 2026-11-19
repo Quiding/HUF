@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.3.27.
+Version 0.4.0.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -18,10 +18,13 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   click-casting work on them. Show myself or not, sort by name / Blizzard's party order / class,
   vertical or horizontal in either direction, adjustable padding. Missing health in health-status
   colour (hidden at full health), name, level and power on the power bar, your buffs (HoTs) top
-  left, debuffs top right. Offline members: light grey bar and "Offline". Hidden alone and in a
-  raid (raid frames are planned).
+  left, debuffs top right, a cast bar on the line between health and power bar with the spell
+  icon at the left edge (red for a moment when someone interrupts it). Offline members: light
+  grey bar and "Offline". Hidden alone and in a raid (raid frames are planned). Player, target
+  and pet frames can show the same cast bar (off by default).
 - **Nameplates**: name only / name + bar / bar only (friendly units separately), level, elite /
-  rare star, quest progress ("2/10") left of the bar, cast bar, your debuffs and buffs with time
+  rare star, quest progress ("2/10") left of the bar, cast bar ("Interrupted!" for a moment when
+  someone interrupts the cast), your debuffs and buffs with time
   left as numbers. Name above or inside the bar, own NPC colours, darker out of combat. Questie's
   quest icon is moved next to HUF's quest progress.
   In instances the game protects friendly player nameplates (no addon can change their names):
@@ -36,6 +39,14 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   breakdown (spells, amounts, share) in a panel beside the meter. Up to 5 windows, each with its own list,
   fight and place (e.g. damage and threat side by side; + opens one, x closes it). Optionally dimmed
   out of combat (full under the mouse) and threat windows hidden out of combat. `/huf meter` toggles it.
+- **Minimap**: square or round, any size and scale, moved in unlock mode. A border (accent colour
+  by default) and a soft dark shade outside. Zone name, clock, coordinates and FPS / latency, each
+  placed inside or around the map with its own size and colour. The game's icons (tracking,
+  calendar, mail, crafting orders, instance difficulty, expansion summary, addon compartment, zoom)
+  placed anywhere, each shown always, on mouseover or never; addon buttons the same (all or one by
+  one). Or the **addon bar**: one button that opens a small bar with every addon button; it closes
+  after a click on one of them or after 10 seconds. Turning it off gives the minimap back to
+  Blizzard after /reload.
 - **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
   where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
   and debuff icons.

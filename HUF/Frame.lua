@@ -150,10 +150,18 @@ local function OnEnter(self)
 end
 local function OnLeave() GameTooltip:Hide() end
 
-local function OnUnitEvent(ev, event)
+local CAST_EVENT = {}
+for _, e in ipairs(ns.Cast.EVENTS) do CAST_EVENT[e] = true end
+
+local function OnUnitEvent(ev, event, _, castGUID, spellID, interruptedBy)
     local f = ev.owner
     if not f.hunit or f.fake then return end
-    if event == "UNIT_HEAL_PREDICTION" then
+    if CAST_EVENT[event] then
+        local cb = f.s.castBar
+        if cb and cb.enabled then
+            ns.Cast.OnEvent(f.cast, f.hunit, event, castGUID, spellID, interruptedBy, cb.interruptTime)
+        end
+    elseif event == "UNIT_HEAL_PREDICTION" then
         Frame.UpdateHealPred(f)
     elseif HEALTH_EVENTS[event] then
         Frame.UpdateHealth(f)
@@ -216,6 +224,25 @@ function Frame.Build(f, key, secure)
     hp.clip:Hide()
     f.healPred = hp
     f.health, f.power = f.bars.health, f.bars.power
+
+    -- cast bar (on the line between health and power), icon as its child so
+    -- both hide together; the icon may reach above and below the bar
+    local c = CreateFrame("StatusBar", nil, f)
+    c:SetMinMaxValues(0, 1)
+    c.bg = c:CreateTexture(nil, "BACKGROUND")
+    c.bg:SetAllPoints()
+    c.edge = CreateFrame("Frame", nil, c)
+    c.edge:SetAllPoints()
+    c.border = MakeBorder(c.edge)
+    c.iconFrame = CreateFrame("Frame", nil, c)
+    c.icon = c.iconFrame:CreateTexture(nil, "ARTWORK")
+    c.icon:SetAllPoints()
+    c.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    c.iconBorder = MakeBorder(c.iconFrame)
+    c.text = c.edge:CreateFontString(nil, "OVERLAY")
+    ns.Cast.Decorate(c)
+    c:Hide()
+    f.cast = c
 
     -- portrait (off by default)
     local p = CreateFrame("Frame", nil, f)
@@ -353,8 +380,9 @@ function Frame.SetUnit(f, unit)
     local ev = f.ev
     ev:UnregisterAllEvents()
     ev:SetScript("OnUpdate", nil)
-    if not unit then Frame.SetAuraUnit(f, nil) return end
+    if not unit then Frame.SetAuraUnit(f, nil) ns.Cast.Stop(f.cast, true) return end
     for _, e in ipairs(UNIT_EVENTS) do pcall(ev.RegisterUnitEvent, ev, e, unit) end
+    for _, e in ipairs(ns.Cast.EVENTS) do pcall(ev.RegisterUnitEvent, ev, e, unit) end
     Frame.SetAuraUnit(f, unit)
     -- target of target sends no unit events of its own: looked at 5x a second
     local info = ns.UNIT_BY_KEY[f.key]
@@ -482,9 +510,69 @@ function Frame.LayoutInner(f)
         f.bars.health.border.lines[2]:Hide()
         f.bars.power.border.lines[1]:Hide()
     end
-    f.textLayer:SetFrameLevel(math.max(h:GetFrameLevel(), pwr:GetFrameLevel()) + 5)
+    local base = math.max(h:GetFrameLevel(), pwr:GetFrameLevel())
+    Frame.LayoutCast(f, base + 4)
+    f.textLayer:SetFrameLevel(base + 7)
     por.edge:SetFrameLevel(por:GetFrameLevel() + 2)
     Frame.LayoutAuras(f)
+end
+
+---------------------------------------------------------------------------
+-- Cast bar (Cast.lua drives it)
+---------------------------------------------------------------------------
+function Frame.LayoutCast(f, level)
+    local c, cb = f.cast, f.s.castBar
+    if not c then return end
+    if not (cb and cb.enabled) then ns.Cast.Stop(c, true) return end
+    local h = f.health
+    c:ClearAllPoints()
+    c:SetFrameLevel(level or (h:GetFrameLevel() + 4))
+    c:SetHeight(math.max(1, cb.height))
+    local bs = cb.borderSize or 1
+    local ix = 0
+    if cb.icon then
+        local ic = c.iconFrame
+        ic:ClearAllPoints()
+        ic:SetSize(cb.iconSize, cb.iconSize)
+        -- at the left inner edge, centred on the line between the bars
+        ic:SetPoint("LEFT", h, "BOTTOMLEFT", cb.x, cb.y)
+        ic:SetFrameLevel(c:GetFrameLevel() + 2)
+        LayoutBorder(c.iconBorder, ic, bs, f.s.health.borderColor, 1)
+        ic:Show()
+        ix = cb.iconSize + 1
+    else
+        c.iconFrame:Hide()
+    end
+    c:SetPoint("LEFT", h, "BOTTOMLEFT", cb.x + ix, cb.y)
+    c:SetPoint("RIGHT", h, "BOTTOMRIGHT", 0, cb.y)
+    c:SetStatusBarTexture(ns.TexturePath(cb.texture))
+    c.bg:SetColorTexture(0.04, 0.04, 0.05, cb.bgAlpha or 0.85)
+    c.edge:SetFrameLevel(c:GetFrameLevel() + 1)
+    LayoutBorder(c.border, c, bs, f.s.health.borderColor, 1)
+    ns.ApplyFont(c.text, cb.font, cb.fontSize, cb.outline)
+    c.text:ClearAllPoints()
+    local al = cb.textAlign or "CENTER"
+    c.text:SetPoint(al, c, al, al == "LEFT" and 2 or (al == "RIGHT" and -2 or 0), 0)
+    c.text:SetJustifyH(al)
+    c.color = cb.color
+    c.showText = cb.text
+    c.showInterrupt = cb.interrupt
+    c.interruptColor = cb.interruptColor
+    if f.fake then return end
+    if f.hunit then ns.Cast.Start(c, f.hunit) end
+end
+
+-- a made-up cast for the unlock preview
+function Frame.FakeCast(f, icon, name)
+    local c, cb = f.cast, f.s.castBar
+    if not (c and cb and cb.enabled) then return end
+    ns.Cast.Stop(c, true)
+    c:SetStatusBarColor(cb.color.r, cb.color.g, cb.color.b)
+    c:SetValue(0.6)
+    c.icon:SetTexture(icon)
+    c.text:SetText(name)
+    c.text:SetShown(cb.text)
+    c:Show()
 end
 
 ---------------------------------------------------------------------------
@@ -841,6 +929,8 @@ function Frame.Update(f)
     Frame.UpdatePower(f)
     Frame.UpdateTexts(f)
     Frame.UpdatePortrait(f)
+    local cb = f.s.castBar
+    if not f.fake and cb and cb.enabled and f.cast then ns.Cast.Start(f.cast, f.hunit) end
     f:SetAlpha(f.s.alpha)
 end
 

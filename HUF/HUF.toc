@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: HUF - Hivemind Unitframes
-## Notes: Dark, minimalist unit frames (player, target, target of target, pet, group, nameplates) with click-casting. Works with MMT's privacy settings. Type /huf for settings.
-## Version: 0.3.27
+## Notes: Dark, minimalist unit frames (player, target, target of target, pet, group, nameplates), damage meter, minimap and click-casting. Works with MMT's privacy settings. Type /huf for settings.
+## Version: 0.4.0
 ## Author: bnetworking
 ## X-License: GPL-3.0
 ## X-Repository: https://github.com/bnetworking/HUF
@@ -18,6 +18,7 @@ Names.lua
 Bridge.lua
 Colors.lua
 Tags.lua
+Cast.lua
 Auras.lua
 Frame.lua
 Units.lua
@@ -25,11 +26,13 @@ Group.lua
 ClickCast.lua
 Nameplates.lua
 DamageMeter.lua
+Minimap.lua
 Movers.lua
 Config.lua
 ConfigPages.lua
 ClickCastConfig.lua
 NameplatesConfig.lua
 DamageMeterConfig.lua
+MinimapConfig.lua
 Recorder.lua
 Help.lua

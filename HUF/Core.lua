@@ -331,6 +331,12 @@ local function UnitDefaults(point)
         -- incoming heals on the health bar: semi-transparent green after the
         -- filled part, may run past the bar's end by up to `overheal` %
         healPred = { enabled = true, color = C(0.25, 0.95, 0.45), alpha = 0.45, overheal = 10 },
+        -- cast bar on the line between health and power bar, spell icon at the
+        -- left inner edge (may be taller than the bar)
+        castBar = { enabled = false, height = 5, x = 0, y = 0, texture = "Fade", color = C(1.00, 0.70, 0.20),
+                    bgAlpha = 0.85, borderSize = 1, icon = true, iconSize = 14,
+                    text = false, font = "GLOBAL", fontSize = 10, outline = "GLOBAL", textAlign = "CENTER",
+                    interrupt = true, interruptColor = C(0.85, 0.15, 0.15), interruptTime = 1 },
     }
     u.power.enabled = true
     u.power.size = 9                -- health = height - power - gap = 14
@@ -407,6 +413,7 @@ local function BuildDefaults()
     g.debuffs = AuraRow(true, "ABOVE_RIGHT")
     for _, r in ipairs({ g.buffs, g.debuffs }) do r.size, r.perRow, r.rows, r.offset = 16, 5, 1, 1 end
     g.buffs.position, g.buffs.offset = "BELOW_LEFT", 8     -- my HoTs under the frame
+    g.castBar.enabled = true
     g.group = {
         showPlayer = true,          -- me in the group frames
         orientation = "DOWN",       -- growth: DOWN (vertical, top to bottom) | UP | RIGHT (horizontal, left to right) | LEFT
@@ -428,7 +435,7 @@ local function BuildDefaults()
             hideBlizzard = true,
             menuMode = "PROXY",        -- right-click menu: PROXY (secure proxy, 12.x) | DIRECT
             clickCast = true,
-            configBg = "Honeycomb",    -- background of the settings window
+            configBg = "None",         -- background of the settings window
             powerColors = "GAME",      -- power bars by type: GAME (the game's colours) | CUSTOM (below)
             customPower = {            -- softer than the game's (mana 0, 0.55, 1: EllesmereUI's)
                 MANA = C(0.00, 0.55, 1.00), RAGE = C(0.90, 0.15, 0.15),
@@ -461,6 +468,43 @@ local function BuildDefaults()
             threatColors = true,        -- threat view: bars in the game's threat colours
             fadeOOC = true, fadeAlpha = 0.4,   -- out of combat: windows at this opacity (full under the mouse)
             hideThreatOOC = true,       -- windows showing threat: hidden out of combat
+        },
+        -- minimap: shape, size, look, texts and icons placed on it (each
+        -- shown always, on mouseover or never), addon buttons on the map or
+        -- in the addon bar
+        minimap = {
+            enabled = true,
+            shape = "SQUARE",           -- SQUARE | ROUND
+            size = 180, scale = 1,
+            point = { "TOPRIGHT", "TOPRIGHT", -20, -20 },
+            borderSize = 2, borderAccent = true, borderColor = C(0.06, 0.06, 0.07),
+            shade = 14, shadeAlpha = 0.6,   -- dark shade outside the map: width, strength
+            mouseZoom = true,
+            font = "GLOBAL", outline = "GLOBAL",
+            iconScale = 1,              -- the game's icons (tracking, calendar ...)
+            -- pos: inside the map (TOPLEFT ... BOTTOMRIGHT) or outside (ABOVE_*, BELOW_*)
+            texts = {
+                zone   = { mode = "ALWAYS", pos = "TOP", x = 0, y = -4, size = 13, color = "ZONE" },
+                clock  = { mode = "ALWAYS", pos = "BOTTOM", x = 0, y = 4, size = 13, color = "WHITE", format = "24", localTime = true },
+                coords = { mode = "HOVER", pos = "BOTTOMLEFT", x = 4, y = 4, size = 11, color = "WHITE", decimals = 1 },
+                system = { mode = "HOVER", pos = "BOTTOMRIGHT", x = -4, y = 4, size = 11, color = "WHITE", show = "BOTH" },
+            },
+            icons = {
+                tracking    = { mode = "HOVER", pos = "LEFT", x = 2, y = 0 },
+                calendar    = { mode = "HOVER", pos = "TOPRIGHT", x = -2, y = -2 },
+                mail        = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = 0 },
+                crafting    = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = -26 },
+                difficulty  = { mode = "ALWAYS", pos = "TOPLEFT", x = 2, y = -2 },
+                landing     = { mode = "HOVER", pos = "LEFT", x = 2, y = -30 },
+                compartment = { mode = "HOVER", pos = "TOPRIGHT", x = -4, y = -32 },
+                zoom        = { mode = "NEVER", pos = "BOTTOMRIGHT", x = -2, y = 24 },
+                addonbar    = { mode = "ALWAYS", pos = "RIGHT", x = -4, y = 28 },
+            },
+            buttonMode = "HOVER",       -- addon buttons on the map: ALWAYS | HOVER | NEVER (each one can differ: buttons[name])
+            buttons = {},
+            addonBar = false,           -- every addon button in one "addon bar" button
+            barGrow = "AUTO",           -- AUTO (towards the screen's middle) | LEFT | RIGHT | UP | DOWN
+            barIconSize = 26, barTimeout = 10,
         },
         nameplates = {
             enabled = true,
@@ -503,6 +547,8 @@ local function BuildDefaults()
             castColor = C(1.00, 0.70, 0.20),
             castText = true, castFontSize = 10,
             castIcon = true,
+            castInterrupt = true,       -- "Interrupted!" for a moment when someone interrupts the cast
+            castInterruptColor = C(0.85, 0.15, 0.15), castInterruptTime = 1,
             -- auras (small icons above the name)
             showBuffs = false, showDebuffs = true,
             debuffsMine = true,         -- only the debuffs you cast
@@ -884,6 +930,13 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 13
+    end
+    -- 14: settings window without the honeycomb pattern
+    if HUFDB.dataVersion < 14 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            if prof.global and prof.global.configBg == "Honeycomb" then prof.global.configBg = "None" end
+        end
+        HUFDB.dataVersion = 14
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

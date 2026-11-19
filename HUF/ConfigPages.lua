@@ -710,6 +710,39 @@ local function AuraPage(f, key)
     end
 end
 
+-- Cast bar: on the line between health and power bar
+local function CastPage(f, key)
+    local C = function() return U(key).castBar end
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Cast bar")
+    L:Check("Show the cast bar", Opt(C, "enabled"))
+    L:Slider("Height", 1, 20, 1, Opt(C, "height"))
+    L:Slider("Horizontal offset", -100, 100, 1, Opt(C, "x"))
+    L:Slider("Vertical offset", -40, 40, 1, Opt(C, "y"))
+    L:Cycle("Bar texture", TextureChoices, Opt(C, "texture"))
+    L:Color("Colour", Opt(C, "color"))
+    L:Slider("Background opacity", 0, 1, 0.05, function() return C().bgAlpha end, function(v) C().bgAlpha = v end, "%.2f")
+    L:Slider("Border", 0, 3, 0.5, function() return C().borderSize end, function(v) C().borderSize = v end, "%.1f")
+    L:Note("Sits on the line between the health and the power bar (the bottom of the health bar).")
+
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Spell icon")
+    R:Check("Show the spell icon", Opt(C, "icon"))
+    R:Slider("Icon size", 4, 40, 1, Opt(C, "iconSize"))
+    R:Header("Spell name")
+    R:Check("Show the spell name", Opt(C, "text"))
+    R:Cycle("Font", function() return FontChoices(true) end, Opt(C, "font"))
+    R:Slider("Size", 6, 20, 1, Opt(C, "fontSize"))
+    R:Cycle("Outline", OUTLINES_G, Opt(C, "outline"))
+    R:Cycle("Aligned", {
+        { value = "LEFT", text = "Left" }, { value = "CENTER", text = "Center" }, { value = "RIGHT", text = "Right" },
+    }, Opt(C, "textAlign"))
+    R:Header("Interrupts")
+    local gi, si = Opt(C, "interrupt")
+    R:Check("Show interrupts", gi, si, "The bar turns red for a moment when someone interrupts the cast (with the spell name on: \"Interrupted!\").")
+    R:Color("Colour", Opt(C, "interruptColor"))
+end
+
 local function UnitPage(key)
     return function(page)
         local info = ns.UNIT_BY_KEY[key]
@@ -742,6 +775,7 @@ local function UnitPage(key)
             { "frame", "Frame" }, { "health", "Health bar" }, { "power", "Power bar" }, { "texts", "Texts" },
         }
         if not info.noAuras then tabs[#tabs + 1] = { "auras", "Buffs & debuffs" } end
+        if not info.polled then tabs[#tabs + 1] = { "cast", "Cast bar" } end
         local subs = {}
         local strip
         local function Show(k)
@@ -756,6 +790,7 @@ local function UnitPage(key)
         subs.power = SubFrame(page); BarPage(subs.power, key, "power")
         subs.texts = SubFrame(page); TextsPage(subs.texts, key, page)
         if not info.noAuras then subs.auras = SubFrame(page); AuraPage(subs.auras, key) end
+        if not info.polled then subs.cast = SubFrame(page); CastPage(subs.cast, key) end
         Show("frame")
     end
 end

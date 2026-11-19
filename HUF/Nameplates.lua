@@ -101,6 +101,7 @@ local function Build()
     p.cast.icon = p.cast:CreateTexture(nil, "ARTWORK")
     p.cast.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
     p.cast.text = NewFont(p.text, 7)
+    ns.Cast.Decorate(p.cast)
     p.cast:Hide()
 
     p.auras = CreateFrame("Frame", nil, p)
@@ -468,58 +469,22 @@ end
 ---------------------------------------------------------------------------
 -- Cast bar (cast times may be secret: the game's timer drives the bar)
 ---------------------------------------------------------------------------
-local function CastOnUpdate(c, elapsed)
-    if not c.startMS then return end
-    local now = GetTime() * 1000
-    local v = (now - c.startMS) / math.max(1, c.endMS - c.startMS)
-    if c.channel then v = 1 - v end
-    c:SetValue(math.max(0, math.min(1, v)))
-    if now > c.endMS + 200 then c:Hide() end
-end
+local Cast = ns.Cast
+local function StopCast(p) Cast.Stop(p.cast, true) end
 
-local function StopCast(p)
-    local c = p.cast
-    c.startMS = nil
-    c:SetScript("OnUpdate", nil)
-    c:Hide()
-    c.text:Hide()
+local function CastSetup(p)
+    local s, c = S(), p.cast
+    c.color = s.castColor
+    c.showText = s.castText
+    c.showInterrupt = s.castInterrupt
+    c.interruptColor = s.castInterruptColor
 end
 
 local function UpdateCast(p)
     local s = S()
-    local c = p.cast
     if not s.showCast then StopCast(p) return end
-    local unit = p.unit
-    local channel = false
-    local name, _, texture, startMS, endMS = UnitCastingInfo(unit)
-    if type(name) == "nil" then
-        name, _, texture, startMS, endMS = UnitChannelInfo(unit)
-        channel = true
-    end
-    if type(name) == "nil" then StopCast(p) return end
-    c.channel = channel
-    c:SetScript("OnUpdate", nil)
-    c.startMS = nil
-    local timed = false
-    -- the game's own timer (works while the times are secret)
-    if c.SetTimerDuration and Enum and Enum.StatusBarTimerDirection then
-        local okD, d = pcall(channel and UnitChannelDuration or UnitCastingDuration, unit)
-        if okD and d then
-            local dir = channel and Enum.StatusBarTimerDirection.RemainingTime or Enum.StatusBarTimerDirection.ElapsedTime
-            timed = pcall(c.SetTimerDuration, c, d, nil, dir)
-        end
-    end
-    if not timed and not IsSecret(startMS) and not IsSecret(endMS) and startMS and endMS then
-        c:SetMinMaxValues(0, 1)
-        c.startMS, c.endMS = startMS, endMS
-        c:SetScript("OnUpdate", CastOnUpdate)
-        timed = true
-    end
-    if not timed then StopCast(p) return end
-    pcall(c.icon.SetTexture, c.icon, texture)
-    pcall(c.text.SetText, c.text, name)
-    c:Show()
-    c.text:SetShown(s.castText)
+    CastSetup(p)
+    Cast.Start(p.cast, p.unit)
 end
 
 ---------------------------------------------------------------------------
@@ -544,21 +509,21 @@ NP.UpdateAll = UpdateAll
 ---------------------------------------------------------------------------
 -- Events
 ---------------------------------------------------------------------------
-local CAST_START = { UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_CHANNEL_START = true, UNIT_SPELLCAST_DELAYED = true,
-    UNIT_SPELLCAST_CHANNEL_UPDATE = true }
-local CAST_STOP = { UNIT_SPELLCAST_STOP = true, UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_INTERRUPTED = true,
-    UNIT_SPELLCAST_CHANNEL_STOP = true }
+local CAST_EVENT = {}
+for _, e in ipairs(Cast.EVENTS) do CAST_EVENT[e] = true end
 local UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION", "UNIT_FLAGS",
     "UNIT_CLASSIFICATION_CHANGED",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_UPDATE",
     "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP" }
 
-local function OnUnitEvent(ev, event)
+local function OnUnitEvent(ev, event, _, castGUID, spellID, interruptedBy)
     local p = ev.plate
     if not p.unit then return end
     if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then UpdateHealth(p)
-    elseif CAST_START[event] then UpdateCast(p)
-    elseif CAST_STOP[event] then StopCast(p)
+    elseif CAST_EVENT[event] then
+        if not S().showCast then StopCast(p) return end
+        CastSetup(p)
+        Cast.OnEvent(p.cast, p.unit, event, castGUID, spellID, interruptedBy, S().castInterruptTime)
     elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
         local mode = ModeFor(p.unit)
         if mode ~= p.mode then Layout(p) end

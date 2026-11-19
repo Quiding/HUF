@@ -315,6 +315,7 @@ function UI.Dropdown(parent, width, text, choices, get, set)
     Highlight(b)
     local fs = UI.Label(b, text)
     fs:SetPoint("LEFT", 8, 0)
+    b.label = fs
     local arrow = UI.Label(b, "v")
     arrow:SetPoint("RIGHT", -7, 1)
     arrow:SetTextColor(0.6, 0.6, 0.6)

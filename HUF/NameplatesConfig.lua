@@ -152,6 +152,12 @@ local function CastPage(f)
     R:Check("Spell icon", Opt("castIcon"))
     R:Check("Spell name", Opt("castText"))
     R:Slider("Spell name size", 6, 14, 1, Opt("castFontSize"))
+    R:Header("Interrupts")
+    local gi, si = Opt("castInterrupt")
+    R:Check("Show \"Interrupted!\"", gi, si, "For a moment, when someone interrupts the cast (a kick, a stun). Not when the caster stops it himself.")
+    R:Color("Colour", Opt("castInterruptColor"))
+    R:Slider("Shown for", 0.5, 3, 0.5, function() return N().castInterruptTime end,
+        function(v) N().castInterruptTime = v end, "%.1f s")
 end
 
 local function AuraPage(f)

@@ -171,6 +171,9 @@ local function LayoutGroup()
             f:SetSize(s.width, s.height)
             Frame.LayoutInner(f)
             Frame.Update(f)
+            -- two of them casting, to see the cast bar
+            if i == 1 then Frame.FakeCast(f, 135907, "Flash Heal")
+            elseif i == 4 then Frame.FakeCast(f, 135913, "Greater Heal") end
             f:Show()
         end
     end
@@ -202,6 +205,7 @@ function Movers.SetUnlocked(on)
         for _, f in pairs(previews) do f:Hide() end
         if group then group:Hide() end
     end
+    if ns.Minimap then ns.Minimap.SetUnlocked(ns.unlocked) end
     if ns.RefreshConfig then ns.RefreshConfig() end
 end
 
