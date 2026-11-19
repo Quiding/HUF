@@ -27,7 +27,7 @@ local UNIT_EVENTS = {
     "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
     "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_CONNECTION", "UNIT_FACTION", "UNIT_FLAGS",
     "UNIT_CLASSIFICATION_CHANGED", "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED",
-    "UNIT_HEAL_PREDICTION",
+    "UNIT_HEAL_PREDICTION", "UNIT_IN_RANGE_UPDATE",
 }
 local HEALTH_EVENTS = { UNIT_HEALTH = true, UNIT_MAXHEALTH = true, UNIT_HEALTH_FREQUENT = true }
 local POWER_EVENTS = { UNIT_POWER_UPDATE = true, UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true, UNIT_DISPLAYPOWER = true }
@@ -163,6 +163,8 @@ local function OnUnitEvent(ev, event, _, castGUID, spellID, interruptedBy)
         end
     elseif event == "UNIT_HEAL_PREDICTION" then
         Frame.UpdateHealPred(f)
+    elseif event == "UNIT_IN_RANGE_UPDATE" then
+        Frame.UpdateRange(f)
     elseif HEALTH_EVENTS[event] then
         Frame.UpdateHealth(f)
         Frame.UpdateTexts(f)
@@ -1064,7 +1066,34 @@ function Frame.Update(f)
     Frame.UpdateHappiness(f)
     local cb = f.s.castBar
     if not f.fake and cb and cb.enabled and f.cast then ns.Cast.Start(f.cast, f.hunit) end
-    f:SetAlpha(f.s.alpha)
+    Frame.UpdateRange(f)
+end
+
+-- a once-a-second look as well (the range event isn't on every client)
+C_Timer.NewTicker(1, function()
+    if not ns.db then return end
+    for _, f in ipairs(ns.allFrames) do
+        if f.s and f.s.group and f.s.group.range and f:IsVisible() then pcall(Frame.UpdateRange, f) end
+    end
+end)
+
+-- group members out of range faded (EllesmereUI's way: UnitInRange's answer,
+-- secret or not, straight into SetAlphaFromBoolean); yourself and frames
+-- without the option at their normal opacity, offline members at 80%
+function Frame.UpdateRange(f)
+    local a = f.s.alpha
+    local g = f.s.group
+    local unit = f.hunit
+    if f.fake or not (g and g.range) or not unit then f:SetAlpha(a) return end
+    local okP, me = pcall(UnitIsUnit, unit, "player")
+    if okP and ns.Bool(me) then f:SetAlpha(a) return end
+    local okC, conn = pcall(UnitIsConnected, unit)
+    if okC and not ns.IsSecret(conn) and conn == false then f:SetAlpha(a * 0.8) return end
+    local ok, inRange = pcall(UnitInRange, unit)
+    if ok and inRange ~= nil and f.SetAlphaFromBoolean then
+        if pcall(f.SetAlphaFromBoolean, f, inRange, a, a * g.rangeAlpha) then return end
+    end
+    if ok and not ns.IsSecret(inRange) and inRange == false then f:SetAlpha(a * g.rangeAlpha) else f:SetAlpha(a) end
 end
 
 function Frame.Apply(f)

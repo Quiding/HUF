@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.12.
+Version 0.4.13.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -19,7 +19,7 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   click-casting work on them. Show myself or not, sort by name / Blizzard's party order / class,
   vertical or horizontal in either direction, adjustable padding. Missing health in health-status
   colour (hidden at full health), name, level and power on the power bar, your buffs (HoTs) top
-  left, debuffs top right, a cast bar on the line between health and power bar with the spell
+  left, debuffs top right, members out of range faded (40%, the game's range check), a cast bar on the line between health and power bar with the spell
   icon at the left edge (red for a moment when someone interrupts it). Offline members: light
   grey bar and "Offline". Hidden alone and in a raid (raid frames are planned). Player, target
   and pet frames can show the same cast bar (off by default).
@@ -57,6 +57,12 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   chat menu buttons moved there, fading to 40% after 5 s; the input line below or above; the game's chat
   settings (bubbles, timestamps, style, whispers, filter) and chat colours on one page. Lines the
   game hides from addons (instance chat lockdown) stay as they are.
+- **Bags**: all bags in one HUF window (the game's own item buttons, so using / moving / selling
+  works as usual, also in combat); a dropdown to your bank (as it was at your last bank visit) and
+  one to your other characters' bags and banks (saved when you play them); a search bar that dims
+  everything else; tooltips show "Name: 8 | 12" (bags | bank) for every character; slots per row,
+  slot size, spacing, background, border, quality borders, scale. Turns on the game's combined bags
+  option. Saved bags are account data, never in a profile export.
 - **Combo points** (rogues, druids in cat form): a row of points above the target frame and under
   your target's nameplate (on by default; position, size, colour adjustable).
 - **Buff bar and debuff bar**: HUF's own instead of Blizzard's icons at the top right (each can

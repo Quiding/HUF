@@ -425,6 +425,8 @@ local function BuildDefaults()
         sort = "NAME",              -- NAME (alphabetical) | INDEX (Blizzard's party order) | CLASS
         spacing = 10,               -- padding, vertical
         spacingH = 2,               -- padding, horizontal
+        range = true,               -- members out of range faded
+        rangeAlpha = 0.4,
     }
     u.party = g
 
@@ -488,6 +490,19 @@ local function BuildDefaults()
             icons = "NONE",             -- NONE | CLASS: class icon before each bar
             rowBorder = 0,              -- a border around each bar (0: none)
             barBgColor = C(0, 0, 0), barBgAlpha = 0.35,          -- the empty part of each bar
+        },
+        -- bags: HUF's one bag window, bank / other characters from snapshots,
+        -- search, counts in tooltips (snapshots: HUFDB.inventory, not here)
+        bags = {
+            enabled = true,
+            oneBag = true,              -- the game's "combined bags" option
+            point = { "BOTTOMRIGHT", "BOTTOMRIGHT", -60, 110 },
+            cols = 10, size = 34, spacing = 4, padding = 8, scale = 1,
+            bgColor = C(0.04, 0.04, 0.05), bgAlpha = 0.92,
+            borderAccent = true, borderColor = C(0.2, 0.2, 0.22), borderSize = 1,
+            qualityBorders = true, showEmpty = true,
+            font = "GLOBAL", countSize = 12,
+            tooltipCounts = true, openWithBank = true,
         },
         -- chat window: look, short channel names, links, history, buttons
         chat = {
@@ -715,7 +730,8 @@ local handlers = {}
 function ns.On(event, fn)
     if not handlers[event] then
         handlers[event] = {}
-        eventFrame:RegisterEvent(event)
+        -- unknown on this client: nothing to listen to (no error)
+        if not pcall(eventFrame.RegisterEvent, eventFrame, event) then ns.Log("events", "no event %s on this client", event) end
     end
     table.insert(handlers[event], fn)
 end

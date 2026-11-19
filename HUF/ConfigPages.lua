@@ -510,6 +510,10 @@ local function FramePage(f, key)
             { value = "INDEX", text = "Blizzard's party order" },
             { value = "CLASS", text = "Class" },
         }, Opt(O, "sort"))
+        local gr, sr = Opt(O, "range")
+        R:Check("Fade members out of range", gr, sr, "Members farther than about 40 yards get the opacity below (the game's range check; works while it is secret too).")
+        R:Slider("Out of range opacity", 0.05, 1, 0.05, function() return O().rangeAlpha end,
+            function(v) O().rangeAlpha = v end, "%.2f")
     end
     R:Header("Frame background")
     R:Cycle("Picture", BackgroundChoices, Opt(S, "frameBg"))
