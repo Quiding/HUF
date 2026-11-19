@@ -979,6 +979,9 @@ local function Build()
     textLayer:SetAllPoints(Minimap)
     iconLayer = CreateFrame("Frame", nil, Minimap)
     iconLayer:SetAllPoints(Minimap)
+    -- the game's icons (mail, crafting orders) ask their parent to lay them out
+    iconLayer.Layout = function() end
+    iconLayer.MarkDirty = function() end
 
     -- unlock mode: drag the map
     mover = CreateFrame("Button", nil, holder)
