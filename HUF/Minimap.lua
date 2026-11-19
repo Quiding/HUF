@@ -161,7 +161,15 @@ local function PlaceIcon(info, f, second)
         local p = POS[cfg.pos] or POS.CENTER
         f:ClearAllPoints()
         local sc = S().iconScale
-        f:SetPoint(p[1], Minimap, p[2], (cfg.x or 0) / sc, (cfg.y or 0) / sc)
+        -- tracking on the data bar's end: centred in its slot, above the bar
+        local slot = info.key == "tracking" and ns.DataBars and ns.DataBars.TrackingSlot and ns.DataBars.TrackingSlot()
+        if slot then
+            f:SetPoint("CENTER", slot, "CENTER", 0, 0)
+            if f.SetFrameStrata then f:SetFrameStrata(slot:GetFrameStrata()) end
+            f:SetFrameLevel(slot:GetFrameLevel() + 3)
+        else
+            f:SetPoint(p[1], Minimap, p[2], (cfg.x or 0) / sc, (cfg.y or 0) / sc)
+        end
     end
     d.busy = false
 end

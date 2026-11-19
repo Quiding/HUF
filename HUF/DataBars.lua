@@ -56,6 +56,16 @@ local function Build()
     bar.bg = bar:CreateTexture(nil, "BACKGROUND")
     bar.bg:SetAllPoints()
     bar.border = ns.UI.Border(bar, 0, 0, 0, 1)
+    -- the tracking button's slot at the left end (Minimap places it there)
+    bar.slot = CreateFrame("Frame", nil, bar)
+    bar.slot.bg = bar.slot:CreateTexture(nil, "BACKGROUND", nil, 1)
+    bar.slot.bg:SetAllPoints()
+    bar.slot.bg:SetColorTexture(1, 1, 1, 0.04)
+    bar.slot.line = bar.slot:CreateTexture(nil, "ARTWORK")
+    bar.slot.line:SetPoint("TOPRIGHT")
+    bar.slot.line:SetPoint("BOTTOMRIGHT")
+    bar.slot.line:SetWidth(1)
+    bar.slot.line:SetColorTexture(0, 0, 0, 1)
     for _, info in ipairs(BLOCKS) do
         local b = CreateFrame("Button", nil, bar)
         b.info = info
@@ -75,6 +85,18 @@ local function Build()
         blocks[info.key] = b
     end
     bar:Hide()
+end
+
+-- the tracking button sits on the bar's end: Minimap's tracking at
+-- "Below, left" (bar under the map) or "Above, left" (bar over it)
+function DB.TrackingSlot()
+    local s = S()
+    if not (bar and bar:IsShown() and s.enabled) then return nil end
+    local t = ns.db.minimap and ns.db.minimap.icons and ns.db.minimap.icons.tracking
+    if not t or t.mode == "NEVER" then return nil end
+    local want = (s.position == "ABOVE") and "ABOVE_LEFT" or "BELOW_LEFT"
+    if t.pos ~= want then return nil end
+    return bar.slot
 end
 
 -- the counts (and which blocks show: no guild, no guild block)
@@ -105,7 +127,17 @@ function DB.Update()
         widths[i] = w
         total = total + w + (i > 1 and s.spacing or 0)
     end
-    local x = -total / 2
+    -- the tracking slot takes the left end; the counts centre in the rest
+    local slot = DB.TrackingSlot()
+    local slotW = slot and s.height or 0
+    bar.slot:SetShown(slot ~= nil)
+    if slot then
+        bar.slot:ClearAllPoints()
+        bar.slot:SetPoint("TOPLEFT")
+        bar.slot:SetPoint("BOTTOMLEFT")
+        bar.slot:SetWidth(slotW)
+    end
+    local x = -total / 2 + slotW / 2
     for i, b in ipairs(shown) do
         b:ClearAllPoints()
         b:SetSize(widths[i], s.height)
@@ -143,6 +175,8 @@ function DB.Apply()
     for _, b in pairs(blocks) do ns.ApplyFont(b.text, "GLOBAL", s.fontSize, "GLOBAL") end
     bar:Show()
     DB.Update()
+    -- the tracking button follows (into the slot or out of it)
+    if ns.Minimap and ns.Minimap.PlaceIcons then ns.Minimap.PlaceIcons() end
 end
 
 local function Soon()
