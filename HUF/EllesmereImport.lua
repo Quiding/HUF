@@ -904,6 +904,13 @@ local function ConvertMinimap(addon, m, notes)
         notes[#notes + 1] = "Minimap: Ellesmere's difficulty text is the game's difficulty icon in HUF."
     end
 
+    -- Ellesmere's element row (tracking) under the map's left edge, its
+    -- button flyout in the map's lower left
+    if ic.tracking and ic.tracking.mode ~= "NEVER" then
+        ic.tracking.mode, ic.tracking.pos, ic.tracking.x, ic.tracking.y = "ALWAYS", "BELOW_LEFT", 0, -(m.borderSize + 1)
+    end
+    if ic.addonbar then ic.addonbar.mode, ic.addonbar.pos, ic.addonbar.x, ic.addonbar.y = "ALWAYS", "BOTTOMLEFT", 2, 2 end
+
     -- addon buttons: Ellesmere gathers them in its flyout; HUF's addon bar
     if not G("hideAddonButtons", false) then
         m.addonBar = true
@@ -914,6 +921,38 @@ local function ConvertMinimap(addon, m, notes)
     if type(G("ungroupedButtons")) == "table" and next(G("ungroupedButtons")) then
         notes[#notes + 1] = "Minimap: buttons Ellesmere keeps outside its flyout are in HUF's addon bar with the others."
     end
+end
+
+-- Ellesmere's "Minimap Companion" data bar (EllesmereUIDataBars) -> HUF's
+-- minimap data bar: on, height, background; its micro menu's social / guild
+local DB_FOLDER = "EllesmereUIDataBars"
+local function ConvertDataBar(addon, d, notes)
+    local found
+    for _, b in pairs(type(addon.bars) == "table" and addon.bars or {}) do
+        if type(b) == "table" and (b.name == "Minimap Companion") then found = b end
+    end
+    if not found then return false end
+    d.enabled = true
+    d.position = "BELOW"
+    d.height = math.max(14, math.floor(Num(found.thickness, 24) + 0.5))
+    local th = type(found.theme) == "table" and found.theme or {}
+    local mc = type(th.modernColor) == "table" and th.modernColor
+    if mc then
+        d.bgColor = Color(mc, d.bgColor)
+        d.bgAlpha = Num(mc.a, 0.95)
+    end
+    d.borderSize = found.hideBorder and 0 or 1
+    local social, guild = false, false
+    for _, blk in pairs(type(found.blocks) == "table" and found.blocks or {}) do
+        if type(blk) == "table" and blk.type == "micromenu" then
+            local st = type(blk.settings) == "table" and blk.settings or {}
+            social = social or st.social == true
+            guild = guild or st.guild == true
+        end
+    end
+    d.friends, d.guild = social, guild
+    notes[#notes + 1] = "Minimap data bar: hide Ellesmere's Minimap Companion bar in its Data Bars (its other bars stay)."
+    return true
 end
 
 ---------------------------------------------------------------------------
@@ -956,6 +995,15 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         what[#what + 1] = "minimap"
         parts[#parts + 1] = { title = "Minimap", tbl = out.minimap, on = true,
             why = "off in Ellesmere", folder = MM_FOLDER, module = "EllesmereUI Minimap" }
+    end
+    local dbA = prof and prof.addons and prof.addons[DB_FOLDER]
+    if type(dbA) == "table" and type(out.dataBars) == "table" and out.dataBars.minimap then
+        local okB, res = pcall(ConvertDataBar, dbA, out.dataBars.minimap, notes)
+        if not okB then return false, "Could not convert the data bar: " .. tostring(res) end
+        if res then
+            what[#what + 1] = "minimap data bar"
+            parts[#parts + 1] = { title = "Minimap data bar", tbl = out.dataBars.minimap, on = true, why = "off in Ellesmere" }
+        end
     end
     local rf = prof and prof.addons and prof.addons[RF_FOLDER]
     if type(rf) == "table" and out.units.party then

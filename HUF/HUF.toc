@@ -36,5 +36,7 @@ ClickCastConfig.lua
 NameplatesConfig.lua
 DamageMeterConfig.lua
 MinimapConfig.lua
+DataBars.lua
+DataBarsConfig.lua
 Recorder.lua
 Help.lua

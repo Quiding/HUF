@@ -507,20 +507,31 @@ local function BuildDefaults()
                 system = { mode = "HOVER", pos = "BOTTOMRIGHT", x = -4, y = 4, size = 11, color = "WHITE", show = "BOTH" },
             },
             icons = {
-                tracking    = { mode = "HOVER", pos = "LEFT", x = 2, y = 0 },
+                tracking    = { mode = "ALWAYS", pos = "BELOW_LEFT", x = 0, y = -2 },   -- on the data bar's left end
                 calendar    = { mode = "HOVER", pos = "TOPRIGHT", x = -2, y = -2 },
                 mail        = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = 0 },
                 crafting    = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = -26 },
                 difficulty  = { mode = "ALWAYS", pos = "TOPLEFT", x = 2, y = -2 },
                 landing     = { mode = "HOVER", pos = "LEFT", x = 2, y = -30 },
                 zoom        = { mode = "NEVER", pos = "BOTTOMRIGHT", x = -2, y = 24 },
-                addonbar    = { mode = "ALWAYS", pos = "RIGHT", x = -4, y = 28 },
+                addonbar    = { mode = "ALWAYS", pos = "BOTTOMLEFT", x = 2, y = 2 },    -- the button bag, lower left
             },
             buttonMode = "HOVER",       -- addon buttons on the map: ALWAYS | HOVER | NEVER (each one can differ: buttons[name])
             buttons = {},
             addonBar = false,           -- every addon button in one "addon bar" button
             barGrow = "AUTO",           -- AUTO (towards the screen's middle) | LEFT | RIGHT | UP | DOWN
             barIconSize = 26, barTimeout = 10,
+        },
+        -- data bars: for now the minimap data bar (DataBars.lua)
+        dataBars = {
+            minimap = {
+                enabled = false,
+                position = "BELOW",         -- BELOW | ABOVE the map
+                height = 22, gap = 0,
+                bgColor = C(0.067, 0.067, 0.067), bgAlpha = 0.95, borderSize = 1,
+                friends = true, guild = true,
+                fontSize = 12, spacing = 16,
+            },
         },
         nameplates = {
             enabled = true,
