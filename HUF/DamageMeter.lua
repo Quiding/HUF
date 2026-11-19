@@ -33,6 +33,23 @@ local TYPES = {
     { key = "Threat", text = "Threat", threat = true },     -- HUF's own: the group's threat on your enemy
 }
 DM.TYPES = TYPES
+-- title bar icons (setting "titleIcons")
+local TYPE_ICONS = {
+    DamageDone = "Interface\\Icons\\INV_Sword_04",
+    HealingDone = "Interface\\Icons\\Spell_Holy_FlashHeal",
+    DamageTaken = "Interface\\Icons\\INV_Shield_06",
+    AvoidableDamageTaken = "Interface\\Icons\\Spell_Fire_Fire",
+    EnemyDamageTaken = "Interface\\Icons\\Ability_DualWield",
+    Interrupts = "Interface\\Icons\\Ability_Kick",
+    Dispels = "Interface\\Icons\\Spell_Holy_DispelMagic",
+    Deaths = "Interface\\Icons\\Ability_Rogue_FeignDeath",
+    Threat = "Interface\\Icons\\Spell_Nature_Reincarnation",
+}
+local SESSION_ICONS = {
+    CURRENT = "Interface\\Icons\\Spell_Holy_BorrowedTime",      -- this fight
+    OVERALL = "Interface\\Icons\\INV_Misc_PocketWatch_01",      -- all fights
+    EARLIER = "Interface\\Icons\\INV_Misc_Note_01",              -- an earlier fight
+}
 local TYPE_BY_KEY = {}
 for i, t in ipairs(TYPES) do t.index = i TYPE_BY_KEY[t.key] = t end
 
@@ -272,7 +289,7 @@ local function ValueText(fs, src, t)
     elseif c.numbers == "PERSECOND" then
         fs:SetText(Short(ps))
     else
-        local ok = pcall(fs.SetFormattedText, fs, "%s (%s)", Short(total), Short(ps))
+        local ok = pcall(fs.SetFormattedText, fs, c.numbers == "BAR" and "%s | %s" or "%s (%s)", Short(total), Short(ps))
         if not ok then fs:SetText(Short(total)) end
     end
 end
@@ -289,6 +306,13 @@ local ROW_POOL = 40
 local MAX_WINDOWS = 5
 
 local function WC() return win.cfg end
+-- rows of the window at hand: its own (windows[i].rows, e.g. from an
+-- EllesmereUI import) or the shared setting
+local function Rows()
+    local r = win and win.cfg and win.cfg.rows
+    if type(r) == "number" and r >= 1 then return r end
+    return S().rows
+end
 
 -- per-window settings; the first window takes over the settings from
 -- before there were several windows
@@ -468,6 +492,22 @@ local function SpellInfo(id)
     return name, icon
 end
 
+-- class icon before a bar (settings "icons" = CLASS); a class the game keeps
+-- secret leaves the spot empty
+local CLASS_ICONS = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
+local function ClassIcon(r, src)
+    if not r.iconOn then return end
+    local class = src.classFilename
+    local coords = Plain(class) and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
+    if coords then
+        r.icon:SetTexture(CLASS_ICONS)
+        r.icon:SetTexCoord(coords[1] + 0.02, coords[2] - 0.02, coords[3] + 0.02, coords[4] - 0.02)
+        r.icon:Show()
+    else
+        r.icon:Hide()
+    end
+end
+
 local function BarColor(bar, src)
     local c = S()
     if src.threatStatus ~= nil and c.threatColors then
@@ -507,6 +547,13 @@ local function Row(i)
     r = CreateFrame("StatusBar", nil, win.body)
     r.bg = r:CreateTexture(nil, "BACKGROUND")
     r.bg:SetAllPoints()
+    -- class icon before the bar (settings "icons"), border around icon and bar
+    r.icon = r:CreateTexture(nil, "ARTWORK")
+    r.icon:SetPoint("RIGHT", r, "LEFT", 0, 0)
+    r.icon:Hide()
+    r.edge = CreateFrame("Frame", nil, r)
+    r.edge:SetPoint("BOTTOMRIGHT")
+    r.border = ns.Frame.MakeBorder(r.edge)
     r.left = r:CreateFontString(nil, "OVERLAY")
     r.right = r:CreateFontString(nil, "OVERLAY")
     ns.ApplyFont(r.left, "GLOBAL", 11, "OUTLINE")
@@ -520,6 +567,9 @@ local function Row(i)
         if button == "LeftButton" and self.src then
             win = self.win
             DM.OpenBreakdown(self.src, self.name)
+        elseif button == "RightButton" and S().breakdownInline then
+            win = self.win
+            DM.OpenTypes()
         end
     end)
     r:SetScript("OnEnter", function(self)
@@ -541,20 +591,38 @@ local function RefreshOne()
     t = t or TYPES[1]
     win.typeText:SetText(t.text)
     win.sessionText:SetText(SessionLabel())
+    if c.titleIcons then
+        -- inside the title bar: at most its height - 2
+        local size = math.max(8, math.min(c.titleIconSize or 18, (c.titleHeight or 20) - 2))
+        win.typeB:SetIcon(TYPE_ICONS[t.key] or TYPE_ICONS.DamageDone, size)
+        local sk = (wc.session == "OVERALL" and "OVERALL") or (type(wc.session) == "number" and "EARLIER") or "CURRENT"
+        win.sessB:SetIcon(SESSION_ICONS[sk], size)
+        win.sessB:SetShown(not t.threat)                 -- threat: no fight to pick
+        win.label:SetText(t.text)
+    else
+        win.typeB:SetIcon(nil)
+        win.sessB:SetIcon(nil)
+        win.sessB:Show()
+        win.label:SetText("")
+    end
     local sources = session and session.combatSources or {}
     local n = #sources
     win.sessB:SetDisabled(t.threat and true or false)    -- threat: the enemy's name stands there
     if t.threat then
         win.sessionText:SetText(session and session.title or "")
+        -- icon title bar: the enemy's name where the meter type's name stands
+        if c.titleIcons and session and session.title and session.title ~= "" then
+            pcall(win.label.SetFormattedText, win.label, "%s: %s", t.text, session.title)
+        end
         win.empty:SetText(session and session.empty or "No threat yet")
     else
         win.empty:SetText("No data yet")
     end
     win.addB:SetShown(S().windowCount < MAX_WINDOWS)
-    win.offset = math.max(0, math.min(win.offset or 0, n - c.rows))
+    win.offset = math.max(0, math.min(win.offset or 0, n - Rows()))
     local maxAmount = sources[1] and sources[1].totalAmount
     local shown = 0
-    for i = 1, c.rows do
+    for i = 1, Rows() do
         local r = Row(i)
         local src = sources[i + win.offset]
         if src then
@@ -579,13 +647,14 @@ local function RefreshOne()
                 if not pcall(r.SetValue, r, src.totalAmount or 0) then r:SetValue(0) end
             end
             BarColor(r, src)
+            ClassIcon(r, src)
             r:Show()
         else
             r.src = nil
             r:Hide()
         end
     end
-    for i = c.rows + 1, #win.rows do win.rows[i]:Hide() end
+    for i = Rows() + 1, #win.rows do win.rows[i]:Hide() end
     win.empty:SetShown(shown == 0)
 end
 
@@ -595,19 +664,218 @@ function DM.Refresh()
         win = w
         RefreshOne()
     end
+    -- every window's own breakdown / meter list
+    for _, w in ipairs(wins) do
+        if w.bd and w.bd.open then
+            DM.UseWindow(w)
+            DM.RefreshBreakdown()
+        end
+    end
     win = keep
-    if bd.open then DM.RefreshBreakdown() end
 end
 
 ---------------------------------------------------------------------------
 -- Breakdown panel: beside the meter (right, or left when there's no room)
+-- or in its place. Every window has its own (w.panel) and its own state
+-- (w.bd: what is open); `panel` and `bd` are the window at hand's.
 ---------------------------------------------------------------------------
 local panel
+function DM.UseWindow(w)
+    win = w
+    if not w.bd then w.bd = { open = false } end
+    bd = w.bd
+    panel = w.panel
+end
+---------------------------------------------------------------------------
+-- Spell details on hover (a breakdown row): a box beside the window with
+-- the spell's total, per second, share and rank, and the player's damage
+-- per target. The game's meter data has no hits, crits or misses (only the
+-- combat log has those, and addons may not read it here).
+---------------------------------------------------------------------------
+local hover
+local HOVER_LINES = 14
+
+local function BuildHover()
+    if hover then return end
+    local h = CreateFrame("Frame", "HUF_DamageMeterSpell", UIParent)
+    hover = h
+    h:SetFrameStrata("TOOLTIP")
+    h:SetClampedToScreen(true)
+    h.fill = h:CreateTexture(nil, "BACKGROUND")
+    h.fill:SetAllPoints()
+    h.border = UI.Border(h, 0, 0, 0, 1)
+    h.top = h:CreateTexture(nil, "BORDER")
+    h.top:SetPoint("TOPLEFT")
+    h.top:SetPoint("TOPRIGHT")
+    h.icon = h:CreateTexture(nil, "ARTWORK")
+    h.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    h.head = h:CreateFontString(nil, "OVERLAY")
+    h.head:SetJustifyH("LEFT")
+    h.head:SetWordWrap(false)
+    h.lines = {}
+    for i = 1, HOVER_LINES do
+        local l = {}
+        l.left = h:CreateFontString(nil, "OVERLAY")
+        l.right = h:CreateFontString(nil, "OVERLAY")
+        l.left:SetJustifyH("LEFT")
+        l.left:SetWordWrap(false)
+        l.right:SetJustifyH("RIGHT")
+        h.lines[i] = l
+    end
+    h:Hide()
+end
+
+-- the session of a meter type, as the window shows it
+local function SessionOf(c, mtype)
+    if not (Available() and mtype ~= nil) then return nil end
+    local ok, s
+    if type(c.session) == "number" and C_DamageMeter.GetCombatSessionFromID then
+        ok, s = pcall(C_DamageMeter.GetCombatSessionFromID, c.session, mtype)
+    elseif C_DamageMeter.GetCombatSessionFromType then
+        local st = c.session == "OVERALL" and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        ok, s = pcall(C_DamageMeter.GetCombatSessionFromType, st, mtype)
+    end
+    return ok and type(s) == "table" and s or nil
+end
+local function SourceOf(c, mtype, guid, cid)
+    local ok, s
+    if type(c.session) == "number" and C_DamageMeter.GetCombatSessionSourceFromID then
+        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromID, c.session, mtype, guid, cid)
+    elseif C_DamageMeter.GetCombatSessionSourceFromType then
+        local st = c.session == "OVERALL" and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        ok, s = pcall(C_DamageMeter.GetCombatSessionSourceFromType, st, mtype, guid, cid)
+    end
+    return ok and type(s) == "table" and s or nil
+end
+
+-- the player's damage per enemy (from the enemies' damage taken; the
+-- attackers' names are readable only out of combat), largest first
+local function TargetsOf(c, realName)
+    if not (Plain(realName) and Enum.DamageMeterType.EnemyDamageTaken) then return nil end
+    local s = SessionOf(c, Enum.DamageMeterType.EnemyDamageTaken)
+    if not (s and type(s.combatSources) == "table") then return nil end
+    local list = {}
+    for _, enemy in ipairs(s.combatSources) do
+        local sd = SourceOf(c, Enum.DamageMeterType.EnemyDamageTaken, enemy.sourceGUID, enemy.sourceCreatureID)
+        local sum = 0
+        for _, sp in ipairs(sd and sd.combatSpells or {}) do
+            local det = sp.combatSpellDetails
+            local who, amt = det and det.unitName, sp.totalAmount
+            if Plain(who) and who == realName and Plain(amt) and type(amt) == "number" then sum = sum + amt end
+        end
+        if sum > 0 then
+            list[#list + 1] = { name = Plain(enemy.name) and enemy.name or "?", total = sum }
+        end
+    end
+    table.sort(list, function(a, b) return a.total > b.total end)
+    return list
+end
+
+local function ShowHover(row)
+    local sp = row.sp
+    if not sp then return end
+    BuildHover()
+    local c = S()
+    local h = hover
+    local w = bd.win or win
+    -- look: the meter's
+    local bg, tc = c.bgColor or { r = 0.04, g = 0.04, b = 0.05 }, c.titleColor or { r = 0.08, g = 0.08, b = 0.09 }
+    h:SetScale(c.scale)
+    h.fill:SetColorTexture(bg.r, bg.g, bg.b, math.max(0.9, c.bgAlpha))
+    h.top:SetColorTexture(tc.r, tc.g, tc.b, 1)
+    local th = c.titleHeight or 20
+    h.top:SetHeight(th)
+    h.icon:SetSize(th - 4, th - 4)
+    h.icon:ClearAllPoints()
+    h.icon:SetPoint("TOPLEFT", 4, -2)
+    h.head:ClearAllPoints()
+    h.head:SetPoint("LEFT", h.icon, "RIGHT", 4, 0)
+    h.head:SetPoint("RIGHT", h, "TOPRIGHT", -6, -th / 2)
+    ns.ApplyFont(h.head, c.font, c.titleSize, c.outline)
+    local sname, icon = SpellInfo(sp.spellID)
+    h.icon:SetTexture(icon or 134400)
+    if sname ~= nil then h.head:SetText(sname)
+    elseif sp.creatureName ~= nil then h.head:SetText(sp.creatureName)
+    else h.head:SetText("Melee / other") end
+
+    -- the lines: label, value (a header line has no value)
+    local lines = {}
+    local function Add(l, r, head) lines[#lines + 1] = { l, r, head } end
+    local t = TYPE_BY_KEY[(w and w.cfg and w.cfg.meterType) or "DamageDone"] or TYPES[1]
+    local total, ps = sp.totalAmount, sp.amountPerSecond
+    Add(t.text, Short(total))
+    if ps ~= nil then Add("Per second", Short(ps)) end
+    local function Join(a, b)
+        local ok, txt = pcall(function() return a .. b end)
+        return ok and txt or a
+    end
+    if row.share then Add(Join("Share of ", bd.name or "the total"), row.share .. "%") end
+    if row.rank then Add("Rank", ("%d of %d"):format(row.rank, row.count or row.rank)) end
+    if t.key == "DamageDone" then
+        local src = bd.src
+        local targets = src and TargetsOf(w.cfg, src.name)
+        if targets and #targets > 0 then
+            Add(Join("Targets of ", bd.name or "the player") .. " (all spells)", nil, true)
+            for i = 1, math.min(#targets, HOVER_LINES - #lines) do Add(targets[i].name, Short(targets[i].total)) end
+        elseif InCombatLockdown() then
+            Add("Targets: after the fight", nil, true)
+        end
+    end
+    Add("Hits, crits and misses: not in the game's meter data", nil, true)
+
+    local lh = math.max(c.fontSize + 4, 14)
+    local y = -(th + 4)
+    for i, l in ipairs(h.lines) do
+        local e = lines[i]
+        l.left:ClearAllPoints()
+        l.right:ClearAllPoints()
+        if e then
+            ns.ApplyFont(l.left, c.font, e[3] and math.max(8, c.fontSize - 2) or c.fontSize, c.outline)
+            ns.ApplyFont(l.right, c.font, c.fontSize, c.outline)
+            l.left:SetPoint("TOPLEFT", 6, y)
+            l.left:SetPoint("TOPRIGHT", -6, y)
+            l.right:SetPoint("TOPRIGHT", -6, y)
+            local okL = pcall(l.left.SetText, l.left, e[1])
+            if not okL then l.left:SetText("?") end
+            if e[3] then l.left:SetTextColor(0.6, 0.6, 0.62) else l.left:SetTextColor(1, 1, 1) end
+            if e[2] ~= nil then
+                if not pcall(l.right.SetText, l.right, e[2]) then l.right:SetText("") end
+                l.left:SetPoint("TOPRIGHT", l.right, "TOPLEFT", -6, 0)
+            else
+                l.right:SetText("")
+            end
+            l.left:Show()
+            l.right:Show()
+            y = y - lh
+        else
+            l.left:Hide()
+            l.right:Hide()
+        end
+    end
+    h:SetSize(c.width, -y + 6)
+    -- beside the window (the breakdown panel's side when it stands there)
+    h:ClearAllPoints()
+    local anchor = (panel and panel:IsShown() and not c.breakdownInline) and panel or w
+    local right = (anchor:GetRight() or 0) + c.width + 4
+    local screen = (UIParent:GetRight() or 1920) * (UIParent:GetEffectiveScale() or 1)
+    if right * (anchor:GetEffectiveScale() or 1) > screen then
+        h:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -2, 0)
+    else
+        h:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 2, 0)
+    end
+    h:Show()
+end
+
+local function HideHover()
+    if hover then hover:Hide() end
+end
+
 local TitleButton      -- defined with the window's title bar below
 local function PanelRow(i)
     local r = panel.rows[i]
     if r then return r end
     r = CreateFrame("Frame", nil, panel.body)
+    r.w = win
     r.icon = r:CreateTexture(nil, "ARTWORK")
     r.icon:SetPoint("TOPLEFT")
     r.icon:SetPoint("BOTTOMLEFT")
@@ -615,6 +883,10 @@ local function PanelRow(i)
     r.bar = CreateFrame("StatusBar", nil, r)
     r.bar:SetPoint("TOPLEFT", r.icon, "TOPRIGHT", 1, 0)
     r.bar:SetPoint("BOTTOMRIGHT")
+    r.edge = CreateFrame("Frame", nil, r)
+    r.edge:SetAllPoints()
+    r.edge:SetFrameLevel(r.bar:GetFrameLevel() + 2)
+    r.border = ns.Frame.MakeBorder(r.edge)
     r.bg = r.bar:CreateTexture(nil, "BACKGROUND")
     r.bg:SetAllPoints()
     r.left = r.bar:CreateFontString(nil, "OVERLAY")
@@ -625,44 +897,73 @@ local function PanelRow(i)
     r.left:SetWordWrap(false)
     r.right:SetJustifyH("RIGHT")
     r:EnableMouse(true)
+    -- hover: the spell's details in a box beside the window
     r:SetScript("OnEnter", function(self)
-        local id = self.spellID
-        if id == nil or not Plain(id) then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if pcall(GameTooltip.SetSpellByID, GameTooltip, id) then GameTooltip:Show() end
+        if self.typeKey or not self.sp then return end
+        DM.UseWindow(self.w)
+        local ok, err = pcall(ShowHover, self)
+        if not ok then ns.Log("meter", "spell details: %s", tostring(err)) end
     end)
-    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    r:SetScript("OnLeave", function() HideHover() end)
+    r:SetScript("OnMouseUp", function(self, button)
+        DM.UseWindow(self.w)
+        if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown()
+        elseif button == "LeftButton" and self.typeKey and bd.types then
+            -- meter list: this meter in the window
+            local w = bd.win
+            DM.CloseBreakdown()
+            if w and w.cfg then
+                w.cfg.meterType = self.typeKey
+                if self.typeKey == "Threat" and not InCombatLockdown() then w.keepThreat = true end
+                w.offset = 0
+                DM.Refresh()
+            end
+        end
+    end)
     panel.rows[i] = r
     return r
 end
 
 local function BuildPanel()
-    if panel then return end
-    local p = CreateFrame("Frame", "HUF_DamageMeterBreakdown", UIParent)
+    if win.panel then panel = win.panel return end
+    local w = win
+    local p = CreateFrame("Frame", "HUF_DamageMeterBreakdown" .. (w.index or 1), UIParent)
+    w.panel = p
     panel = p
+    p.w = w
     p:SetFrameStrata("MEDIUM")
     p:SetClampedToScreen(true)
     p:EnableMouse(true)
     p.rows = {}
     p.fill = p:CreateTexture(nil, "BACKGROUND")
     p.fill:SetAllPoints()
-    UI.Border(p, 0.15, 0.15, 0.17, 1)
+    p.border = UI.Border(p, 0.15, 0.15, 0.17, 1)
     local title = CreateFrame("Frame", nil, p)
     title:SetPoint("TOPLEFT")
     title:SetPoint("TOPRIGHT")
     title:SetHeight(20)
+    p.titleBar = title
     p.title = title:CreateTexture(nil, "BORDER")
     p.title:SetAllPoints()
     p.line = title:CreateTexture(nil, "ARTWORK")
     p.line:SetPoint("BOTTOMLEFT")
     p.line:SetPoint("BOTTOMRIGHT")
     p.line:SetHeight(1)
-    local close = TitleButton(title, function() DM.CloseBreakdown() end, "Close")
+    local close = TitleButton(title, function() DM.UseWindow(w) DM.CloseBreakdown() end, "Close")
     close:SetPoint("TOPRIGHT", -4, 0)
     close:SetPoint("BOTTOMRIGHT", -4, 0)
     close:SetWidth(16)
     close.text:SetText("x")
     p.closeText = close.text
+    p.closeB = close
+    -- inside the window: back to the names
+    local back = TitleButton(title, function() DM.UseWindow(w) DM.CloseBreakdown() end, "Back to the names (or right-click the list)")
+    back:SetPoint("TOPLEFT", 4, 0)
+    back:SetPoint("BOTTOMLEFT", 4, 0)
+    back:SetWidth(16)
+    back.text:SetText("<")
+    p.backB = back
+    p.backText = back.text
     p.head = title:CreateFontString(nil, "OVERLAY")
     ns.ApplyFont(p.head, "GLOBAL", 11, "OUTLINE")
     p.head:SetPoint("LEFT", 6, 0)
@@ -674,8 +975,14 @@ local function BuildPanel()
     p.body:SetPoint("BOTTOMRIGHT", -1, 1)
     p.body:EnableMouseWheel(true)
     p.body:SetScript("OnMouseWheel", function(_, delta)
+        DM.UseWindow(w)
         p.offset = math.max(0, (p.offset or 0) - delta)
         DM.RefreshBreakdown()
+    end)
+    p.body:EnableMouse(true)
+    p.body:SetScript("OnMouseUp", function(_, button)
+        DM.UseWindow(w)
+        if button == "RightButton" and S().breakdownInline then DM.CloseBreakdown() end
     end)
     p.empty = p.body:CreateFontString(nil, "OVERLAY")
     ns.ApplyFont(p.empty, "GLOBAL", 11, "OUTLINE")
@@ -691,19 +998,46 @@ local function LayoutPanel()
     p:SetScale(c.scale)
     p:SetSize(c.width, win:GetHeight())
     p:ClearAllPoints()
-    local right = (win:GetRight() or 0) + c.width + 4
-    local screen = (UIParent:GetRight() or GetScreenWidth and GetScreenWidth() or 1920) * (UIParent:GetEffectiveScale() or 1)
-    if right * (win:GetEffectiveScale() or 1) > screen then
-        p:SetPoint("TOPRIGHT", win, "TOPLEFT", -2, 0)
+    local inline = c.breakdownInline
+    if inline then
+        -- in the window's place, above it: "<" (or a right-click) goes back
+        p:SetPoint("TOPLEFT", win, "TOPLEFT", 0, 0)
+        p:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", 0, 0)
+        p:SetFrameLevel(win:GetFrameLevel() + 20)
     else
-        p:SetPoint("TOPLEFT", win, "TOPRIGHT", 2, 0)
+        local right = (win:GetRight() or 0) + c.width + 4
+        local screen = (UIParent:GetRight() or GetScreenWidth and GetScreenWidth() or 1920) * (UIParent:GetEffectiveScale() or 1)
+        if right * (win:GetEffectiveScale() or 1) > screen then
+            p:SetPoint("TOPRIGHT", win, "TOPLEFT", -2, 0)
+        else
+            p:SetPoint("TOPLEFT", win, "TOPRIGHT", 2, 0)
+        end
     end
+    p.backB:SetShown(inline and true or false)
+    p.closeB:SetShown(not inline)
+    p.head:ClearAllPoints()
+    p.head:SetPoint("LEFT", inline and p.backB or p.titleBar, inline and "RIGHT" or "LEFT", inline and 4 or 6, 0)
+    p.head:SetPoint("RIGHT", p.closeB, "LEFT", -4, 0)
+    -- the window's title bar and background settings
     local a = ns.ACCENT
-    p.fill:SetColorTexture(0.04, 0.04, 0.05, c.bgAlpha)
-    p.title:SetColorTexture(0.08, 0.08, 0.09, math.min(1, c.bgAlpha + 0.15))
+    local th = c.titleHeight or 20
+    local bg, tc = c.bgColor or { r = 0.04, g = 0.04, b = 0.05 }, c.titleColor or { r = 0.08, g = 0.08, b = 0.09 }
+    local ta = (c.titleAlpha or -1) >= 0 and c.titleAlpha or math.min(1, c.bgAlpha + 0.15)
+    p.titleBar:SetHeight(th)
+    p.body:ClearAllPoints()
+    p.body:SetPoint("TOPLEFT", 1, -(th + 1))
+    p.body:SetPoint("BOTTOMRIGHT", -1, 1)
+    p.fill:SetColorTexture(bg.r, bg.g, bg.b, c.bgAlpha)
+    p.title:SetColorTexture(tc.r, tc.g, tc.b, ta)
+    p.border:SetShown(c.windowBorder ~= false)
+    -- inside the window: the window's own contents step aside, so the
+    -- breakdown has exactly its background (also when see-through)
+    DM.Cover(win, inline and true or false)
     p.line:SetColorTexture(a[1], a[2], a[3], 0.9)
+    p.line:SetShown(c.titleLine ~= false)
     ns.ApplyFont(p.head, c.font, c.titleSize, c.outline)
     ns.ApplyFont(p.closeText, c.font, c.titleSize, c.outline)
+    ns.ApplyFont(p.backText, c.font, c.titleSize, c.outline)
     ns.ApplyFont(p.empty, c.font, c.fontSize, c.outline)
     local tex = ns.TexturePath(c.texture)
     for i = 1, ROW_POOL do
@@ -714,7 +1048,15 @@ local function LayoutPanel()
         r:SetHeight(c.rowHeight)
         r.icon:SetWidth(c.rowHeight)
         r.bar:SetStatusBarTexture(tex)
-        r.bg:SetColorTexture(0, 0, 0, 0.35)
+        -- inside the window: drawn like the meter's rows (icon flush, the same
+        -- border and empty-bar colour); beside it as before
+        local bb = c.barBgColor or { r = 0, g = 0, b = 0 }
+        r.bar:ClearAllPoints()
+        r.bar:SetPoint("TOPLEFT", r.icon, "TOPRIGHT", inline and 0 or 1, 0)
+        r.bar:SetPoint("BOTTOMRIGHT")
+        if inline then r.bg:SetColorTexture(bb.r, bb.g, bb.b, c.barBgAlpha or 0.35)
+        else r.bg:SetColorTexture(0, 0, 0, 0.35) end
+        ns.Frame.LayoutBorder(r.border, r.edge, inline and (c.rowBorder or 0) or 0, { r = 0, g = 0, b = 0 }, 1)
         ns.ApplyFont(r.left, c.font, c.fontSize, c.outline)
         ns.ApplyFont(r.right, c.font, c.fontSize, c.outline)
         r.left:ClearAllPoints()
@@ -722,17 +1064,16 @@ local function LayoutPanel()
         r.left:SetPoint("RIGHT", r.right, "LEFT", -4, 0)
         r.right:ClearAllPoints()
         r.right:SetPoint("RIGHT", -4, 0)
-        if i > c.rows then r:Hide() end
+        if i > Rows() then r:Hide() end
     end
 end
 
-function DM.OpenBreakdown(src, name)
-    local t = TYPE_BY_KEY[WC().meterType] or TYPES[1]
-    if t.threat then return end
-    if bd.open and bd.src == src then DM.CloseBreakdown() return end
-    local guid, cid = RowIdentity(src)
-    bd = { open = true, src = src, guid = guid, cid = cid, name = name, unit = RowUnit(src),
-           color = src.classFilename, win = win }
+-- meter list inside the window (right-click on the names): a row per meter
+-- type, the current one lit; a click picks it, a right-click goes back
+function DM.OpenTypes()
+    DM.UseWindow(win)
+    bd = { open = true, types = true, win = win }
+    win.bd = bd
     BuildPanel()
     LayoutPanel()
     panel.offset = 0
@@ -740,21 +1081,99 @@ function DM.OpenBreakdown(src, name)
     DM.RefreshBreakdown()
 end
 
+local function RefreshTypes()
+    local c = S()
+    local cur = bd.win and bd.win.cfg and bd.win.cfg.meterType
+    panel.head:SetText("Meters")
+    panel.offset = math.max(0, math.min(panel.offset or 0, #TYPES - Rows()))
+    local muted = c.titleIconsMuted ~= false
+    local a = ns.ACCENT
+    local shown = 0
+    for i = 1, Rows() do
+        local r = PanelRow(i)
+        local t = TYPES[i + (panel.offset or 0)]
+        if t then
+            shown = shown + 1
+            r.typeKey, r.spellID, r.sp = t.key, nil, nil
+            r.icon:SetTexture(TYPE_ICONS[t.key] or TYPE_ICONS.DamageDone)
+            r.icon:SetDesaturated(muted)
+            if muted then r.icon:SetVertexColor(0.75, 0.75, 0.77) else r.icon:SetVertexColor(1, 1, 1) end
+            r.left:SetText(t.text)
+            r.right:SetText(t.key == cur and "<" or "")
+            r.bar:SetMinMaxValues(0, 1)
+            r.bar:SetValue(t.key == cur and 1 or 0)
+            r.bar:SetStatusBarColor(a[1], a[2], a[3])
+            r:Show()
+        else
+            r.typeKey = nil
+            r:Hide()
+        end
+    end
+    for i = Rows() + 1, #panel.rows do panel.rows[i]:Hide() end
+    panel.empty:SetShown(shown == 0)
+end
+
+function DM.OpenBreakdown(src, name)
+    local t = TYPE_BY_KEY[WC().meterType] or TYPES[1]
+    if t.threat then return end
+    DM.UseWindow(win)
+    if bd.open and bd.src == src then DM.CloseBreakdown() return end
+    local guid, cid = RowIdentity(src)
+    bd = { open = true, src = src, guid = guid, cid = cid, name = name, unit = RowUnit(src),
+           color = src.classFilename, win = win }
+    win.bd = bd
+    BuildPanel()
+    LayoutPanel()
+    panel.offset = 0
+    panel:Show()
+    DM.RefreshBreakdown()
+end
+
+-- closes the window at hand's breakdown / meter list (the others stay)
 function DM.CloseBreakdown()
     bd = { open = false }
+    if win then win.bd = bd end
+    HideHover()
     if panel then panel:Hide() end
+    DM.Cover(win, false)
+end
+
+local function CloseAllBreakdowns()
+    local keep = win
+    for _, w in ipairs(wins) do
+        if w.bd and w.bd.open then DM.UseWindow(w) DM.CloseBreakdown() end
+    end
+    win = keep
+end
+
+-- a window's own title bar, rows and background hidden (under a breakdown
+-- inside it) or back
+function DM.Cover(w, on)
+    if not (w and w.body) or (w.covered or false) == on then return end
+    w.covered = on
+    w.body:SetShown(not on)
+    w.titleBar:SetShown(not on)
+    w.fill:SetShown(not on)
+    w.border:SetShown(not on and S().windowBorder ~= false)
 end
 
 function DM.RefreshBreakdown()
+    if win then DM.UseWindow(win) end
     if not (bd.open and panel and panel:IsShown()) then return end
     win = bd.win or win
+    if bd.types then RefreshTypes() return end
+    for _, r in ipairs(panel.rows) do
+        r.typeKey = nil
+        r.icon:SetDesaturated(false)
+        r.icon:SetVertexColor(1, 1, 1)
+    end
     local c = S()
     local spells, t, why = GetBreakdown()
     local ok = pcall(panel.head.SetFormattedText, panel.head, "%s - %s", bd.name or "?", t.text)
     if not ok then panel.head:SetText(t.text) end
     spells = spells or {}
     local n = #spells
-    panel.offset = math.max(0, math.min(panel.offset or 0, n - c.rows))
+    panel.offset = math.max(0, math.min(panel.offset or 0, n - Rows()))
     -- percent of the whole row, when the numbers are readable
     local sum, plain = 0, true
     for _, sp in ipairs(spells) do
@@ -764,7 +1183,7 @@ function DM.RefreshBreakdown()
     local max = spells[1] and spells[1].totalAmount
     local col = bd.color and Plain(bd.color) and ns.ClassColor(bd.color)
     local shown = 0
-    for i = 1, c.rows do
+    for i = 1, Rows() do
         local r = PanelRow(i)
         local sp = spells[i + panel.offset]
         if sp then
@@ -772,6 +1191,8 @@ function DM.RefreshBreakdown()
             local id = sp.spellID
             local sname, icon = SpellInfo(id)
             r.spellID = id
+            r.sp, r.rank, r.count, r.share = sp, i + panel.offset, n, nil
+            if plain and sum > 0 then r.share = math.floor(sp.totalAmount / sum * 100 + 0.5) end
             r.icon:SetTexture(icon or 134400)          -- question mark
             if sname ~= nil then r.left:SetText(sname)
             elseif sp.creatureName ~= nil then r.left:SetText(sp.creatureName)
@@ -789,11 +1210,11 @@ function DM.RefreshBreakdown()
             else BarColor(r.bar, { classFilename = bd.color }) end
             r:Show()
         else
-            r.spellID = nil
+            r.spellID, r.sp = nil, nil
             r:Hide()
         end
     end
-    for i = c.rows + 1, #panel.rows do panel.rows[i]:Hide() end
+    for i = Rows() + 1, #panel.rows do panel.rows[i]:Hide() end
     panel.empty:SetText(why or "Nothing in this fight")
     panel.empty:SetShown(shown == 0)
 end
@@ -802,29 +1223,89 @@ local function Layout()
     local c = S()
     local w = win
     w:SetScale(c.scale)
-    w:SetSize(c.width, 20 + c.rows * (c.rowHeight + c.rowGap) + 2)
+    local th = c.titleHeight or 20
+    w:SetSize(c.width, th + Rows() * (c.rowHeight + c.rowGap) + 2)
     local pt = WC().point
     w:ClearAllPoints()
     w:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
     local a = ns.ACCENT
-    w.fill:SetColorTexture(0.04, 0.04, 0.05, c.bgAlpha)
-    w.title:SetColorTexture(0.08, 0.08, 0.09, math.min(1, c.bgAlpha + 0.15))
+    local bg, tc = c.bgColor or { r = 0.04, g = 0.04, b = 0.05 }, c.titleColor or { r = 0.08, g = 0.08, b = 0.09 }
+    local ta = (c.titleAlpha or -1) >= 0 and c.titleAlpha or math.min(1, c.bgAlpha + 0.15)
+    w.fill:SetColorTexture(bg.r, bg.g, bg.b, c.bgAlpha)
+    w.titleBar:SetHeight(th)
+    w.title:SetColorTexture(tc.r, tc.g, tc.b, ta)
     w.line:SetColorTexture(a[1], a[2], a[3], 0.9)
+    w.line:SetShown(c.titleLine ~= false)
+    w.border:SetShown(c.windowBorder ~= false and not w.covered)
+    w.body:ClearAllPoints()
+    w.body:SetPoint("TOPLEFT", 1, -(th + 1))
+    w.body:SetPoint("BOTTOMRIGHT", -1, 1)
     for _, fs in ipairs({ w.typeText, w.sessionText, w.resetText, w.closeText, w.addB.text }) do
         ns.ApplyFont(fs, c.font, c.titleSize, c.outline)
     end
-    w.typeB:SetWidth(math.max(70, c.width * 0.42))
+    ns.ApplyFont(w.label, c.font, c.titleSize, c.outline)
+    w.label:SetTextColor(1, 1, 1)
+    local resetB = w.resetText:GetParent()
+    -- the extra windows' x: not while the meter is locked
+    local closable = (w.index or 1) > 1 and not c.locked
+    local closeB = w.closeText:GetParent()
+    closeB:SetShown(closable)
+    closeB:SetWidth(closable and 14 or 0.1)
+    resetB:ClearAllPoints()
+    resetB:SetPoint("TOPRIGHT", closeB, "TOPLEFT", closable and -2 or 0, 0)
+    resetB:SetPoint("BOTTOMRIGHT", closeB, "BOTTOMLEFT", closable and -2 or 0, 0)
+    resetB:SetWidth(14)
+    w.typeB:ClearAllPoints()
+    w.sessB:ClearAllPoints()
+    w.addB:ClearAllPoints()
+    w.label:ClearAllPoints()
+    if c.titleIcons then
+        -- like EllesmereUI's header: the name at the left; at the right the
+        -- meter type and fight icons, + new window, R reset, x close
+        local is = math.max(8, math.min(c.titleIconSize or 18, th - 2))
+        w.addB:SetPoint("TOPRIGHT", resetB, "TOPLEFT", -3, 0)
+        w.addB:SetPoint("BOTTOMRIGHT", resetB, "BOTTOMLEFT", -3, 0)
+        w.addB:SetWidth(14)
+        w.sessB:SetSize(is + 2, is + 2)
+        w.sessB:SetPoint("RIGHT", w.addB, "LEFT", -3, 0)
+        w.typeB:SetSize(is + 2, is + 2)
+        w.typeB:SetPoint("RIGHT", w.sessB, "LEFT", -2, 0)
+        w.label:SetPoint("LEFT", 6, 0)
+        w.label:SetPoint("RIGHT", w.typeB, "LEFT", -4, 0)
+        w.label:Show()
+        w.labelB:Show()
+    else
+        w.typeB:SetPoint("TOPLEFT", 3, 0)
+        w.typeB:SetPoint("BOTTOMLEFT", 3, 0)
+        w.typeB:SetWidth(math.max(70, c.width * 0.42))
+        w.addB:SetPoint("TOPLEFT", w.typeB, "TOPRIGHT", 3, 0)
+        w.addB:SetPoint("BOTTOMLEFT", w.typeB, "BOTTOMRIGHT", 3, 0)
+        w.addB:SetWidth(14)
+        w.sessB:SetPoint("TOPRIGHT", resetB, "TOPLEFT", -3, 0)
+        w.sessB:SetPoint("BOTTOMRIGHT", resetB, "BOTTOMLEFT", -3, 0)
+        w.sessB:SetPoint("LEFT", w.addB, "RIGHT", 4, 0)
+        w.label:Hide()
+        w.labelB:Hide()
+    end
     w.typeText:SetTextColor(1, 1, 1)
-    w.sessionText:SetTextColor(a[1], a[2], a[3])
+    if c.titleAccent == false then w.sessionText:SetTextColor(1, 1, 1)
+    else w.sessionText:SetTextColor(a[1], a[2], a[3]) end
     local tex = ns.TexturePath(c.texture)
+    local iconW = (c.icons == "CLASS") and c.rowHeight or 0
+    local bb, rb = c.barBgColor or { r = 0, g = 0, b = 0 }, c.rowBorder or 0
     for i = 1, ROW_POOL do
         local r = Row(i)
         r:ClearAllPoints()
-        r:SetPoint("TOPLEFT", w.body, "TOPLEFT", 0, -(i - 1) * (c.rowHeight + c.rowGap))
+        r:SetPoint("TOPLEFT", w.body, "TOPLEFT", iconW, -(i - 1) * (c.rowHeight + c.rowGap))
         r:SetPoint("TOPRIGHT", w.body, "TOPRIGHT", 0, -(i - 1) * (c.rowHeight + c.rowGap))
         r:SetHeight(c.rowHeight)
         r:SetStatusBarTexture(tex)
-        r.bg:SetColorTexture(0, 0, 0, 0.35)
+        r.bg:SetColorTexture(bb.r, bb.g, bb.b, c.barBgAlpha or 0.35)
+        r.icon:SetSize(iconW > 0 and iconW or 1, c.rowHeight)
+        r.iconOn = iconW > 0
+        if not r.iconOn then r.icon:Hide() end
+        r.edge:SetPoint("TOPLEFT", r, "TOPLEFT", -iconW, 0)
+        ns.Frame.LayoutBorder(r.border, r.edge, rb, { r = 0, g = 0, b = 0 }, 1)
         ns.ApplyFont(r.left, c.font, c.fontSize, c.outline)
         ns.ApplyFont(r.right, c.font, c.fontSize, c.outline)
         r.left:ClearAllPoints()
@@ -832,7 +1313,7 @@ local function Layout()
         r.left:SetPoint("RIGHT", r.right, "LEFT", -4, 0)
         r.right:ClearAllPoints()
         r.right:SetPoint("RIGHT", -4, 0)
-        if i > c.rows then r:Hide() end
+        if i > Rows() then r:Hide() end
     end
     ns.ApplyFont(w.empty, c.font, c.fontSize, c.outline)
 end
@@ -860,11 +1341,46 @@ local function TitleDropdown(parent, items, get, set, tip)
     b.text:SetPoint("RIGHT", b.arrow, "LEFT", -3, 0)
     b.text:SetJustifyH("LEFT")
     b.text:SetWordWrap(false)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetPoint("CENTER")
+    b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    b.icon:Hide()
+    -- muted icon: grey and dimmed, the accent colour under the mouse
+    function b:TintIcon()
+        local muted = S().titleIconsMuted ~= false
+        self.icon:SetDesaturated(muted)
+        if not muted then self.icon:SetVertexColor(1, 1, 1)
+        elseif self:IsMouseOver() then local a = ns.ACCENT self.icon:SetVertexColor(a[1], a[2], a[3])
+        else self.icon:SetVertexColor(0.6, 0.6, 0.62) end
+    end
+    -- an icon in place of the text, box and arrow (nil: the text again)
+    function b:SetIcon(path, size)
+        self.iconMode = path ~= nil
+        if path then
+            self.icon:SetTexture(path)
+            self.icon:SetSize(size, size)
+            self:TintIcon()
+            self.icon:Show()
+            self.text:Hide()
+            self.arrow:Hide()
+            self.box:Hide()
+            self.hl:ClearAllPoints()
+            self.hl:SetAllPoints(self.icon)
+        else
+            self.icon:Hide()
+            self.text:Show()
+            self.arrow:SetShown(not self.disabled)
+            self.box:SetShown(not self.disabled)
+            self.hl:ClearAllPoints()
+            self.hl:SetAllPoints(self.box)
+        end
+    end
     b:SetScript("OnClick", function(self)
         if self.disabled then return end
         GameTooltip:Hide()
         UI.OpenList(self, items(), get(), function(v) set(v) end)
     end)
+    b.items, b.get, b.set = items, get, set
     -- mouse wheel steps through the list without opening it
     b:EnableMouseWheel(true)
     b:SetScript("OnMouseWheel", function(self, delta)
@@ -879,14 +1395,18 @@ local function TitleDropdown(parent, items, get, set, tip)
     b:SetScript("OnEnter", function(self)
         if self.disabled then return end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+        GameTooltip:SetText(type(tip) == "function" and tip() or tip, 1, 1, 1, 1, true)
         GameTooltip:Show()
+        if self.iconMode then self:TintIcon() end
     end)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    b:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+        if self.iconMode then C_Timer.After(0, function() self:TintIcon() end) end
+    end)
     function b:SetDisabled(off)
         self.disabled = off
-        self.arrow:SetShown(not off)
-        self.box:SetShown(not off)
+        self.arrow:SetShown(not off and not self.iconMode)
+        self.box:SetShown(not off and not self.iconMode)
         self:EnableMouse(not off)
     end
     return b
@@ -924,6 +1444,7 @@ local function Build(index)
     w.border = UI.Border(w, 0.15, 0.15, 0.17, 1)
     -- title bar: meter type (click: next, right-click: back), fight, reset
     local title = CreateFrame("Frame", nil, w)
+    w.titleBar = title
     title:SetPoint("TOPLEFT")
     title:SetPoint("TOPRIGHT")
     title:SetHeight(20)
@@ -944,7 +1465,7 @@ local function Build(index)
         p[4] = math.floor(p[4] + (w:GetTop() or 0) - from[2] + 0.5)
         win = w
         Layout()
-        if bd.open and bd.win == w then LayoutPanel() end
+        if w.bd and w.bd.open then DM.UseWindow(w) LayoutPanel() end
     end)
     w.title = title:CreateTexture(nil, "BORDER")
     w.title:SetAllPoints()
@@ -962,7 +1483,10 @@ local function Build(index)
         if v == "Threat" and not InCombatLockdown() then w.keepThreat = true end
         w.offset = 0
         DM.Refresh()
-    end, "What the meter shows (damage, healing, taken, interrupts, dispels, deaths, threat). Mouse wheel: step through.")
+    end, function()
+        local t = TYPE_BY_KEY[w.cfg.meterType] or TYPES[1]
+        return t.text .. "\n|cffaaaaaaWhat the meter shows (damage, healing, taken, interrupts, dispels, deaths, threat). Mouse wheel: step through.|r"
+    end)
     typeB:SetPoint("TOPLEFT", 3, 0)
     typeB:SetPoint("BOTTOMLEFT", 3, 0)
     typeB:SetWidth(120)
@@ -1008,12 +1532,44 @@ local function Build(index)
         w.cfg.session = v
         w.offset = 0
         DM.Refresh()
-    end, "Which fight: current, overall or an earlier one. Mouse wheel: step through.")
+    end, function()
+        local prev = win
+        win = w
+        local label = SessionLabel()
+        win = prev
+        return label .. "\n|cffaaaaaaWhich fight: current, overall or an earlier one. Mouse wheel: step through.|r"
+    end)
     sessB:SetPoint("TOPRIGHT", reset, "TOPLEFT", -3, 0)
     sessB:SetPoint("BOTTOMRIGHT", reset, "BOTTOMLEFT", -3, 0)
     sessB:SetPoint("LEFT", w.quickLast, "RIGHT", 4, 0)
     w.sessB = sessB
     w.sessionText = sessB.text
+    -- icon title bar: the meter type's name between the buttons
+    w.label = title:CreateFontString(nil, "OVERLAY")
+    w.label:SetJustifyH("LEFT")
+    w.label:SetWordWrap(false)
+    -- the name is a button too: the meter list (as the type icon), the mouse
+    -- wheel steps through; dragging it still moves the window
+    local lb = CreateFrame("Button", nil, title)
+    lb:SetAllPoints(w.label)
+    lb:RegisterForClicks("LeftButtonUp")
+    lb:RegisterForDrag("LeftButton")
+    lb:SetScript("OnDragStart", function() title:GetScript("OnDragStart")(title) end)
+    lb:SetScript("OnDragStop", function() title:GetScript("OnDragStop")(title) end)
+    lb:SetScript("OnClick", function(self)
+        local tb = w.typeB
+        if tb.disabled then return end
+        GameTooltip:Hide()
+        UI.OpenList(self, tb.items(), tb.get(), function(v) tb.set(v) end)
+    end)
+    lb:EnableMouseWheel(true)
+    lb:SetScript("OnMouseWheel", function(_, delta) w.typeB:GetScript("OnMouseWheel")(w.typeB, delta) end)
+    lb:SetScript("OnEnter", function()
+        local a = ns.ACCENT
+        w.label:SetTextColor(a[1], a[2], a[3])
+    end)
+    lb:SetScript("OnLeave", function() w.label:SetTextColor(1, 1, 1) end)
+    w.labelB = lb
 
     w.body = CreateFrame("Frame", nil, w)
     w.body:SetPoint("TOPLEFT", 1, -21)
@@ -1022,6 +1578,14 @@ local function Build(index)
     w.body:SetScript("OnMouseWheel", function(_, delta)
         w.offset = math.max(0, (w.offset or 0) - delta)
         DM.Refresh()
+    end)
+    -- inside-the-window navigation: right-click the names for the meter list
+    w.body:EnableMouse(true)
+    w.body:SetScript("OnMouseUp", function(_, button)
+        if button == "RightButton" and S().breakdownInline then
+            win = w
+            DM.OpenTypes()
+        end
     end)
     w.empty = w.body:CreateFontString(nil, "OVERLAY")
     ns.ApplyFont(w.empty, "GLOBAL", 11, "OUTLINE")
@@ -1058,10 +1622,11 @@ local function Fade()
     local dim = c.fadeOOC and not InCombatLockdown()
     for _, w in ipairs(wins) do
         if w:IsShown() then
-            local over = w:IsMouseOver() or (bd.open and bd.win == w and panel and panel:IsShown() and panel:IsMouseOver())
+            local p = w.bd and w.bd.open and w.panel
+            local over = w:IsMouseOver() or (p and p:IsShown() and p:IsMouseOver())
             local a = (dim and not over) and c.fadeAlpha or 1
             w:SetAlpha(a)
-            if bd.open and bd.win == w and panel then panel:SetAlpha(a) end
+            if p then p:SetAlpha(a) end
         end
     end
     if dim and not fader then
@@ -1075,7 +1640,7 @@ DM.Fade = Fade
 
 local function HideAll()
     for _, w in ipairs(wins) do w:Hide() end
-    DM.CloseBreakdown()
+    CloseAllBreakdowns()
 end
 
 function DM.Apply()
@@ -1092,8 +1657,11 @@ function DM.Apply()
     end
     for i = count + 1, #wins do wins[i]:Hide() end
     Fade()
-    if bd.open then
-        if bd.win and bd.win:IsShown() then win = bd.win LayoutPanel() else DM.CloseBreakdown() end
+    for _, w in ipairs(wins) do
+        if w.bd and w.bd.open then
+            DM.UseWindow(w)
+            if w:IsShown() then LayoutPanel() else DM.CloseBreakdown() end
+        end
     end
     DM.Refresh()
 end
@@ -1164,7 +1732,11 @@ end
 function DM.CloseWindow(i)
     local c = S()
     if i <= 1 or i > c.windowCount then return end
-    if bd.open and bd.win == wins[i] then DM.CloseBreakdown() end
+    -- the closed window's breakdown and those after it (their settings move up)
+    for j = i, #wins do
+        local w = wins[j]
+        if w.bd and w.bd.open then DM.UseWindow(w) DM.CloseBreakdown() end
+    end
     table.remove(c.windows, i)
     c.windowCount = c.windowCount - 1
     for _, w in ipairs(wins) do w.keepThreat = nil end

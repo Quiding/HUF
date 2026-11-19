@@ -468,6 +468,20 @@ local function BuildDefaults()
             threatColors = true,        -- threat view: bars in the game's threat colours
             fadeOOC = true, fadeAlpha = 0.4,   -- out of combat: windows at this opacity (full under the mouse)
             hideThreatOOC = true,       -- windows showing threat: hidden out of combat
+            -- look (defaults: HUF's own; an EllesmereUI import sets Ellesmere's)
+            bgColor = C(0.04, 0.04, 0.05),
+            windowBorder = true,        -- a thin grey line around each window
+            titleHeight = 20,
+            titleColor = C(0.08, 0.08, 0.09), titleAlpha = -1,   -- -1: the background's opacity + 0.15
+            titleLine = true,           -- accent line under the title bar
+            titleAccent = true,         -- the fight in the accent colour (off: white)
+            titleIcons = false,         -- the type's name at the left, meter type and fight as icon buttons at the right
+            titleIconSize = 18,         -- those icons (may stand out of a lower title bar)
+            titleIconsMuted = true,     -- those icons grey and dimmed, accent colour under the mouse
+            breakdownInline = true,     -- a clicked name's breakdown and the meter list in its window (< back); off: the breakdown beside it
+            icons = "NONE",             -- NONE | CLASS: class icon before each bar
+            rowBorder = 0,              -- a border around each bar (0: none)
+            barBgColor = C(0, 0, 0), barBgAlpha = 0.35,          -- the empty part of each bar
         },
         -- minimap: shape, size, look, texts and icons placed on it (each
         -- shown always, on mouseover or never), addon buttons on the map or

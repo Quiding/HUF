@@ -1,18 +1,28 @@
--- HUF: import the unit frames of an EllesmereUI profile string ("!EUI_...").
+-- HUF: import an EllesmereUI profile: a string ("!EUI_...") or its current
+-- settings in the game.
 --
--- The string is read with EllesmereUI's own decoder (EllesmereUI has to be
--- loaded), so nothing is run: it is only parsed. Its Unit Frames settings
--- (player, target, target of target, pet) become HUF settings: size, position,
--- power bar, portrait, health / power texts, buffs and debuffs, bar texture,
--- colours, border, font. Everything else of the active HUF profile (group
--- frames, nameplates, accent, privacy ...) stays as it is.
--- The result looks close to Ellesmere's frames, not pixel-identical: what HUF
--- has no setting for is left out and listed after the import.
+-- A string is read with EllesmereUI's own decoder (EllesmereUI has to be
+-- loaded), so nothing is run: it is only parsed. What becomes HUF settings:
+--   * Unit Frames (player, target, target of target, pet): size, position,
+--     power bar, portrait, texts, buffs / debuffs, texture, colours, border,
+--     font, incoming heals (Heal Prediction), power colours
+--   * Nameplates: bar, texts, NPC colours, cast bar, debuffs
+--   * Damage Meters: its windows (up to 5), look, when it shows
+-- Everything else of the active HUF profile (group frames, accent, privacy
+-- ...) stays as it is. The result looks close to Ellesmere's, not
+-- pixel-identical: what HUF has no setting for is left out and listed after
+-- the import.
+--
+-- Keep it complete: when HUF gets a feature EllesmereUI also has (a frame,
+-- an option, a module like the damage meter), map its Ellesmere settings
+-- here too, so an import keeps bringing everything over.
 
 local _, ns = ...
 
 local EUI_PREFIX = "!EUI_"
 local UF_FOLDER = "EllesmereUIUnitFrames"
+local NP_FOLDER = "EllesmereUINameplates"
+local DM_FOLDER = "EllesmereUIDamageMeters"
 
 -- HUF frame key -> Ellesmere settings key
 local UNIT_KEYS = { player = "player", target = "target", targettarget = "targettarget", pet = "pet" }
@@ -205,10 +215,12 @@ local function Decode(text)
     local prof = ProfileOf(payload)
     local uf = prof and prof.addons and prof.addons[UF_FOLDER]
     local np = prof and prof.addons and prof.addons[NP_FOLDER]
-    if type(uf) ~= "table" and type(np) ~= "table" then
-        return false, "This EllesmereUI string has no Unit Frames or Nameplates settings (export it with them ticked)."
+    local dm = prof and prof.addons and prof.addons[DM_FOLDER]
+    if type(uf) ~= "table" and type(np) ~= "table" and type(dm) ~= "table" then
+        return false, "This EllesmereUI string has no Unit Frames, Nameplates or Damage Meters settings (export it with them ticked)."
     end
-    return true, prof, type(uf) == "table" and uf or nil, type(np) == "table" and np or nil
+    return true, prof, type(uf) == "table" and uf or nil, type(np) == "table" and np or nil,
+        type(dm) == "table" and dm or nil
 end
 
 ---------------------------------------------------------------------------
@@ -301,6 +313,18 @@ local function ConvertUnit(key, s, uf, u, notes)
             or Color(s.customFillColor, h.color)
     end
     if s.bgClassColored then notes[#notes + 1] = title .. ": class coloured background is a plain colour." end
+    -- incoming heals: Ellesmere's Heal Prediction (player and target only)
+    if type(u.healPred) == "table" then
+        if key == "player" or key == "target" then
+            u.healPred.enabled = s.healPrediction == true
+            u.healPred.color = Color(s.healPredColor, { r = 102 / 255, g = 243 / 255, b = 102 / 255 })
+            u.healPred.alpha = Num(s.healPredOpacity, 60) / 100
+            u.healPred.overheal = Num(s.healPredOverheal, 0)
+        else
+            u.healPred.enabled = false
+        end
+    end
+
     -- power fill: Ellesmere's power colours by type (the import sets them
     -- globally), a custom fill with "power colour" off, or the class colour
     if s.powerPercentPowerColor == false then
@@ -414,7 +438,6 @@ end
 ---------------------------------------------------------------------------
 -- Nameplates (EllesmereUINameplates)
 ---------------------------------------------------------------------------
-local NP_FOLDER = "EllesmereUINameplates"
 local NP_SLOTS = { { "textSlotTop", "ABOVE" }, { "textSlotLeft", "LEFT" }, { "textSlotCenter", "CENTER" }, { "textSlotRight", "RIGHT" } }
 local NP_DEFAULTS = {
     healthBarWidth = 6, healthBarHeight = 17, healthBarTexture = "none",
@@ -519,6 +542,153 @@ local function ConvertNameplates(s, n, notes)
 end
 
 ---------------------------------------------------------------------------
+-- Damage meter (EllesmereUIDamageMeters): its first window -> HUF's meter
+---------------------------------------------------------------------------
+local DM_SHOW = { always = "ALWAYS", in_party = "GROUP", in_raid = "GROUP" }
+local DM_NUMBERS = { [0] = "PERSECOND", [1] = "TOTAL", [2] = "BOTH", [3] = "BAR" }
+
+local function ConvertDamageMeter(addon, m, notes)
+    local c = type(addon.dm) == "table" and addon.dm or addon
+    local function G(k, d) local v = c[k] if v == nil then return d end return v end
+    local list = type(c.windows) == "table" and c.windows or {}
+    local w = type(list[1]) == "table" and list[1] or {}
+    m.enabled = true
+    m.hideBlizzard = true
+
+    -- a window's place: unlock format { point, relPoint, x, y } or the older
+    -- { x, y } (its top left from the screen's bottom left: taken as its
+    -- bottom left, h below, so windows of other heights keep their bottoms)
+    local function Point(pos, h)
+        if type(pos) ~= "table" then return nil end
+        local p1, p2 = pos.point or pos[1], pos.relPoint or pos[2]
+        local x, y = pos.x or pos[3], pos.y or pos[4]
+        if type(p1) == "string" and type(x) == "number" and type(y) == "number" then
+            return { p1, type(p2) == "string" and p2 or p1, math.floor(x + 0.5), math.floor(y + 0.5) }
+        elseif type(pos.x) == "number" and type(pos.y) == "number" then
+            return { "BOTTOMLEFT", "BOTTOMLEFT", math.floor(pos.x + 0.5), math.floor(pos.y - h + 0.5) }
+        end
+        return nil
+    end
+    -- a window's meter type, when HUF has it (Ellesmere stores the game's enum
+    -- number, or "threat" for its WoW Forever threat view)
+    local function HasType(key)
+        for _, t in ipairs((ns.DamageMeter and ns.DamageMeter.TYPES) or {}) do
+            if t.key == key then return true end
+        end
+        return false
+    end
+    local function MeterType(cur)
+        if cur == "threat" then return HasType("Threat") and "Threat" or nil end
+        if type(cur) ~= "number" or not (Enum and type(Enum.DamageMeterType) == "table") then return nil end
+        for key, v in pairs(Enum.DamageMeterType) do
+            if v == cur then
+                for _, t in ipairs((ns.DamageMeter and ns.DamageMeter.TYPES) or {}) do
+                    if t.key == key then return key end
+                end
+            end
+        end
+        return nil
+    end
+
+    -- the windows: each its own meter type and place (HUF: up to 5)
+    local count = math.max(1, math.min(5, math.floor(Num(G("windowCount"), 1))))
+    if Num(G("windowCount"), 1) > 5 then
+        notes[#notes + 1] = "Damage meter: HUF has up to 5 windows; the first 5 of Ellesmere's are taken."
+    end
+    -- rows of a window from its height (Ellesmere's has the title bar in it).
+    -- Ellesmere draws a bar's border inside the bar, HUF around it: with a
+    -- border the bar is 2 x border lower and the gap 2 x border wider, so the
+    -- rows keep their spacing and neighbouring borders fall on one line.
+    local rb = math.max(0, math.floor(Num(G("borderSize"), 0) + 0.5))
+    local barH, spacing = Num(G("barHeight"), 18), Num(G("barSpacing"), 2)
+    local rowHeight = math.max(8, math.floor(barH - 2 * rb + 0.5))
+    local rowGap = math.max(0, math.floor(spacing + 2 * rb + 0.5))
+    local function RowsFor(h)
+        local body = h - Num(G("hdrHeight"), 22)
+        return math.max(1, math.min(40, math.floor((body + rowGap) / (rowHeight + rowGap))))
+    end
+    local windows = {}
+    for i = 1, count do
+        local e = type(list[i]) == "table" and list[i] or {}
+        local h = Num(e.height, 150)
+        local before = windows[i - 1]
+        local point = Point(e.position, h)
+            or (before and { before.point[1], before.point[2], before.point[3] - Num(w.width, 375) - 8, before.point[4] })
+            or ns.CopyTable(m.point)
+        -- each window its own height (HUF: windows[i].rows over the shared rows)
+        windows[i] = { meterType = MeterType(e.curDMType) or "DamageDone", session = "CURRENT", point = point,
+                       rows = RowsFor(h) }
+    end
+    m.windows, m.windowCount = windows, count
+    m.point = ns.CopyTable(windows[1].point)
+    m.meterType, m.session = windows[1].meterType, "CURRENT"
+
+    -- width: shared by HUF's windows, Ellesmere's first one's
+    m.width = math.max(100, math.floor(Num(w.width, 375) + 0.5))
+    m.rowHeight, m.rowGap = rowHeight, rowGap
+    m.rows = windows[1].rows
+    m.locked = w.locked and true or false
+    for i = 2, count do
+        local e = list[i]
+        if type(e) == "table" and math.abs(Num(e.width, m.width) - m.width) > 4 then
+            notes[#notes + 1] = "Damage meter: HUF's windows share one width; the first window's is taken."
+            break
+        end
+    end
+
+    -- look
+    m.texture = TextureName(G("barTexture", "atrocity")) or "Flat"
+    m.bgColor = { r = Num(G("bgR"), 0), g = Num(G("bgG"), 0), b = Num(G("bgB"), 0) }
+    m.windowBorder = Num(G("windowBorderSize"), 0) > 0
+    m.titleHeight = math.max(12, math.min(30, math.floor(Num(G("hdrHeight"), 22) + 0.5)))
+    m.titleColor = Color(G("hdrBgColor"), { r = 0x1B / 255, g = 0x1B / 255, b = 0x1B / 255 })
+    m.titleAlpha = Num(G("hdrBgAlpha"), 1)
+    m.titleLine = Num(G("hdrBottomBorderSize"), 0) > 0 or G("hdrBottomSeparator", false) == true
+    m.titleAccent = G("hdrTextUseAccent", true) and true or false
+    m.titleIcons = true                 -- Ellesmere's title bar has icon buttons
+    m.titleIconsMuted = true            -- single-coloured there too
+    -- Ellesmere's header icons are thin glyphs that may be larger than its
+    -- bar; HUF's are square spell icons: inside the title bar
+    m.titleIconSize = math.max(10, math.min(m.titleHeight - 2, math.floor(Num(G("hdrIconSize"), 22) + 0.5)))
+    m.icons = (G("iconStyle", "spec") ~= "none") and "CLASS" or "NONE"
+    m.rowBorder = rb
+    m.barBgColor = { r = Num(G("barBgR"), 0), g = Num(G("barBgG"), 0), b = Num(G("barBgB"), 0) }
+    m.barBgAlpha = Num(G("barBgAlpha"), 0)
+    if G("showClassColor", true) then
+        m.colorMode = "CLASS"
+    elseif G("barColorUseAccent", true) then
+        m.colorMode = "ACCENT"
+    else
+        m.colorMode = "STATIC"
+        m.color = Color(G("barColor"), m.color)
+    end
+    m.bgAlpha = Num(G("bgAlpha"), 0.75)
+    m.fontSize = math.floor(Num(G("leftFontSize"), Num(G("fontSize"), 11)) + 0.5)
+    m.titleSize = math.floor(Num(G("hdrFontSize"), 11) + 0.5)
+    m.numbers = DM_NUMBERS[G("numberFormat", 2)] or "BOTH"
+
+    -- when it shows. Ellesmere doesn't fade out of combat: HUF's fading off,
+    -- except for "in combat" / "mouseover" (out of combat invisible, the
+    -- mouse brings it back)
+    local vis = G("visibility", "always")
+    m.show = "ALWAYS"
+    m.fadeOOC = false
+    m.hideThreatOOC = false             -- Ellesmere keeps its threat window out of combat
+    if w.hideOutOfInstance then
+        m.show = "INSTANCE"
+    elseif DM_SHOW[vis] then
+        m.show = DM_SHOW[vis]
+    elseif vis == "in_combat" or vis == "mouseover" then
+        m.fadeOOC, m.fadeAlpha = true, 0
+        if vis == "mouseover" then
+            notes[#notes + 1] = "Damage meter: \"mouseover\" becomes invisible out of combat (shown in combat and under the mouse)."
+        end
+    else
+        notes[#notes + 1] = ("Damage meter: \"%s\" visibility is not in HUF, it shows always."):format(tostring(vis))
+    end
+end
+
+---------------------------------------------------------------------------
 -- Public
 ---------------------------------------------------------------------------
 -- prof: Ellesmere profile data (addons, fonts); uf / np its Unit Frames /
@@ -527,7 +697,7 @@ end
 -- parts: what the import turns on or off, for the import window:
 --   { title, tbl (its settings: .enabled), on, why (Ellesmere's state when off) }
 local UNIT_ORDER = { "player", "target", "targettarget", "pet" }
-local function Convert(prof, uf, np, npOn)
+local function Convert(prof, uf, np, npOn, dm, dmOn)
     local out = ns.CopyTable(ns.db)
     ns.FillDefaults(out, ns.DEFAULTS)
     local notes, what, parts = {}, {}, {}
@@ -549,7 +719,15 @@ local function Convert(prof, uf, np, npOn)
         what[#what + 1] = "nameplates"
         out.nameplates.enabled = npOn ~= false
         parts[#parts + 1] = { title = "Nameplates", tbl = out.nameplates, on = out.nameplates.enabled,
-            why = "EllesmereUI Nameplates is off" }
+            why = "EllesmereUI Nameplates is off", folder = NP_FOLDER, module = "EllesmereUI Nameplates" }
+    end
+    if dm and type(out.damageMeter) == "table" then
+        local okD, err = pcall(ConvertDamageMeter, dm, out.damageMeter, notes)
+        if not okD then return false, "Could not convert the damage meter: " .. tostring(err) end
+        what[#what + 1] = "damage meter"
+        out.damageMeter.enabled = dmOn ~= false
+        parts[#parts + 1] = { title = "Damage meter", tbl = out.damageMeter, on = out.damageMeter.enabled,
+            why = "EllesmereUI Damage Meters is off", folder = DM_FOLDER, module = "EllesmereUI Damage Meters" }
     end
 
     -- font and outline (Ellesmere's Unit Frames font, else its global one)
@@ -606,9 +784,9 @@ end
 -- ok, a whole HUF profile (the active one with Ellesmere's frames), notes,
 -- what was taken ({ "unit frames", "nameplates" }) or ok=false, error text
 function ns.ReadEllesmereText(text)
-    local ok, prof, uf, np = Decode(text)
+    local ok, prof, uf, np, dm = Decode(text)
     if not ok then return false, prof end
-    return Convert(prof, uf, np)
+    return Convert(prof, uf, np, nil, dm)
 end
 
 -- the same from EllesmereUI's current settings in this game (no string):
@@ -626,12 +804,15 @@ function ns.ReadEllesmereLive()
     local saved = type(stored) == "table" and type(stored.addons) == "table" and stored.addons or {}
     local uf = data.addons[UF_FOLDER] or saved[UF_FOLDER]
     local np = data.addons[NP_FOLDER] or saved[NP_FOLDER]
+    local dm = data.addons[DM_FOLDER] or saved[DM_FOLDER]
     -- only loaded modules are in the snapshot: from the stored copy = Ellesmere has them off
     local npOn = data.addons[NP_FOLDER] ~= nil
-    if type(uf) ~= "table" and type(np) ~= "table" then
-        return false, "EllesmereUI has no Unit Frames or Nameplates settings here."
+    local dmOn = data.addons[DM_FOLDER] ~= nil
+    if type(uf) ~= "table" and type(np) ~= "table" and type(dm) ~= "table" then
+        return false, "EllesmereUI has no Unit Frames, Nameplates or Damage Meters settings here."
     end
-    return Convert(data, type(uf) == "table" and uf or nil, type(np) == "table" and np or nil, npOn)
+    return Convert(data, type(uf) == "table" and uf or nil, type(np) == "table" and np or nil, npOn,
+        type(dm) == "table" and dm or nil, dmOn)
 end
 
 -- EllesmereUI's nameplates and HUF's both on: two plates on every unit
