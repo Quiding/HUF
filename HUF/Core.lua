@@ -438,6 +438,7 @@ local function BuildDefaults()
             shortenTexts = false,      -- a left text next to a right text cut short ("Burnin...")
             statusText = true,         -- "Dead", "Ghost", "Offline" instead of health values
             hideBlizzard = true,
+            hideRaidManager = true,    -- Blizzard's raid / party manager on the left edge
             menuMode = "PROXY",        -- right-click menu: PROXY (secure proxy, 12.x) | DIRECT
             clickCast = true,
             configBg = "None",         -- background of the settings window
@@ -499,8 +500,10 @@ local function BuildDefaults()
                      INSTANCE_CHAT = "I", INSTANCE_CHAT_LEADER = "IL" },
             classColors = true, urls = true, linkTooltips = true,
             history = true, historyLines = 2000,
-            buttons = { copy = true, guild = true, social = false, bottom = true },
-            buttonSide = "RIGHT", buttonX = 0, buttonY = 0,
+            buttons = { copy = true, guild = true, social = false, channels = true, chatmenu = true },
+            buttonSide = "RIGHT", buttonX = 8, buttonY = 0,
+            fade = true, fadeAlpha = 0.4, fadeDelay = 5,     -- the buttons fade while the mouse is elsewhere
+            inputPos = "BELOW", inputOffset = 0,              -- the input line: BELOW | ABOVE the chat
         },
         -- buff and debuff bars (HUF's instead of Blizzard's at the top right)
         auraBars = {
@@ -993,6 +996,17 @@ ns.On("ADDON_LOADED", function(name)
             if prof.global and prof.global.configBg == "Honeycomb" then prof.global.configBg = "None" end
         end
         HUFDB.dataVersion = 14
+    end
+    -- 15: chat buttons 8 px further out, no "to the end" button
+    if HUFDB.dataVersion < 15 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local c = prof.chat
+            if c then
+                if c.buttonX == nil or c.buttonX == 0 then c.buttonX = 8 end
+                if c.buttons then c.buttons.bottom = nil end
+            end
+        end
+        HUFDB.dataVersion = 15
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

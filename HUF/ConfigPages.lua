@@ -106,6 +106,11 @@ ns.RegisterPage("general", "General", "general", function(page)
         sh(v)
         if not v then ns.Print("Blizzard's frames come back after /reload.") end
     end, "Hides Blizzard's player, target and target-of-target frames while HUF's are on. Turning this off needs /reload.")
+    local gr, sr = Opt(G, "hideRaidManager")
+    R:Check("Hide Blizzard's raid / party manager", gr, function(v)
+        sr(v)
+        if not v then ns.Print("The raid / party manager comes back after /reload.") end
+    end, "The panel on the left edge of the screen in a group (marks, ready check, roles). Turning this off needs /reload.")
     R:Header("Clicks")
     R:Note("Left-click targets the unit, right-click opens its menu.")
     local gm, sm = Opt(G, "menuMode")

@@ -5,7 +5,9 @@
 --   * URLs as clickable links (a copy box opens), link tooltips on mouseover
 --   * class coloured names (the game's own per chat type setting)
 --   * chat history kept over /reload and logout (up to 2000 lines a window)
---   * buttons beside the chat: copy, guild (members online), friends, to the end
+--   * buttons beside the chat: copy, guild (members online), friends, and the
+--     game's chat channel and chat menu buttons moved there; they fade out
+--   * the input line below or above the chat
 --   * the game's chat settings (bubbles, timestamps, style, colours) on one page
 --
 -- Taint rules (from EllesmereUI's chat engine): never replace a field on a
@@ -393,9 +395,13 @@ local BUTTONS = {
         if ToggleGuildFrame then ToggleGuildFrame() elseif ToggleCommunitiesFrame then ToggleCommunitiesFrame() end end },
     { key = "social", icon = "Interface\\FriendsFrame\\UI-Toast-FriendOnlineIcon", tip = "Friends", click = function()
         if ToggleFriendsFrame then ToggleFriendsFrame() end end },
-    { key = "bottom", icon = "Interface\\ChatFrame\\UI-ChatIcon-ScrollEnd-Up", tip = "To the end of the chat", click = function()
-        local cf = SelectedWindow()
-        if cf and cf.ScrollToBottom then cf:ScrollToBottom() end end },
+    -- the game's own buttons, moved here: an invisible copy of the real one
+    -- lies over HUF's icon and takes the clicks (EllesmereUI's way: the
+    -- game's menu opens where the button is)
+    { key = "channels", atlas = "chatframe-button-icon-voicechat", icon = "Interface\\ChatFrame\\UI-ChatIcon-ArmoryChat",
+      blizzard = "ChatFrameChannelButton", tip = "Chat channels" },
+    { key = "chatmenu", icon = "Interface\\ChatFrame\\UI-ChatIcon-Chat-Up", blizzard = "ChatFrameMenuButton",
+      tip = "Language, emotes, chat type" },
 }
 
 local function GuildOnline()
@@ -441,10 +447,13 @@ local function BuildBar()
         b.icon = b:CreateTexture(nil, "ARTWORK")
         b.icon:SetPoint("TOPLEFT", 3, -3)
         b.icon:SetPoint("BOTTOMRIGHT", -3, 3)
-        b.icon:SetTexture(info.icon)
+        if not (info.atlas and b.icon.SetAtlas and pcall(b.icon.SetAtlas, b.icon, info.atlas)) then
+            b.icon:SetTexture(info.icon)
+        end
         if info.key == "guild" then b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
         b:RegisterForClicks("LeftButtonUp")
-        b:SetScript("OnClick", info.click)
+        if info.click then b:SetScript("OnClick", info.click) end
+        b.blizzard = info.blizzard
         b:SetScript("OnEnter", function(self)
             self.border:SetColor(A[1], A[2], A[3], 1)
             if info.key == "guild" then GuildTooltip(self) return end
@@ -473,6 +482,42 @@ function Chat.UpdateGuildCount()
     end
 end
 
+-- the game's button over HUF's slot: invisible, mouse on, above the slot
+local seated = {}
+local function Seat(b, on)
+    local real = b.blizzard and _G[b.blizzard]
+    if not real then return false end
+    if not seated[real] then
+        seated[real] = b
+        real:HookScript("OnEnter", function()
+            local slot = seated[real]
+            if slot and slot:IsShown() then slot.border:SetColor(A[1], A[2], A[3], 1) Chat.Wake() end
+        end)
+        real:HookScript("OnLeave", function()
+            local slot = seated[real]
+            if slot then slot.border:SetColor(0.2, 0.2, 0.22, 1) end
+        end)
+    end
+    real:ClearAllPoints()
+    if on then
+        real:SetAllPoints(b)
+        if real.SetFixedFrameStrata then real:SetFixedFrameStrata(false) end
+        real:SetFrameStrata(bar:GetFrameStrata())
+        if real.SetFixedFrameStrata then real:SetFixedFrameStrata(true) end
+        if real.SetFixedFrameLevel then real:SetFixedFrameLevel(false) end
+        real:SetFrameLevel(b:GetFrameLevel() + 3)
+        if real.SetFixedFrameLevel then real:SetFixedFrameLevel(true) end
+        real:SetAlpha(0)
+        real:EnableMouse(true)
+    else
+        -- not wanted: hidden away (its place belongs to the game's chat layout)
+        real:SetAllPoints(b)
+        real:SetAlpha(0)
+        real:EnableMouse(false)
+    end
+    return true
+end
+
 local function LayoutBar()
     local s = S()
     BuildBar()
@@ -482,6 +527,7 @@ local function LayoutBar()
     for _, b in ipairs(bar.buttons) do
         local on = s.buttons[b.key]
         if b.key == "guild" and not (IsInGuild and IsInGuild()) then on = false end
+        if b.blizzard and not _G[b.blizzard] then on = false end
         b:ClearAllPoints()
         if on then
             b:SetPoint("TOP", bar, "TOP", 0, -y)
@@ -500,7 +546,75 @@ local function LayoutBar()
         bar:SetPoint("TOPLEFT", cf, "TOPRIGHT", 6 + (s.buttonX or 0), (s.buttonY or 0))
     end
     bar:SetShown(n > 0)
+    for _, b in ipairs(bar.buttons) do
+        if b.blizzard then Seat(b, b:IsShown() and n > 0) end
+    end
     Chat.UpdateGuildCount()
+    Chat.Wake()
+end
+
+---------------------------------------------------------------------------
+-- Fading the buttons: down to fadeAlpha after fadeDelay seconds, full again
+-- while the mouse is over the chat or the buttons
+---------------------------------------------------------------------------
+local idle = 0
+function Chat.Wake()
+    idle = 0
+    if bar then bar:SetAlpha(1) end
+end
+
+local function MouseOverChat()
+    if bar and bar:IsShown() and bar:IsMouseOver(4, -4, -4, 4) then return true end
+    local cf = SelectedWindow()
+    for _, f in ipairs({ cf, ChatFrame1 }) do
+        -- the window with its tabs above and the input line below
+        if f and f:IsVisible() and f:IsMouseOver(32, -36, -8, 8) then return true end
+    end
+    for real in pairs(seated) do
+        if real:IsVisible() and real:IsMouseOver() then return true end
+    end
+    return false
+end
+
+C_Timer.NewTicker(0.2, function()
+    if not (bar and HUFDB and ns.db) then return end
+    local s = S()
+    if not (s.enabled and s.fade) then
+        if bar:GetAlpha() ~= 1 then bar:SetAlpha(1) end
+        return
+    end
+    if MouseOverChat() then
+        idle = 0
+        if bar:GetAlpha() ~= 1 then bar:SetAlpha(1) end
+        return
+    end
+    idle = idle + 0.2
+    if idle >= s.fadeDelay then
+        if math.abs(bar:GetAlpha() - s.fadeAlpha) > 0.01 then bar:SetAlpha(s.fadeAlpha) end
+    end
+end)
+
+---------------------------------------------------------------------------
+-- Input line above or below the chat (plain anchors; never hooks on the box)
+---------------------------------------------------------------------------
+local placedInput = {}
+local function PlaceInput(cf)
+    local s = S()
+    local name = cf.GetName and cf:GetName()
+    local eb = name and _G[name .. "EditBox"]
+    if not eb then return end
+    local want = s.enabled and s.inputPos or "BELOW"
+    if want == "BELOW" and not placedInput[eb] then return end     -- the game's own place
+    eb:ClearAllPoints()
+    local off = s.inputOffset or 0
+    if want == "ABOVE" then
+        eb:SetPoint("BOTTOMLEFT", cf, "TOPLEFT", -5, 28 + off)
+        eb:SetPoint("BOTTOMRIGHT", cf, "TOPRIGHT", 5, 28 + off)
+    else
+        eb:SetPoint("TOPLEFT", cf, "BOTTOMLEFT", -5, -2 - off)
+        eb:SetPoint("TOPRIGHT", cf, "BOTTOMRIGHT", 5, -2 - off)
+    end
+    placedInput[eb] = true
 end
 
 ---------------------------------------------------------------------------
@@ -551,6 +665,7 @@ function Chat.Apply(full)
             ApplyLook(cf)
             if full then ApplyBackground(cf) end
         end
+        pcall(PlaceInput, cf)
     end
     LayoutBar()
 end
@@ -583,7 +698,11 @@ ns.On("PLAYER_GUILD_UPDATE", function() if HUFDB and ns.db then LayoutBar() end 
 C_Timer.NewTicker(5, function()
     if not (HUFDB and ns.db) then return end
     for _, cf in ipairs(Windows()) do
-        if not hooked[cf] then Hook(cf) if S().enabled then ApplyLook(cf) end end
+        if not hooked[cf] then
+            Hook(cf)
+            if S().enabled then ApplyLook(cf) end
+            pcall(PlaceInput, cf)
+        end
     end
     if IsInGuild and IsInGuild() and not Chat.rosterAsked then
         Chat.rosterAsked = true

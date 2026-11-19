@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.10.
+Version 0.4.11.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -53,7 +53,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   a line ([1], [2], [S], [Y], [P], [PL], [G], [GO], [R], [RL], [RW], [W], [I], each editable);
   names in class colours; web addresses as links (click: copy box); tooltips over item / spell /
   quest links; chat kept over /reload and logout (up to 2000 lines a window); buttons beside the
-  chat: copy chat, guild (members online, hover for who), friends, to the end; the game's chat
+  chat: copy chat, guild (members online, hover for who), friends, and the game's chat channel and
+  chat menu buttons moved there, fading to 40% after 5 s; the input line below or above; the game's chat
   settings (bubbles, timestamps, style, whispers, filter) and chat colours on one page. Lines the
   game hides from addons (instance chat lockdown) stay as they are.
 - **Combo points** (rogues, druids in cat form): a row of points above the target frame and under
@@ -66,7 +67,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
 - **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
   where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
   and debuff icons.
-- Blizzard's player, target, target of target, pet and party frames are hidden while HUF's are on.
+- Blizzard's player, target, target of target, pet and party frames are hidden while HUF's are on,
+  and Blizzard's raid / party manager on the left edge (General: can be shown again).
 
 ## Look and texts
 - Accent colour blue / purple / bronze / custom, dark backgrounds and textures, several bar
