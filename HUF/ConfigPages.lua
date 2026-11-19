@@ -248,7 +248,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
     -- export / import as text (copy & paste, e.g. to another account)
     local R = UI.Column(page, COL2_X, 0, COL_W)
     R:Header("Export and import")
-    R:Note("Export: every setting of the active profile as one line of text. Copy it (Ctrl+A, Ctrl+C) and paste it into HUF on another account or PC (Ctrl+V), then Import.")
+    R:Note("Export: every setting of the active profile as one line of text, with this character's click-cast bindings, the game's chat settings and colours and the damage number settings. Copy it (Ctrl+A, Ctrl+C) and paste it into HUF on another account or PC (Ctrl+V), then Import.")
     local area = UI.TextArea(page, COL_W, 170)
     if area.edit.SetMaxLetters then area.edit:SetMaxLetters(0) end
     R:Add(area, 178)
@@ -419,7 +419,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         end)
     end
     R:Add(msg, 40)
-    R:Note("Import replaces the active profile. To keep it, create a new profile first (left) and import into that one. Click-cast bindings belong to the character and are not part of a profile.")
+    R:Note("Import replaces the active profile (to keep it, create a new profile first, left, and import into that one); click-cast bindings go to the character you import on. Kept chat lines are not exported.")
     if _G.EllesmereUI then R:Note("EllesmereUI: \"Import from EllesmereUI\" or an EllesmereUI string (!EUI_...) in the box: its unit frames (player, target, target of target, pet, with the font), nameplates and damage meter replace HUF's; group frames stay. Close to Ellesmere's look, not identical.") end
 end)
 

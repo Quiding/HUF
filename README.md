@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.11.
+Version 0.4.12.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -100,7 +100,9 @@ MMT hides names outside MMT / never). HUF uses MMT's documented privacy API (top
 
 ## Profiles
 Account-wide profiles chosen per character. General > Profiles: create, copy, reset, and
-**export / import** a profile as one line of text (copy & paste to another account).
+**export / import** a profile as one line of text (copy & paste to another account): every HUF
+setting, plus the character's click-cast bindings, the game's chat settings and colours and the
+damage number settings (not the kept chat lines).
 With EllesmereUI installed: **Import from EllesmereUI** (its current settings or a `!EUI_` string)
 brings over the look of its player, target, target of target, pet frames and nameplates.
 

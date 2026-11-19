@@ -146,10 +146,81 @@ local function Diff(t, d)
     return any and out or nil
 end
 
+-- settings kept outside the profile, carried along under "_extra":
+--   clickcast  this character's click-cast bindings (import: the importing character's)
+--   cvars      the game's own settings HUF's pages change (chat, damage numbers)
+--   chatColors the game's chat colours
+--   configScale the settings window's size
+-- Not exported: kept chat lines, debug log, internal state.
+local GAME_CVARS = { "chatBubbles", "chatBubblesParty", "showTimestamps", "chatStyle", "whisperMode",
+    "profanityFilter", "chatMouseScroll", "WorldTextScale_v2", "WorldTextGravity_v2" }
+local CHAT_COLOR_TYPES = { "SAY", "YELL", "EMOTE", "PARTY", "PARTY_LEADER", "RAID", "RAID_LEADER", "RAID_WARNING",
+    "GUILD", "OFFICER", "WHISPER", "WHISPER_INFORM", "INSTANCE_CHAT", "INSTANCE_CHAT_LEADER", "SYSTEM",
+    "CHANNEL1", "CHANNEL2", "CHANNEL3", "CHANNEL4", "CHANNEL5" }
+ns.SHARE_CVARS, ns.SHARE_CHAT_COLORS = GAME_CVARS, CHAT_COLOR_TYPES
+
+local function GetCV(name)
+    local fn = (C_CVar and C_CVar.GetCVar) or GetCVar
+    local ok, v = pcall(fn, name)
+    if ok and type(v) == "string" then return v end
+end
+
+local function Extra()
+    local x = {}
+    if ns.ClickCast then
+        local d = ns.ClickCast.Data()
+        if #d.bindings > 0 or d.enabled == false then x.clickcast = ns.CopyTable(d) end
+    end
+    local cv = {}
+    for _, name in ipairs(GAME_CVARS) do
+        local v = GetCV(name)
+        if v then cv[name] = v end
+    end
+    if next(cv) then x.cvars = cv end
+    if ChatTypeInfo then
+        local cc = {}
+        for _, t in ipairs(CHAT_COLOR_TYPES) do
+            local i = ChatTypeInfo[t]
+            if i and i.r then cc[t] = { r = math.floor(i.r * 1000 + 0.5) / 1000, g = math.floor(i.g * 1000 + 0.5) / 1000,
+                b = math.floor(i.b * 1000 + 0.5) / 1000 } end
+        end
+        if next(cc) then x.chatColors = cc end
+    end
+    if HUFDB and tonumber(HUFDB.configScale) then x.configScale = tonumber(HUFDB.configScale) end
+    return next(x) and x or nil
+end
+
+local function ApplyExtra(x)
+    if type(x) ~= "table" then return end
+    if type(x.clickcast) == "table" and ns.ClickCast then
+        HUFDB.clickcast = HUFDB.clickcast or {}
+        HUFDB.clickcast[ns.CharKey()] = ns.CopyTable(x.clickcast)
+        ns.RunOOC("import clickcast", function() ns.ClickCast.Apply() end)
+    end
+    if type(x.cvars) == "table" then
+        local set = (C_CVar and C_CVar.SetCVar) or SetCVar
+        for _, name in ipairs(GAME_CVARS) do
+            local v = x.cvars[name]
+            if type(v) == "string" and GetCV(name) ~= nil then pcall(set, name, v) end
+        end
+    end
+    if type(x.chatColors) == "table" and ChangeChatColor then
+        for _, t in ipairs(CHAT_COLOR_TYPES) do
+            local c = x.chatColors[t]
+            if type(c) == "table" and tonumber(c.r) and tonumber(c.g) and tonumber(c.b) then
+                pcall(ChangeChatColor, t, c.r, c.g, c.b)
+            end
+        end
+    end
+    if tonumber(x.configScale) and HUFDB then HUFDB.configScale = tonumber(x.configScale) end
+end
+ns.ShareExtra, ns.ShareApplyExtra = Extra, ApplyExtra
+
 function ns.ExportProfile()
     local out = {}
     local changed = Diff(ns.db, ns.DEFAULTS) or {}
     changed.units = changed.units or {}       -- marks it as HUF settings
+    changed._extra = Extra()
     Ser(changed, out, 0)
     return PREFIX .. Encode(table.concat(out))
 end
@@ -170,7 +241,11 @@ end
 -- replaces every setting of the active profile
 function ns.ImportProfile(t)
     local name = ns.CurrentProfileName()
-    HUFDB.profiles[name] = ns.CopyTable(t)
+    t = ns.CopyTable(t)
+    local extra = t._extra
+    t._extra = nil
+    ApplyExtra(extra)
+    HUFDB.profiles[name] = t
     ns.SetProfile(name)
     ns.Log("config", "profile imported into %s", name)
 end
