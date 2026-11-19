@@ -1107,12 +1107,17 @@ function ns.ReadEllesmereLive()
     local db = _G.EllesmereUIDB
     local stored = type(db) == "table" and type(db.profiles) == "table" and db.profiles[db.activeProfile or "Default"]
     local saved = type(stored) == "table" and type(stored.addons) == "table" and stored.addons or {}
-    local uf = data.addons[UF_FOLDER] or saved[UF_FOLDER]
-    local np = data.addons[NP_FOLDER] or saved[NP_FOLDER]
-    local dm = data.addons[DM_FOLDER] or saved[DM_FOLDER]
     -- only loaded modules are in the snapshot: from the stored copy = Ellesmere has them off
     local npOn = data.addons[NP_FOLDER] ~= nil
     local dmOn = data.addons[DM_FOLDER] ~= nil
+    -- a module that is off is not in the snapshot: its settings from the
+    -- profile's stored copy (every part reads data.addons)
+    for folder, v in pairs(saved) do
+        if data.addons[folder] == nil and type(v) == "table" then data.addons[folder] = v end
+    end
+    local uf = data.addons[UF_FOLDER] or saved[UF_FOLDER]
+    local np = data.addons[NP_FOLDER] or saved[NP_FOLDER]
+    local dm = data.addons[DM_FOLDER] or saved[DM_FOLDER]
     if type(uf) ~= "table" and type(np) ~= "table" and type(dm) ~= "table" then
         return false, "EllesmereUI has no Unit Frames, Nameplates or Damage Meters settings here."
     end
