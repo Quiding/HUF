@@ -36,7 +36,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   Blizzard's meter window. In combat in instances the game hides the meter's names from addons:
   HUF then recognises you, unique classes and members it learned by class + specialisation, else
   shows the class name until the fight ends; never a hidden real name. Click a row for its
-  breakdown (spells, amounts, share) in a panel beside the meter. Up to 5 windows, each with its own list,
+  breakdown (spells, amounts, share; hover a spell for details) inside the window (or in a panel
+  beside it). Up to 5 windows, each with its own list,
   fight and place (e.g. damage and threat side by side; + opens one, x closes it). Optionally dimmed
   out of combat (full under the mouse) and threat windows hidden out of combat. `/huf meter` toggles it.
 - **Minimap**: square or round, any size and scale, moved in unlock mode. A border (accent colour
@@ -61,6 +62,10 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
 - 9 text anchors per bar (top / middle / bottom x left / center / right), each with its own
   template, font, size, outline, colour (incl. health status) and offset. Values like `[name]`,
   `[hp]`, `[hp%]`, `[hp:missing]`, `[mp]`, `[mp%]`, `[level]`, `[levelclass:color]`, `[status]`.
+
+## Settings
+`/huf`. A search box (top right) finds any setting by its name; a click opens its page and tab.
+The settings close when a fight starts and come back after it.
 
 ## Click-cast
 General > Click-cast: pick a spell (typed or from the spellbook), press a key or mouse button
