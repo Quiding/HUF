@@ -38,10 +38,10 @@ local function Pair(col, a, b, height)
 end
 
 -- one placed element: show (always / mouseover / never), where, offsets
-local function Element(col, title, T, extra)
+local function Element(col, title, T, extra, modes)
     col:Header(title)
     Pair(col,
-        UI.Dropdown(col.parent, HALF, "Show", ns.Minimap.MODES, Opt(T, "mode")),
+        UI.Dropdown(col.parent, HALF, "Show", modes or ns.Minimap.MODES, Opt(T, "mode")),
         UI.Dropdown(col.parent, HALF, "At", ns.Minimap.POSITIONS, Opt(T, "pos")))
     Pair(col,
         UI.Slider(col.parent, HALF, "Horizontal", -200, 200, 1, Opt(T, "x")),
@@ -109,7 +109,7 @@ local function TextsPage(f)
     end
     local L = UI.Column(f, 0, 0, COL_W)
     local R = UI.Column(f, COL2_X, 0, COL_W)
-    Element(L, "Zone name", T("zone"), Extra("zone"))
+    Element(L, "Zone name", T("zone"), Extra("zone"), ns.Minimap.ZONE_MODES)
     Element(L, "Clock", T("clock"), Extra("clock"))
     Element(R, "Coordinates", T("coords"), Extra("coords"))
     Element(R, "FPS and latency", T("system"), Extra("system"))

@@ -61,6 +61,13 @@ MM.MODES = {
     { value = "HOVER", text = "On mouseover" },
     { value = "NEVER", text = "Never" },
 }
+-- the zone name can also show when it changes
+MM.ZONE_MODES = {
+    { value = "ALWAYS", text = "Always" },
+    { value = "ENTER", text = "On mouseover and on a new zone" },
+    { value = "HOVER", text = "On mouseover" },
+    { value = "NEVER", text = "Never" },
+}
 local function Justify(pos)
     local p = (POS[pos] or POS.CENTER)[1]
     if p:find("LEFT") then return "LEFT" end
@@ -72,9 +79,14 @@ local function Place(f, cfg, extraY)
     f:ClearAllPoints()
     f:SetPoint(p[1], Minimap, p[2], cfg.x or 0, (cfg.y or 0) + (extraY or 0))
 end
+-- ENTER (zone name): on mouseover, and for a few seconds after the zone or
+-- subzone changes
+local zoneShownUntil = 0
+local ZONE_SECONDS = 5
 local function Wanted(mode)
     if mode == "ALWAYS" then return true end
     if mode == "HOVER" then return hovering end
+    if mode == "ENTER" then return hovering or GetTime() < zoneShownUntil end
     return false
 end
 
@@ -966,9 +978,21 @@ end
 ---------------------------------------------------------------------------
 -- Events
 ---------------------------------------------------------------------------
-ns.On("ZONE_CHANGED", UpdateZone)
-ns.On("ZONE_CHANGED_INDOORS", UpdateZone)
-ns.On("ZONE_CHANGED_NEW_AREA", UpdateZone)
+-- a new zone or subzone: its name shows for a while (mode ENTER)
+local function ZoneChanged()
+    UpdateZone()
+    if not MM.active or S().texts.zone.mode ~= "ENTER" then return end
+    local t = GetTime()
+    zoneShownUntil = t + ZONE_SECONDS
+    TextVisibility()
+    C_Timer.After(ZONE_SECONDS + 0.1, function()
+        if GetTime() >= zoneShownUntil then TextVisibility() end
+    end)
+end
+ns.On("ZONE_CHANGED", ZoneChanged)
+ns.On("ZONE_CHANGED_INDOORS", ZoneChanged)
+ns.On("ZONE_CHANGED_NEW_AREA", ZoneChanged)
+ns.On("PLAYER_ENTERING_WORLD", ZoneChanged)
 ns.On("PLAYER_ENTERING_WORLD", function()
     if not (HUFDB and ns.db and S().enabled) then return end
     MM.Apply()
