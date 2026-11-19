@@ -212,9 +212,8 @@ TrackingButton = function(slot, f)
         trackBtn = CreateFrame("Button", "HUF_MinimapTrackingButton", slot)
         trackBtn.icon = trackBtn:CreateTexture(nil, "ARTWORK")
         trackBtn.icon:SetAllPoints()
-        if not (pcall(trackBtn.icon.SetAtlas, trackBtn.icon, "UI-HUD-Minimap-Tracking-Up") and trackBtn.icon:GetAtlas()) then
-            trackBtn.icon:SetTexture("Interface\\Minimap\\Tracking\\None")
-        end
+        -- a magnifying glass: the game's search box icon
+        trackBtn.icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
         trackBtn.icon:SetVertexColor(0.85, 0.85, 0.88)
         trackBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         trackBtn:SetScript("OnClick", function(self) OpenTracking(self.game) end)
@@ -236,7 +235,7 @@ TrackingButton = function(slot, f)
     trackBtn:SetFrameLevel(slot:GetFrameLevel() + 4)
     trackBtn:ClearAllPoints()
     trackBtn:SetPoint("CENTER", slot, "CENTER")
-    local h = math.max(10, (slot:GetHeight() or 22) - 4)
+    local h = math.max(10, (slot:GetHeight() or 22) - 8)
     trackBtn:SetSize(h, h)
     trackBtn:Show()
 end
@@ -478,10 +477,14 @@ function MM.LayoutPins()
         b:SetScale(sc)
         b:ClearAllPoints()
         local off = gap + (i - 1) * (size + gap)
+        -- a column lines up with the bag button on its side away from the map
+        -- (a bag left of the map: right edges), so it never reaches over it
+        local leftOfMap = (s.icons.addonbar.pos or ""):find("^OUTSIDE_LEFT") ~= nil
+        local side = leftOfMap and "RIGHT" or "LEFT"
         if grow == "RIGHT" then b:SetPoint("BOTTOMLEFT", barButton, "BOTTOMRIGHT", off / sc, 0)
         elseif grow == "LEFT" then b:SetPoint("BOTTOMRIGHT", barButton, "BOTTOMLEFT", -off / sc, 0)
-        elseif grow == "DOWN" then b:SetPoint("TOPLEFT", barButton, "BOTTOMLEFT", 0, -off / sc)
-        else b:SetPoint("BOTTOMLEFT", barButton, "TOPLEFT", 0, off / sc) end
+        elseif grow == "DOWN" then b:SetPoint("TOP" .. side, barButton, "BOTTOM" .. side, 0, -off / sc)
+        else b:SetPoint("BOTTOM" .. side, barButton, "TOP" .. side, 0, off / sc) end
         b:SetAlpha(show and 1 or 0)
         b:EnableMouse(show and known[b].mouse)
     end
