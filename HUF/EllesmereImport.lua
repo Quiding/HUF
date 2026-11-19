@@ -876,28 +876,42 @@ local function ConvertMinimap(addon, m, notes)
     m.textAlpha = 0.9
 
     -- texts: Ellesmere's size 10 x its scale; "edge" = just outside the map
-    local function Place(t, mode, posKey, scale, base)
+    -- Ellesmere keeps its texts 6 px in from the map's edges (4, and 2 more
+    -- past its square rim), then adds the offset they were dragged to
+    -- (<off>OffsetX / Y, in the text's scale)
+    local INSET = 6
+    local function Place(t, mode, posKey, scale, base, off)
         if mode == "none" then t.mode = "NEVER" return end
         t.mode = (mode == "hover" or mode == "mouseover") and "HOVER" or "ALWAYS"
         local hp = MM_POS[posKey or "top"] or "TOP"
         if mode == "edge" then hp = (posKey == "bottom" or posKey == "belowMap") and "BELOW" or "ABOVE" end
-        t.pos, t.x, t.y = hp, 0, 0
+        local x, y = 0, 0
+        if hp ~= "BELOW" and hp ~= "ABOVE" and hp ~= "CENTER" then
+            if hp:find("LEFT") then x = INSET elseif hp:find("RIGHT") then x = -INSET end
+            if hp:find("TOP") then y = -INSET elseif hp:find("BOTTOM") then y = INSET end
+        end
+        local sc = Num(scale, 1)
+        if off then
+            x = x + Num(G(off .. "OffsetX"), 0) * sc
+            y = y + Num(G(off .. "OffsetY"), 0) * sc
+        end
+        t.pos, t.x, t.y = hp, math.floor(x + 0.5), math.floor(y + 0.5)
         t.size = math.max(6, math.floor(Num(base, 10) * Num(scale, 1.15) + 0.5))
     end
     -- the older settings carry zoneInside / clockInside instead of the modes
     local clockMode = G("clockMode") or ((G("showClock") == false) and "none") or ((G("clockInside") == false) and "edge" or "inside")
     local locMode = G("locationMode") or ((G("hideZoneText") == true) and "none") or (G("zoneInside") and "inside" or "edge")
     local tx = m.texts
-    Place(tx.zone, locMode, G("locationPosition", "bottom"), G("locationScale", 1.15))
+    Place(tx.zone, locMode, G("locationPosition", "bottom"), G("locationScale", 1.15), nil, "location")
     tx.zone.color = G("zoneReactiveColor", false) and "ZONE" or "WHITE"
     tx.zone.sub = G("zoneShowSubZone", false) and true or false
-    Place(tx.clock, clockMode, G("clockPosition", "top"), G("clockScale", 1.15))
+    Place(tx.clock, clockMode, G("clockPosition", "top"), G("clockScale", 1.15), nil, "clock")
     tx.clock.format = (G("clockFormat", "12h") == "24h") and "24" or "12"
     local cMode = G("coordsMode") or (G("coordsBelow") and "always") or "always"
     if G("showCoords") == false and G("coordsMode") == nil and not G("coordsBelow") then cMode = "none" end
-    Place(tx.coords, cMode, G("coordsPosition") or (G("coordsBelow") and "belowMap") or "topLeft", G("coordsScale", 1))
+    Place(tx.coords, cMode, G("coordsPosition") or (G("coordsBelow") and "belowMap") or "topLeft", G("coordsScale", 1), nil, "coordsBelow")
     tx.coords.decimals = math.floor(Num(G("coordPrecision"), 0))
-    Place(tx.system, G("showFPS", false) and "always" or "none", G("fpsPosition", "bottomLeft"), G("fpsScale", 1), Num(G("fpsTextSize"), 12))
+    Place(tx.system, G("showFPS", false) and "always" or "none", G("fpsPosition", "bottomLeft"), G("fpsScale", 1), Num(G("fpsTextSize"), 12), "fps")
     local lms, wms = G("fpsShowLocalMS", true), G("fpsShowWorldMS", false)
     tx.system.show = (lms or wms) and "BOTH" or "FPS"
     tx.system.latency = (lms and wms and "HIGHER") or (wms and "WORLD") or "HOME"
@@ -918,8 +932,11 @@ local function ConvertMinimap(addon, m, notes)
         if G("diffTextEnabled", false) then
             tx.difficulty.mode = "ALWAYS"
             tx.difficulty.pos = MM_POS[G("diffTextPosition", "topLeft")] or "TOPLEFT"
-            tx.difficulty.x = math.floor(Num(G("diffTextOffsetX"), 0) + 0.5)
-            tx.difficulty.y = math.floor(Num(G("diffTextOffsetY"), 0) + 0.5)
+            local dp = tx.difficulty.pos
+            local ix = dp:find("LEFT") and INSET or dp:find("RIGHT") and -INSET or 0
+            local iy = dp:find("TOP") and -INSET or dp:find("BOTTOM") and INSET or 0
+            tx.difficulty.x = math.floor(ix + Num(G("diffTextOffsetX"), 0) + 0.5)
+            tx.difficulty.y = math.floor(iy + Num(G("diffTextOffsetY"), 0) + 0.5)
             tx.difficulty.size = math.floor(Num(G("diffTextSize"), 12) + 0.5)
             tx.difficulty.color = G("diffTextAccent", false) and "ACCENT" or "WHITE"
         else

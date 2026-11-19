@@ -1152,6 +1152,16 @@ local DRAGGABLE = {
     { key = "tracking", label = "Tracking", get = function() local i = ICON_BY_KEY.tracking return i and Tbl((i.get())) end },
     { key = "addonbar", label = "Bag", get = function() return barButton end },
 }
+-- the texts move too, keeping their corner (the drag adds to their offset)
+for _, info in ipairs(MM.TEXTS) do
+    DRAGGABLE[#DRAGGABLE + 1] = { key = info.key, label = info.title, text = true,
+        get = function()
+            local c = S().texts[info.key]
+            if not c or c.mode == "NEVER" then return nil end
+            local b = texts[info.key]
+            return b and b.fs
+        end }
+end
 local function IconMover(info)
     local m = iconMovers[info.key]
     if m then return m end
@@ -1166,10 +1176,26 @@ local function IconMover(info)
     m.label = m:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     m.label:SetPoint("BOTTOM", m, "TOP", 0, 2)
     m.label:SetText(info.label)
-    m:SetScript("OnDragStart", function(self) if not InCombatLockdown() then self:StartMoving() end end)
+    m:SetScript("OnDragStart", function(self)
+        if InCombatLockdown() then return end
+        self.fromX, self.fromY = self:GetCenter()
+        self:StartMoving()
+    end)
     m:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         if self.SetUserPlaced then self:SetUserPlaced(false) end
+        if info.text then
+            -- how far it moved, in the map's units, added to the text's offset
+            local sx, sy = self:GetCenter()
+            if not (sx and self.fromX) then return end
+            local k = self:GetEffectiveScale() / Minimap:GetEffectiveScale()
+            local c = S().texts[info.key]
+            c.x = math.floor((c.x or 0) + (sx - self.fromX) * k + 0.5)
+            c.y = math.floor((c.y or 0) + (sy - self.fromY) * k + 0.5)
+            MM.Apply()
+            C_Timer.After(0, function() MM.SetUnlocked(true) end)
+            return
+        end
         -- the offset in the map's units (the icons are placed relative to it)
         local sx, sy = self:GetCenter()
         local mx, my = Minimap:GetCenter()
@@ -1186,7 +1212,8 @@ local function IconMover(info)
     m:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(info.label)
-        GameTooltip:AddLine("Drag it anywhere, on the map or off it.", 1, 1, 1)
+        GameTooltip:AddLine(info.text and "Drag it; it keeps its corner of the map (Texts: where)."
+            or "Drag it anywhere, on the map or off it.", 1, 1, 1)
         GameTooltip:Show()
     end)
     m:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1205,7 +1232,9 @@ function MM.SetUnlocked(on)
             local fe, ue = f:GetEffectiveScale(), UIParent:GetEffectiveScale()
             m:ClearAllPoints()
             m:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x * fe / ue, y * fe / ue)
-            m:SetSize(math.max(16, (f:GetWidth() or 16) * fe / ue), math.max(16, (f:GetHeight() or 16) * fe / ue))
+            m:SetSize(math.max(16, (f:GetWidth() or 16) * fe / ue + (info.text and 4 or 0)),
+                      math.max(info.text and 12 or 16, (f:GetHeight() or 16) * fe / ue + (info.text and 2 or 0)))
+            m.label:SetShown(not info.text)     -- a text mover shows its name on hover only
             m:Show()
         elseif m then
             m:Hide()

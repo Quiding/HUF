@@ -17,7 +17,7 @@ local blocks = {}
 -- at 10 px leaves only a smudge); the height is cut to keep it square. Sets
 -- tex.aspect (width / height of what is shown). A plain file where the client
 -- has no such atlas.
-local function SetIcon(tex, atlas, file, trim)
+local function SetIcon(tex, atlas, file, trim, shift)
     local info = atlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas)
     local sheet = info and (info.file or info.filename)
     if sheet and info.width and info.width > 0 and info.height and info.height > 0 then
@@ -25,7 +25,8 @@ local function SetIcon(tex, atlas, file, trim)
         local aspect = info.width / info.height
         if trim then
             local sy = math.min(1, trim * aspect)        -- the same pixels both ways
-            local cx, cy = (l + r) / 2, (t + b) / 2
+            -- shift: the picture is off the art's centre (a share of its width)
+            local cx, cy = (l + r) / 2 + (r - l) * (shift or 0), (t + b) / 2
             local hw, hh = (r - l) * trim / 2, (b - t) * sy / 2
             l, r, t, b = cx - hw, cx + hw, cy - hh, cy + hh
             aspect = 1
@@ -88,7 +89,7 @@ local BLOCKS = {
     { key = "friends", title = "Friends online", atlas = "socialqueuing-icon-group",
       file = "Interface\\FriendsFrame\\UI-Toast-FriendOnlineIcon", count = FriendsOnline,
       click = function() if ToggleFriendsFrame then ToggleFriendsFrame() end end },
-    { key = "guild", title = "Guild members online", atlas = "UI-HUD-MicroMenu-GuildCommunities-Up", trim = 0.62,
+    { key = "guild", title = "Guild members online", atlas = "UI-HUD-MicroMenu-GuildCommunities-Up", trim = 0.62, shift = 0.05,
       file = "Interface\\GossipFrame\\TabardGossipIcon", count = GuildOnline,
       click = function()
           if ToggleGuildFrame then ToggleGuildFrame()
@@ -116,7 +117,7 @@ local function Build()
         local b = CreateFrame("Button", nil, bar)
         b.info = info
         b.icon = b:CreateTexture(nil, "ARTWORK")
-        SetIcon(b.icon, info.atlas, info.file, info.trim)
+        SetIcon(b.icon, info.atlas, info.file, info.trim, info.shift)
         b.text = b:CreateFontString(nil, "OVERLAY")
         b:RegisterForClicks("LeftButtonUp")
         b:SetScript("OnClick", function() info.click() end)
@@ -183,7 +184,8 @@ function DB.Update()
             b.text:SetPoint("LEFT", b.icon, "RIGHT", 2, 0)
             w = iw + 2 + math.max(6, b.text:GetStringWidth() or 0)
         end
-        widths[i] = w
+        widths[i] = math.ceil(w)
+        if (widths[i] - iw) % 2 == 1 then widths[i] = widths[i] + 1 end   -- the icon on a whole pixel
         total = total + w + (i > 1 and s.spacing or 0)
     end
     -- the tracking slot takes the left end; the counts centre in the rest
@@ -196,7 +198,7 @@ function DB.Update()
         bar.slot:SetPoint("BOTTOMLEFT")
         bar.slot:SetWidth(slotW)
     end
-    local x = -total / 2 + slotW / 2
+    local x = math.floor(-total / 2 + slotW / 2 + 0.5)
     for i, b in ipairs(shown) do
         b:ClearAllPoints()
         b:SetSize(widths[i], s.height)
