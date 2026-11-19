@@ -29,6 +29,7 @@ DamageMeter.lua
 Minimap.lua
 Movers.lua
 Config.lua
+Search.lua
 ConfigPages.lua
 ClickCastConfig.lua
 NameplatesConfig.lua

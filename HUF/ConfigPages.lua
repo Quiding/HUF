@@ -377,7 +377,17 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
                     end
                 end
             end
-            if reload then ReloadUI() end
+            if reload then
+                -- the game refuses a reload in combat: ask again after the fight
+                if InCombatLockdown() then
+                    ns.Print("A reload has to wait for the end of the fight.")
+                    ns.RunOOC("reload", function()
+                        UI.Confirm("Reload now to finish turning the EllesmereUI module off?", "Reload", ReloadUI, "Later")
+                    end)
+                else
+                    ReloadUI()
+                end
+            end
         end
         f:Show()
     end
@@ -801,6 +811,7 @@ local function UnitPage(key)
         subs.texts = SubFrame(page); TextsPage(subs.texts, key, page)
         if not info.noAuras then subs.auras = SubFrame(page); AuraPage(subs.auras, key) end
         if not info.polled then subs.cast = SubFrame(page); CastPage(subs.cast, key) end
+        strip:Bind(subs, Show)
         Show("frame")
     end
 end

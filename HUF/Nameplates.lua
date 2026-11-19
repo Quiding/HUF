@@ -157,7 +157,10 @@ local function Layout(p)
     Frame.LayoutBorder(h.border, h, bs, s.borderColor, 1)
     p.text:SetFrameLevel(h:GetFrameLevel() + 4)
 
-    ns.ApplyFont(p.name, s.font, s.fontSize, s.outline)
+    -- friendly units may have their own name size
+    p.friendly = IsFriendly(p.unit)
+    local nameSize = (p.friendly and (s.friendlyFontSize or 0) > 0) and s.friendlyFontSize or s.fontSize
+    ns.ApplyFont(p.name, s.font, nameSize, s.outline)
     p.name:ClearAllPoints()
     local inside = showBar and (s.namePosition == "LEFT" or s.namePosition == "CENTER")
     p.nameInside = inside
@@ -260,7 +263,8 @@ local function Layout(p)
         end
         sb:ClearAllPoints()
         sb:SetPoint("CENTER", np, "CENTER", 0, s.yOffset)
-        sb:SetSize(s.width, s.height + ((showName and not inside) and (s.fontSize + s.nameGap) or 0))
+        local sh = s.height + ((showName and not inside) and (s.fontSize + s.nameGap) or 0)
+        sb:SetSize(s.width, math.max(1, sh * (s.stackSpacing or 100) / 100))
         sb:Show()
         pcall(np.SetStackingBoundsFrame, np, sb)
     end
@@ -317,7 +321,10 @@ local function UpdateName(p)
     local unit = p.unit
     if p.mode == "BAR" then return end
     local name = ns.NameText(unit, "PRIVACY")
-    if s.showLevel then
+    p.friendly = IsFriendly(unit)
+    local showLevel = s.showLevel
+    if p.friendly and s.friendlyLevel and s.friendlyLevel ~= "SAME" then showLevel = s.friendlyLevel == "SHOW" end
+    if showLevel then
         local holder = { hunit = unit }
         -- level + classification ("55E") in difficulty colour, then the name
         ns.SetTemplateText(p.name, holder, "[levelclass:color]")
@@ -331,8 +338,10 @@ local function UpdateName(p)
         pcall(p.name.SetText, p.name, name)
     end
     local c
-    if s.nameColor == "CUSTOM" then c = s.nameCustom
-    elseif s.nameColor == "REACTION" then c = ns.UnitColor(unit, true) end
+    local mode = s.nameColor
+    if p.friendly and s.friendlyNameColor and s.friendlyNameColor ~= "SAME" then mode = s.friendlyNameColor end
+    if mode == "CUSTOM" then c = s.nameCustom
+    elseif mode == "REACTION" then c = ns.UnitColor(unit, true) end
     c = c or { r = 1, g = 1, b = 1 }
     p.name:SetTextColor(c.r, c.g, c.b)
 end
@@ -600,8 +609,26 @@ ns.On("UNIT_QUEST_LOG_CHANGED", function(unit) if unit == "player" then QuestCha
 ns.On("ZONE_CHANGED_NEW_AREA", QuestChanged)
 
 -- settings changed: every plate again; switched off: Blizzard's back
+-- stacking: the game's own switch per enemies / friendly units (only when
+-- set here; not in combat, the game may refuse it there)
+local function ApplyStacking()
+    local s = S()
+    local types = Enum and Enum.NamePlateStackType
+    if not (types and C_CVar and C_CVar.SetCVarBitfield) then return end
+    local function Set(idx, mode)
+        if idx == nil or mode == nil or mode == "GAME" then return end
+        pcall(C_CVar.SetCVarBitfield, "nameplateStackingTypes", idx, mode == "ON")
+    end
+    ns.RunOOC("nameplate stacking", function()
+        Set(types.Enemy, s.stackEnemies)
+        Set(types.Friendly, s.stackFriendly)
+    end)
+end
+NP.ApplyStacking = ApplyStacking
+
 function NP.ApplyAll()
     local s = S()
+    ApplyStacking()
     if not s.enabled then
         for unit, p in pairs(NP.plates) do
             local np = p.nameplate

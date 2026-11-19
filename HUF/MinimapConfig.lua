@@ -194,5 +194,6 @@ ns.RegisterPage("minimap", "Minimap", "frames", function(page)
     subs.texts = SubFrame(page); TextsPage(subs.texts)
     subs.icons = SubFrame(page); IconsPage(subs.icons)
     subs.buttons = SubFrame(page); ButtonsPage(subs.buttons, page)
+    if strip.Bind then strip:Bind(subs, Show) end
     Show("map")
 end, function() return ns.db.minimap.enabled end)
