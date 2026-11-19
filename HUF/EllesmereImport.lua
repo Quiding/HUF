@@ -794,6 +794,32 @@ local function ConvertGroup(rf, g, notes)
     g.group.orientation = horiz and (flip and "LEFT" or "RIGHT") or (flip and "UP" or "DOWN")
     g.group.spacing = math.max(0, math.floor(Num(rf.partyCellSpacing, Num(G("cellSpacing"), -1)) + 2 * bs + 0.5))
     g.group.spacingH = g.group.spacing
+
+    -- place: the first member's top left (HUF's point), border inside as
+    -- Ellesmere draws it. From the screen when Ellesmere's party header shows,
+    -- else from its saved place of the 5-slot party block (partyUnlockPos)
+    local fw, fh = Num(G("partyFrameWidth"), 125), Num(G("partyFrameHeight"), 60)
+    local hdr = _G.ERFPartyHeader
+    local ui = UIParent:GetEffectiveScale()
+    local left, top = hdr and hdr:IsVisible() and hdr:GetLeft(), hdr and hdr:IsVisible() and hdr:GetTop()
+    if left and top and ui and ui > 0 then
+        local es = hdr:GetEffectiveScale()
+        g.anchorTo = "SCREEN"
+        g.point = { "TOPLEFT", "BOTTOMLEFT", math.floor(left * es / ui + bs + 0.5), math.floor(top * es / ui - bs + 0.5) }
+    else
+        local pos = rf.partyUnlockPos
+        if type(pos) == "table" and type(pos.x) == "number" and type(pos.y) == "number" then
+            local gap = Num(rf.partyCellSpacing, Num(G("cellSpacing"), -1))
+            local bw = horiz and (5 * fw + 4 * gap) or fw
+            local bh = horiz and fh or (5 * fh + 4 * gap)
+            local pt = pos.point or "CENTER"
+            -- the anchor point's place in the block, from its top left
+            local ox = (pt:find("LEFT") and 0) or (pt:find("RIGHT") and bw) or bw / 2
+            local oy = (pt:find("TOP") and 0) or (pt:find("BOTTOM") and -bh) or -bh / 2
+            g.anchorTo = "SCREEN"
+            g.point = { "TOPLEFT", pos.relPoint or pt, math.floor(pos.x - ox + bs + 0.5), math.floor(pos.y - oy - bs + 0.5) }
+        end
+    end
     g.group.sort = (G("sortMode", "ROLE") == "INDEX") and "INDEX" or "NAME"
     g.group.showPlayer = true
 end
