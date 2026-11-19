@@ -860,6 +860,16 @@ local function ConvertMinimap(addon, m, notes)
     end
     m.shade = 0
     m.mouseZoom = G("scrollZoom", true) and true or false
+    m.zoomReset = math.max(0, math.floor(Num(G("zoomResetSeconds"), 0) + 0.5))
+    m.rotate = G("rotateMinimap", false) and "ON" or "OFF"
+    -- when it shows
+    local VIS = { always = "ALWAYS", in_combat = "COMBAT", out_of_combat = "NOCOMBAT", mouseover = "HOVER" }
+    local vis = G("visibility", "always")
+    m.visibility = VIS[vis] or "ALWAYS"
+    if not VIS[vis] then notes[#notes + 1] = ("Minimap: visibility \"%s\" is not in HUF, it shows always."):format(tostring(vis)) end
+    m.opacity = math.max(0.1, math.min(1, Num(G("opacity"), 100) / 100))
+    m.onlyInstances = G("visOnlyInstances", false) and true or false
+    m.hideMounted = G("visHideMounted", false) and true or false
     -- Ellesmere's map texts: a soft shadow, not a hard outline (HUF's general
     -- shadow setting draws it), a little see-through
     m.outline = "NONE"
@@ -880,6 +890,7 @@ local function ConvertMinimap(addon, m, notes)
     local tx = m.texts
     Place(tx.zone, locMode, G("locationPosition", "bottom"), G("locationScale", 1.15))
     tx.zone.color = G("zoneReactiveColor", false) and "ZONE" or "WHITE"
+    tx.zone.sub = G("zoneShowSubZone", false) and true or false
     Place(tx.clock, clockMode, G("clockPosition", "top"), G("clockScale", 1.15))
     tx.clock.format = (G("clockFormat", "12h") == "24h") and "24" or "12"
     local cMode = G("coordsMode") or (G("coordsBelow") and "always") or "always"
@@ -889,6 +900,7 @@ local function ConvertMinimap(addon, m, notes)
     Place(tx.system, G("showFPS", false) and "always" or "none", G("fpsPosition", "bottomLeft"), G("fpsScale", 1), Num(G("fpsTextSize"), 12))
     local lms, wms = G("fpsShowLocalMS", true), G("fpsShowWorldMS", false)
     tx.system.show = (lms or wms) and "BOTH" or "FPS"
+    tx.system.latency = (lms and wms and "HIGHER") or (wms and "WORLD") or "HOME"
 
     -- the game's icons Ellesmere hides; the others keep HUF's places
     local ic = m.icons
@@ -901,11 +913,18 @@ local function ConvertMinimap(addon, m, notes)
     Off("difficulty", G("hideRaidDifficulty", false))
     local mp = MM_CORNER[G("mailPosition", "button")]
     if mp and ic.mail and ic.mail.mode ~= "NEVER" then ic.mail.pos, ic.mail.x, ic.mail.y = mp, 0, 0 end
-    if G("diffTextEnabled", false) and ic.difficulty and ic.difficulty.mode ~= "NEVER" then
-        ic.difficulty.mode = "ALWAYS"
-        ic.difficulty.pos = MM_POS[G("diffTextPosition", "topLeft")] or "TOPLEFT"
-        ic.difficulty.x, ic.difficulty.y = 0, 0
-        notes[#notes + 1] = "Minimap: Ellesmere's difficulty text is the game's difficulty icon in HUF."
+    -- Ellesmere's difficulty text: HUF's difficulty text (the game's icon stays as set above)
+    if tx.difficulty then
+        if G("diffTextEnabled", false) then
+            tx.difficulty.mode = "ALWAYS"
+            tx.difficulty.pos = MM_POS[G("diffTextPosition", "topLeft")] or "TOPLEFT"
+            tx.difficulty.x = math.floor(Num(G("diffTextOffsetX"), 0) + 0.5)
+            tx.difficulty.y = math.floor(Num(G("diffTextOffsetY"), 0) + 0.5)
+            tx.difficulty.size = math.floor(Num(G("diffTextSize"), 12) + 0.5)
+            tx.difficulty.color = G("diffTextAccent", false) and "ACCENT" or "WHITE"
+        else
+            tx.difficulty.mode = "NEVER"
+        end
     end
 
     -- Ellesmere's element row (tracking) under the map's left edge, its
@@ -913,14 +932,19 @@ local function ConvertMinimap(addon, m, notes)
     if ic.tracking and ic.tracking.mode ~= "NEVER" then
         ic.tracking.mode, ic.tracking.pos, ic.tracking.x, ic.tracking.y = "ALWAYS", "BELOW_LEFT", 0, -(m.borderSize + 1)
     end
-    if ic.addonbar then ic.addonbar.mode, ic.addonbar.pos, ic.addonbar.x, ic.addonbar.y = "ALWAYS", "OUTSIDE_LEFT_BOTTOM", -4, 0 end
+    if ic.addonbar then
+        ic.addonbar.mode, ic.addonbar.pos, ic.addonbar.y = "ALWAYS", "OUTSIDE_LEFT_BOTTOM", 0
+        ic.addonbar.x = -(4 + math.floor(Num(G("btnRowDistance"), 0) + 0.5))      -- Ellesmere's row distance
+    end
 
     -- addon buttons: Ellesmere gathers them in its flyout; HUF's addon bar
     if not G("hideAddonButtons", false) then
         m.addonBar = true
         m.barIconSize = math.max(16, math.floor(Num(G("addonBtnSize"), 24) + 0.5))
         -- Ellesmere's flyout: a grid, 4 wide, square buttons on dark backgrounds
-        m.barLayout = G("flyoutAsList", false) and "ROW" or "GRID"
+        m.barLayout = G("flyoutAsList", false) and "LIST" or "GRID"
+        local GROW = { auto = "AUTO", up = "UP", down = "DOWN", left = "LEFT", right = "RIGHT" }
+        m.barGrow = GROW[G("flyoutGrowDir", "auto")] or "AUTO"
         m.barColumns = 4
         m.barSquare = G("btnBackgrounds", true) and true or false
     else
@@ -937,7 +961,7 @@ local function ConvertMinimap(addon, m, notes)
             end
         end
         m.pinGrow = "UP"
-        m.pinGap = 4                    -- Ellesmere's column has room between its buttons
+        m.pinGap = 4 + math.floor(Num(G("btnRowSpacing"), 0) + 0.5)   -- room between the buttons (+ Ellesmere's spacing)
     end
 end
 

@@ -575,7 +575,24 @@ function MM.LayoutBar()
         if b:IsShown() and known[b].inBar and not known[b].pin then list[#list + 1] = b end
     end
     local n = #list
-    local cols = grid and math.max(1, math.min(n, s.barColumns or 4)) or (vertical and 1 or math.max(1, n))
+    -- LIST: one column, each button with its addon's name
+    local asList = s.barLayout == "LIST"
+    if asList then grid = true end
+    local nameW = 0
+    for _, b in ipairs(list) do
+        if not b.hufName then
+            b.hufName = bar:CreateFontString(nil, "OVERLAY")
+            b.hufName:SetJustifyH("LEFT")
+        end
+        ns.ApplyFont(b.hufName, S().font, math.max(9, math.floor(size * 0.5)), S().outline)
+        b.hufName:SetText((known[b].name or ""):gsub("^LibDBIcon10_", ""))
+        b.hufName:SetShown(asList)
+        if asList then nameW = math.max(nameW, b.hufName:GetStringWidth() or 0) end
+    end
+    for _, b in ipairs(buttons) do
+        if b.hufName and not (asList and known[b].inBar and not known[b].pin) then b.hufName:Hide() end
+    end
+    local cols = asList and 1 or (grid and math.max(1, math.min(n, s.barColumns or 4)) or (vertical and 1 or math.max(1, n)))
     local rows = grid and math.max(1, math.ceil(n / cols)) or (vertical and math.max(1, n) or 1)
     for i, b in ipairs(list) do
         local bw = math.max(1, b:GetWidth() or size)
@@ -587,7 +604,14 @@ function MM.LayoutBar()
         b:SetPoint("TOPLEFT", bar, "TOPLEFT", (pad + col * (size + gap)) / sc, -(pad + row * (size + gap)) / sc)
         b:SetAlpha(1)
     end
-    bar:SetSize(pad * 2 + cols * size + (cols - 1) * gap, pad * 2 + rows * size + (rows - 1) * gap)
+    local extra = asList and (nameW + 8) or 0
+    bar:SetSize(pad * 2 + cols * size + (cols - 1) * gap + extra, pad * 2 + rows * size + (rows - 1) * gap)
+    if asList then
+        for i, b in ipairs(list) do
+            b.hufName:ClearAllPoints()
+            b.hufName:SetPoint("LEFT", bar, "TOPLEFT", pad + size + 6, -(pad + (i - 1) * (size + gap) + size / 2))
+        end
+    end
     bar:SetScale(holder:GetEffectiveScale() / UIParent:GetEffectiveScale())
     bar:ClearAllPoints()
     if grid then
@@ -644,7 +668,10 @@ end
 local function UpdateZone()
     local t = texts.zone
     if not t then return end
-    local ok, z = pcall(GetMinimapZoneText)
+    -- the subzone when there is one (sub), else the zone
+    local fn = (S().texts.zone.sub ~= false) and GetMinimapZoneText or GetZoneText
+    local ok, z = pcall(fn)
+    if not ok or z == nil or z == "" then ok, z = pcall(GetMinimapZoneText) end
     pcall(t.fs.SetText, t.fs, ok and z or "")
     TextColor(t.fs, S().texts.zone.color, true)
 end
@@ -695,18 +722,41 @@ local function UpdateSystem()
     local show = S().texts.system.show
     local fps = math.floor((GetFramerate() or 0) + 0.5)
     local _, _, home, world = GetNetStats()
-    local ms = math.max(home or 0, world or 0)
+    local which = S().texts.system.latency
+    local ms = (which == "HOME" and home) or (which == "WORLD" and world) or math.max(home or 0, world or 0)
+    ms = ms or 0
     if show == "FPS" then t.fs:SetFormattedText("%d fps", fps)
     elseif show == "MS" then t.fs:SetFormattedText("%d ms", ms)
     else t.fs:SetFormattedText("%d fps  %d ms", fps, ms) end
 end
 
-local UPDATERS = { zone = UpdateZone, clock = UpdateClock, coords = UpdateCoords, system = UpdateSystem }
+-- the instance's size and difficulty ("5N", "10H", "40"); nothing outside
+local function UpdateDifficulty()
+    local t = texts.difficulty
+    if not t then return end
+    local txt = ""
+    local ok, _, kind, _, diffName, maxPlayers = pcall(GetInstanceInfo)
+    if ok and kind and kind ~= "none" then
+        local letter = ""
+        if type(diffName) == "string" then
+            local l = diffName:lower()
+            if l:find("mythic") then letter = "M"
+            elseif l:find("heroic") then letter = "H"
+            elseif l:find("normal") then letter = "N" end
+        end
+        txt = (type(maxPlayers) == "number" and maxPlayers > 0 and tostring(maxPlayers) or "") .. letter
+    end
+    t.fs:SetText(txt)
+end
+
+local UPDATERS = { zone = UpdateZone, clock = UpdateClock, coords = UpdateCoords, system = UpdateSystem,
+    difficulty = UpdateDifficulty }
 MM.TEXTS = {
     { key = "zone", title = "Zone name" },
     { key = "clock", title = "Clock" },
     { key = "coords", title = "Coordinates" },
     { key = "system", title = "FPS and latency" },
+    { key = "difficulty", title = "Instance difficulty" },
 }
 
 local function BuildText(key)
@@ -793,9 +843,45 @@ local function SetHover(on)
 end
 
 local tick, slow = 0, 0
+-- zoomed in: back out after zoomReset seconds (0: never)
+local zoomToken = 0
+function MM.ZoomResetSoon()
+    local secs = S().zoomReset or 0
+    if secs <= 0 then return end
+    zoomToken = zoomToken + 1
+    local mine = zoomToken
+    C_Timer.After(secs, function()
+        if mine == zoomToken and Minimap and (Minimap:GetZoom() or 0) > 0 then Minimap:SetZoom(0) end
+    end)
+end
+
+-- visibility: always, only in combat, hidden in combat, on mouseover; only
+-- in instances, hidden while mounted; the opacity when shown
+local function MapAlpha()
+    local s = S()
+    local vis = s.visibility or "ALWAYS"
+    local fight = InCombatLockdown()
+    local on = true
+    if vis == "COMBAT" then on = fight
+    elseif vis == "NOCOMBAT" then on = not fight
+    elseif vis == "HOVER" then on = hovering end
+    if on and s.onlyInstances then
+        local ok, inside = pcall(IsInInstance)
+        on = ok and inside and true or false
+    end
+    if on and s.hideMounted and IsMounted and IsMounted() then on = false end
+    return on and (s.opacity or 1) or 0
+end
+function MM.ApplyVisibility()
+    if not (holder and MM.active) then return end
+    local a = MapAlpha()
+    if holder:GetAlpha() ~= a then holder:SetAlpha(a) end
+end
+
 local function OnTick()
     if not MM.active then return end
     SetHover(OverMap())
+    MM.ApplyVisibility()
     tick = tick + 1
     if texts.coords and texts.coords:IsShown() then UpdateCoords() end
     if tick % 5 == 0 then            -- once a second
@@ -884,6 +970,7 @@ local function Build()
         local z = Minimap:GetZoom() or 0
         local max = (Minimap.GetZoomLevels and Minimap:GetZoomLevels() or 6) - 1
         Minimap:SetZoom(math.max(0, math.min(max, z + (delta > 0 and 1 or -1))))
+        MM.ZoomResetSoon()
     end)
 
     textLayer = CreateFrame("Frame", nil, Minimap)
@@ -987,6 +1074,8 @@ function MM.Apply()
     end
     RefreshZoom()
     HideDecorations()
+    -- the game's own rotate setting, only when set here
+    if s.rotate == "ON" or s.rotate == "OFF" then pcall(SetCVar, "rotateMinimap", s.rotate == "ON" and "1" or "0") end
 
     textLayer:SetFrameLevel(Minimap:GetFrameLevel() + 6)
     iconLayer:SetFrameLevel(Minimap:GetFrameLevel() + 8)
@@ -1130,6 +1219,7 @@ end
 -- a new zone or subzone: its name shows for a while (mode ENTER)
 local function ZoneChanged()
     UpdateZone()
+    UpdateDifficulty()
     if not MM.active or S().texts.zone.mode ~= "ENTER" then return end
     local t = GetTime()
     zoneShownUntil = t + ZONE_SECONDS
@@ -1138,6 +1228,8 @@ local function ZoneChanged()
         if GetTime() >= zoneShownUntil then TextVisibility() end
     end)
 end
+ns.On("PLAYER_DIFFICULTY_CHANGED", function() UpdateDifficulty() end)
+ns.On("GROUP_ROSTER_UPDATE", function() UpdateDifficulty() end)
 ns.On("ZONE_CHANGED", ZoneChanged)
 ns.On("ZONE_CHANGED_INDOORS", ZoneChanged)
 ns.On("ZONE_CHANGED_NEW_AREA", ZoneChanged)

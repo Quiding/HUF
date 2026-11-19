@@ -80,6 +80,32 @@ local function MapPage(f)
     R:Slider("Text opacity", 0.3, 1, 0.05, function() return M().textAlpha end, function(v) M().textAlpha = v end, "%.2f")
 end
 
+-- behaviour: when the map shows, rotation, zoom
+local function BehaviourPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("When it shows")
+    L:Cycle("Show", {
+        { value = "ALWAYS", text = "Always" },
+        { value = "COMBAT", text = "Only in combat" },
+        { value = "NOCOMBAT", text = "Hidden in combat" },
+        { value = "HOVER", text = "On mouseover" },
+    }, Opt(M, "visibility"))
+    L:Slider("Opacity", 0.1, 1, 0.05, function() return M().opacity end, function(v) M().opacity = v end, "%.2f")
+    local gi, si = Opt(M, "onlyInstances")
+    L:Check("Only in dungeons, raids and battlegrounds", gi, si)
+    local gm, sm = Opt(M, "hideMounted")
+    L:Check("Hidden while mounted", gm, sm)
+
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Map")
+    R:Cycle("Rotate the map", {
+        { value = "GAME", text = "The game's setting" },
+        { value = "ON", text = "Rotate" },
+        { value = "OFF", text = "North up" },
+    }, Opt(M, "rotate"))
+    R:Slider("Zoom out again after, seconds (0: never)", 0, 60, 1, Opt(M, "zoomReset"))
+end
+
 local COLORS = {
     { value = "WHITE", text = "White" },
     { value = "ACCENT", text = "Accent" },
@@ -105,6 +131,11 @@ local function TextsPage(f)
             elseif k == "system" then
                 col:Cycle("Shows", { { value = "BOTH", text = "FPS and latency" }, { value = "FPS", text = "FPS" },
                     { value = "MS", text = "Latency" } }, Opt(T(k), "show"))
+                col:Cycle("Latency", { { value = "HIGHER", text = "The higher one" }, { value = "HOME", text = "Home" },
+                    { value = "WORLD", text = "World" } }, Opt(T(k), "latency"))
+            elseif k == "zone" then
+                local gs, ss = Opt(T(k), "sub")
+                col:Check("The subzone when there is one", gs, ss, "Off: always the zone (\"The Barrens\").")
             end
         end
     end
@@ -112,6 +143,7 @@ local function TextsPage(f)
     local R = UI.Column(f, COL2_X, 0, COL_W)
     Element(L, "Zone name", T("zone"), Extra("zone"), ns.Minimap.ZONE_MODES)
     Element(L, "Clock", T("clock"), Extra("clock"))
+    Element(L, "Instance difficulty", T("difficulty"), Extra("difficulty"))
     Element(R, "Coordinates", T("coords"), Extra("coords"))
     Element(R, "FPS and latency", T("system"), Extra("system"))
     R:Note("Text alignment follows the position: left, centered or right. Clock: left-click stopwatch, right-click calendar.")
@@ -140,6 +172,7 @@ local function ButtonsPage(f, page)
     L:Cycle("Layout", {
         { value = "ROW", text = "One row" },
         { value = "GRID", text = "Grid" },
+        { value = "LIST", text = "List with names" },
     }, Opt(M, "barLayout"))
     L:Slider("Grid columns", 1, 10, 1, Opt(M, "barColumns"))
     local gq, sq = Opt(M, "barSquare")
@@ -195,7 +228,7 @@ ns.RegisterPage("minimap", "Minimap", "frames", function(page)
     local on = UI.Check(page, 260, "Use HUF's minimap", function() return M().enabled end,
         function(v) M().enabled = v end, "Shape, size, look, texts and icons of the minimap. Off: Blizzard's minimap after /reload.")
     on:SetPoint("TOPLEFT", 0, 4)
-    local tabs = { { "map", "Map" }, { "texts", "Texts" }, { "icons", "Icons" }, { "buttons", "Addon buttons" } }
+    local tabs = { { "map", "Map" }, { "behaviour", "Behaviour" }, { "texts", "Texts" }, { "icons", "Icons" }, { "buttons", "Addon buttons" } }
     local subs, strip = {}, nil
     local function Show(k)
         for name, sf in pairs(subs) do sf:SetShown(name == k) end
@@ -205,6 +238,7 @@ ns.RegisterPage("minimap", "Minimap", "frames", function(page)
     strip:SetPoint("TOPLEFT", 0, -22)
     strip:SetPoint("TOPRIGHT", 0, -22)
     subs.map = SubFrame(page); MapPage(subs.map)
+    subs.behaviour = SubFrame(page); BehaviourPage(subs.behaviour)
     subs.texts = SubFrame(page); TextsPage(subs.texts)
     subs.icons = SubFrame(page); IconsPage(subs.icons)
     subs.buttons = SubFrame(page); ButtonsPage(subs.buttons, page)

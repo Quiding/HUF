@@ -499,13 +499,21 @@ local function BuildDefaults()
             mouseZoom = true,
             font = "GLOBAL", outline = "GLOBAL",
             textAlpha = 1,              -- the texts on and around the map
+            -- behaviour
+            visibility = "ALWAYS",      -- ALWAYS | COMBAT (only in combat) | NOCOMBAT (hidden in combat) | HOVER
+            opacity = 1,
+            onlyInstances = false,      -- shown only in dungeons / raids / battlegrounds
+            hideMounted = false,
+            rotate = "GAME",            -- GAME (the game's setting) | ON | OFF
+            zoomReset = 0,              -- seconds after a zoom until it zooms out again (0: never)
             iconScale = 1,              -- the game's icons (tracking, calendar ...)
             -- pos: inside the map (TOPLEFT ... BOTTOMRIGHT) or outside (ABOVE_*, BELOW_*)
             texts = {
-                zone   = { mode = "ALWAYS", pos = "TOP", x = 0, y = -4, size = 13, color = "ZONE" },
+                zone   = { mode = "ALWAYS", pos = "TOP", x = 0, y = -4, size = 13, color = "ZONE", sub = true },   -- sub: the subzone when there is one
                 clock  = { mode = "ALWAYS", pos = "BOTTOM", x = 0, y = 4, size = 13, color = "WHITE", format = "24", localTime = true },
                 coords = { mode = "HOVER", pos = "BOTTOMLEFT", x = 4, y = 4, size = 11, color = "WHITE", decimals = 1 },
-                system = { mode = "HOVER", pos = "BOTTOMRIGHT", x = -4, y = 4, size = 11, color = "WHITE", show = "BOTH" },
+                system = { mode = "HOVER", pos = "BOTTOMRIGHT", x = -4, y = 4, size = 11, color = "WHITE", show = "BOTH", latency = "HIGHER" },
+                difficulty = { mode = "NEVER", pos = "TOPRIGHT", x = -4, y = -4, size = 12, color = "WHITE" },   -- "5N", "10H" in instances
             },
             icons = {
                 tracking    = { mode = "ALWAYS", pos = "BELOW_LEFT", x = 0, y = -2 },   -- on the data bar's left end
@@ -522,7 +530,7 @@ local function BuildDefaults()
             addonBar = false,           -- every addon button in one "addon bar" button
             barGrow = "AUTO",           -- AUTO (towards the screen's middle) | LEFT | RIGHT | UP | DOWN
             barIconSize = 26, barTimeout = 10,
-            barLayout = "ROW",          -- ROW (one line) | GRID (barColumns wide)
+            barLayout = "ROW",          -- ROW (one line) | GRID (barColumns wide) | LIST (one column with names)
             barColumns = 4,
             barSquare = false,          -- buttons in the bar as square icons on a dark background
             -- buttons[name] = "PIN": kept out of the bag, in a line from the bag button
