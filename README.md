@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.14.
+Version 0.5.0.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -48,8 +48,13 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   calendar, mail, crafting orders, instance difficulty, expansion summary, zoom)
   placed anywhere, each shown always, on mouseover or never; addon buttons the same (all or one by
   one). Or the **addon bar**: one button that opens a small bar with every addon button; it closes
-  after a click on one of them or after 10 seconds. Turning it off gives the minimap back to
+  after a click on one of them or after 10 seconds. Behaviour: shown always or only in some
+  situations, rotating map, zoom reset after a few seconds, subzone, latency and difficulty texts
+  (texts dragged in unlock mode, with their own opacity). Turning it off gives the minimap back to
   Blizzard after /reload.
+- **Data bars**: the minimap data bar, a strip as wide as the map under (or over) it with friends
+  and guild members online (click: friends list / guild window); icon colour, size and place
+  configurable (Frames > Data bars).
 - **Chat**: font, size, outline, window background and opacity; short channel names at the start of
   a line ([1], [2], [S], [Y], [P], [PL], [G], [GO], [R], [RL], [RW], [W], [I], each editable);
   names in class colours; web addresses as links (click: copy box); tooltips over item / spell /
@@ -111,7 +116,8 @@ Account-wide profiles chosen per character. General > Profiles: create, copy, re
 setting, plus the character's click-cast bindings, the game's chat settings and colours and the
 damage number settings (not the kept chat lines).
 With EllesmereUI installed: **Import from EllesmereUI** (its current settings or a `!EUI_` string)
-brings over the look of its player, target, target of target, pet frames and nameplates.
+brings over the look of its player, target, target of target, pet and group frames, nameplates
+(including their stacking), the minimap and its data bar.
 
 ## For addon authors
 `_G.HUF`: `HUF.API_VERSION` (1), `HUF.RegisterNameProvider(id, fn)` (`fn(unit, first, last)`

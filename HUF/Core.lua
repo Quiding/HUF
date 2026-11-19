@@ -545,29 +545,59 @@ local function BuildDefaults()
             shade = 14, shadeAlpha = 0.6,   -- dark shade outside the map: width, strength
             mouseZoom = true,
             font = "GLOBAL", outline = "GLOBAL",
+            textAlpha = 1,              -- the texts on and around the map
+            -- behaviour
+            visibility = "ALWAYS",      -- ALWAYS | COMBAT (only in combat) | NOCOMBAT (hidden in combat) | HOVER
+            opacity = 1,
+            onlyInstances = false,      -- shown only in dungeons / raids / battlegrounds
+            hideMounted = false,
+            rotate = "GAME",            -- GAME (the game's setting) | ON | OFF
+            zoomReset = 0,              -- seconds after a zoom until it zooms out again (0: never)
             iconScale = 1,              -- the game's icons (tracking, calendar ...)
             -- pos: inside the map (TOPLEFT ... BOTTOMRIGHT) or outside (ABOVE_*, BELOW_*)
             texts = {
-                zone   = { mode = "ALWAYS", pos = "TOP", x = 0, y = -4, size = 13, color = "ZONE" },
+                zone   = { mode = "ALWAYS", pos = "TOP", x = 0, y = -4, size = 13, color = "ZONE", sub = true },   -- sub: the subzone when there is one
                 clock  = { mode = "ALWAYS", pos = "BOTTOM", x = 0, y = 4, size = 13, color = "WHITE", format = "24", localTime = true },
                 coords = { mode = "HOVER", pos = "BOTTOMLEFT", x = 4, y = 4, size = 11, color = "WHITE", decimals = 1 },
-                system = { mode = "HOVER", pos = "BOTTOMRIGHT", x = -4, y = 4, size = 11, color = "WHITE", show = "BOTH" },
+                system = { mode = "HOVER", pos = "BOTTOMRIGHT", x = -4, y = 4, size = 11, color = "WHITE", show = "BOTH", latency = "HIGHER" },
+                difficulty = { mode = "NEVER", pos = "TOPRIGHT", x = -4, y = -4, size = 12, color = "WHITE" },   -- "5N", "10H" in instances
             },
             icons = {
-                tracking    = { mode = "HOVER", pos = "LEFT", x = 2, y = 0 },
+                tracking    = { mode = "ALWAYS", pos = "BELOW_LEFT", x = 0, y = -2 },   -- on the data bar's left end
                 calendar    = { mode = "HOVER", pos = "TOPRIGHT", x = -2, y = -2 },
                 mail        = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = 0 },
                 crafting    = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = -26 },
                 difficulty  = { mode = "ALWAYS", pos = "TOPLEFT", x = 2, y = -2 },
                 landing     = { mode = "HOVER", pos = "LEFT", x = 2, y = -30 },
                 zoom        = { mode = "NEVER", pos = "BOTTOMRIGHT", x = -2, y = 24 },
-                addonbar    = { mode = "ALWAYS", pos = "RIGHT", x = -4, y = 28 },
+                addonbar    = { mode = "ALWAYS", pos = "OUTSIDE_LEFT_BOTTOM", x = -2, y = 0 },   -- the button bag, outside the lower left
             },
             buttonMode = "HOVER",       -- addon buttons on the map: ALWAYS | HOVER | NEVER (each one can differ: buttons[name])
             buttons = {},
             addonBar = false,           -- every addon button in one "addon bar" button
             barGrow = "AUTO",           -- AUTO (towards the screen's middle) | LEFT | RIGHT | UP | DOWN
             barIconSize = 26, barTimeout = 10,
+            barLayout = "ROW",          -- ROW (one line) | GRID (barColumns wide) | LIST (one column with names)
+            barColumns = 4,
+            barSquare = false,          -- buttons in the bar as square icons on a dark background
+            -- buttons[name] = "PIN": kept out of the bag, in a line from the bag button
+            pinGrow = "UP",             -- UP | RIGHT | DOWN | LEFT
+            pinGap = 2,
+            pinOrder = {},              -- name -> place in the line (else by name)
+        },
+        -- data bars: for now the minimap data bar (DataBars.lua)
+        dataBars = {
+            minimap = {
+                enabled = false,
+                position = "BELOW",         -- BELOW | ABOVE the map
+                height = 22, gap = 0,
+                bgColor = C(0.067, 0.067, 0.067), bgAlpha = 0.95, borderSize = 1,
+                friends = true, guild = true,
+                fontSize = 12, spacing = 16,
+                layout = "SIDE",            -- SIDE: icon, then the count | STACK: the count above a small icon
+                iconColor = "MONO",         -- MONO (flat light grey) | GAME (the art's colours) | CLASS | ACCENT | CUSTOM
+                iconCustom = C(0.85, 0.85, 0.88),
+            },
         },
         nameplates = {
             enabled = true,
@@ -1027,6 +1057,33 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 15
+    end
+    -- 16: minimap tracking under the map's left edge, the addon button bag in
+    -- its lower left (only where still the old defaults)
+    if HUFDB.dataVersion < 16 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local ic = prof.minimap and prof.minimap.icons
+            local t = ic and ic.tracking
+            if t and t.mode == "HOVER" and t.pos == "LEFT" and t.x == 2 and t.y == 0 then
+                t.mode, t.pos, t.x, t.y = "ALWAYS", "BELOW_LEFT", 0, -2
+            end
+            local ab = ic and ic.addonbar
+            if ab and ab.pos == "RIGHT" and ab.x == -4 and ab.y == 28 then
+                ab.pos, ab.x, ab.y = "BOTTOMLEFT", 2, 2
+            end
+        end
+        HUFDB.dataVersion = 16
+    end
+    -- 17: the addon button bag just outside the map's lower left corner
+    -- (only where still the 16 place)
+    if HUFDB.dataVersion < 17 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local ab = prof.minimap and prof.minimap.icons and prof.minimap.icons.addonbar
+            if ab and ab.pos == "BOTTOMLEFT" and ab.x == 2 and ab.y == 2 then
+                ab.pos, ab.x, ab.y = "OUTSIDE_LEFT_BOTTOM", -2, 0
+            end
+        end
+        HUFDB.dataVersion = 17
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

@@ -43,6 +43,8 @@ local POS = {
     ABOVE_LEFT = { "BOTTOMLEFT", "TOPLEFT" }, ABOVE = { "BOTTOM", "TOP" }, ABOVE_RIGHT = { "BOTTOMRIGHT", "TOPRIGHT" },
     BELOW_LEFT = { "TOPLEFT", "BOTTOMLEFT" }, BELOW = { "TOP", "BOTTOM" }, BELOW_RIGHT = { "TOPRIGHT", "BOTTOMRIGHT" },
     OUTSIDE_LEFT = { "RIGHT", "LEFT" }, OUTSIDE_RIGHT = { "LEFT", "RIGHT" },
+    OUTSIDE_LEFT_TOP = { "TOPRIGHT", "TOPLEFT" }, OUTSIDE_LEFT_BOTTOM = { "BOTTOMRIGHT", "BOTTOMLEFT" },
+    OUTSIDE_RIGHT_TOP = { "TOPLEFT", "TOPRIGHT" }, OUTSIDE_RIGHT_BOTTOM = { "BOTTOMLEFT", "BOTTOMRIGHT" },
 }
 MM.POSITIONS = {
     { value = "TOPLEFT", text = "Inside: top left" }, { value = "TOP", text = "Inside: top" },
@@ -55,9 +57,18 @@ MM.POSITIONS = {
     { value = "BELOW_LEFT", text = "Below, left" }, { value = "BELOW", text = "Below, centered" },
     { value = "BELOW_RIGHT", text = "Below, right" },
     { value = "OUTSIDE_LEFT", text = "Left of the map" }, { value = "OUTSIDE_RIGHT", text = "Right of the map" },
+    { value = "OUTSIDE_LEFT_TOP", text = "Left of the map, top" }, { value = "OUTSIDE_LEFT_BOTTOM", text = "Left of the map, bottom" },
+    { value = "OUTSIDE_RIGHT_TOP", text = "Right of the map, top" }, { value = "OUTSIDE_RIGHT_BOTTOM", text = "Right of the map, bottom" },
 }
 MM.MODES = {
     { value = "ALWAYS", text = "Always" },
+    { value = "HOVER", text = "On mouseover" },
+    { value = "NEVER", text = "Never" },
+}
+-- the zone name can also show when it changes
+MM.ZONE_MODES = {
+    { value = "ALWAYS", text = "Always" },
+    { value = "ENTER", text = "On mouseover and on a new zone" },
     { value = "HOVER", text = "On mouseover" },
     { value = "NEVER", text = "Never" },
 }
@@ -72,9 +83,14 @@ local function Place(f, cfg, extraY)
     f:ClearAllPoints()
     f:SetPoint(p[1], Minimap, p[2], cfg.x or 0, (cfg.y or 0) + (extraY or 0))
 end
+-- ENTER (zone name): on mouseover, and for a few seconds after the zone or
+-- subzone changes
+local zoneShownUntil = 0
+local ZONE_SECONDS = 5
 local function Wanted(mode)
     if mode == "ALWAYS" then return true end
     if mode == "HOVER" then return hovering end
+    if mode == "ENTER" then return hovering or GetTime() < zoneShownUntil end
     return false
 end
 
@@ -115,6 +131,9 @@ local function ShowFrame(f, on, mouse)
 end
 
 -- place one of the game's icons: on HUF's icon layer, where the setting says
+-- tracking in the data bar's slot (defined below with IconVisibility)
+local trackBtn, trackSlotted, TrackingButton
+
 local function PlaceIcon(info, f, second)
     local d = placed[f]
     if not d then
@@ -149,7 +168,19 @@ local function PlaceIcon(info, f, second)
         local p = POS[cfg.pos] or POS.CENTER
         f:ClearAllPoints()
         local sc = S().iconScale
-        f:SetPoint(p[1], Minimap, p[2], (cfg.x or 0) / sc, (cfg.y or 0) / sc)
+        -- tracking on the data bar's end: centred in its slot, above the bar
+        local slot = info.key == "tracking" and ns.DataBars and ns.DataBars.TrackingSlot and ns.DataBars.TrackingSlot()
+        if slot then
+            f:SetPoint("CENTER", slot, "CENTER", 0, 0)
+            trackSlotted = true
+            TrackingButton(slot, f)
+        else
+            if info.key == "tracking" then
+                trackSlotted = false
+                if trackBtn then trackBtn:Hide() end
+            end
+            f:SetPoint(p[1], Minimap, p[2], (cfg.x or 0) / sc, (cfg.y or 0) / sc)
+        end
     end
     d.busy = false
 end
@@ -167,10 +198,58 @@ function MM.PlaceIcons(only)
     end
 end
 
+-- tracking on the data bar's end: HUF's own clear button (the game's
+-- magnifier art) opens the game's tracking menu; the game's button stays
+-- hidden in the slot (the menu opens there)
+local function OpenTracking(f)
+    local b = f and (type(f.Button) == "table" and f.Button or f)
+    if not b then return end
+    if b.OpenMenu then pcall(b.OpenMenu, b)
+    elseif b.Click then pcall(b.Click, b, "LeftButton") end
+end
+TrackingButton = function(slot, f)
+    if not trackBtn then
+        trackBtn = CreateFrame("Button", "HUF_MinimapTrackingButton", slot)
+        trackBtn.icon = trackBtn:CreateTexture(nil, "ARTWORK")
+        trackBtn.icon:SetAllPoints()
+        -- a magnifying glass: the game's search box icon
+        trackBtn.icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
+        trackBtn.icon:SetVertexColor(0.85, 0.85, 0.88)
+        trackBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        trackBtn:SetScript("OnClick", function(self) OpenTracking(self.game) end)
+        trackBtn:SetScript("OnEnter", function(self)
+            local a = ns.ACCENT
+            self.icon:SetVertexColor(a[1], a[2], a[3])
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText("Tracking")
+            GameTooltip:AddLine("Click: what the minimap shows", 0.8, 0.8, 0.8)
+            GameTooltip:Show()
+        end)
+        trackBtn:SetScript("OnLeave", function(self)
+            self.icon:SetVertexColor(0.85, 0.85, 0.88)
+            GameTooltip:Hide()
+        end)
+    end
+    trackBtn.game = f
+    trackBtn:SetParent(slot)
+    trackBtn:SetFrameLevel(slot:GetFrameLevel() + 4)
+    trackBtn:ClearAllPoints()
+    trackBtn:SetPoint("CENTER", slot, "CENTER")
+    local h = math.max(10, (slot:GetHeight() or 22) - 8)
+    trackBtn:SetSize(h, h)
+    trackBtn:Show()
+end
+
 local function IconVisibility()
     for f, d in pairs(placed) do
         local on = Wanted(S().icons[d.info.key].mode)
-        ShowFrame(f, on, d.mouse)
+        if d.info.key == "tracking" and trackSlotted then
+            ShowFrame(f, false, d.mouse)        -- HUF's button stands for it
+            if trackBtn then trackBtn:SetShown(on) end
+            on = false
+        else
+            ShowFrame(f, on, d.mouse)
+        end
         if type(f.Button) == "table" and d.buttonMouse ~= nil then f.Button:EnableMouse(on and d.buttonMouse) end
     end
 end
@@ -236,12 +315,18 @@ end
 
 local function ButtonMode(b)
     local s = S()
-    return s.buttons[known[b].name] or s.buttonMode
+    local m = s.buttons[known[b].name] or s.buttonMode
+    if m == "PIN" then m = "ALWAYS" end         -- pinned (bag off): on the map
+    return m
 end
+
+local Square, Unsquare     -- defined below (square look in the addon bar)
 
 -- back on the map where the addon had it
 local function ToMap(b)
     local d = known[b]
+    d.pin = nil
+    Unsquare(b)
     if b:GetParent() == Minimap and not d.inBar then return end
     d.inBar = nil
     b:SetParent(Minimap)
@@ -257,6 +342,85 @@ local function ToMap(b)
     b:ClearAllPoints()
     for _, p in ipairs(d.points) do b:SetPoint(p[1], p[2] or Minimap, p[3], p[4], p[5]) end
     if b.RegisterForDrag then b:RegisterForDrag("LeftButton") end
+end
+
+---------------------------------------------------------------------------
+-- Square buttons in the bar (setting barSquare): the round frame and
+-- background the minimap button library draws are hidden (recognised by the
+-- game's own minimap button textures), the icon fills a dark square with a
+-- thin outline. Everything comes back when the button leaves the bar.
+---------------------------------------------------------------------------
+local RING_FILES = { [136430] = true, [136467] = true, [136477] = true }
+local RING_PATHS = { "MiniMap%-TrackingBorder", "UI%-Minimap%-Background", "UI%-Minimap%-ZoomButton%-Highlight" }
+local function IsRing(r)
+    if not (r and r.IsObjectType and r:IsObjectType("Texture")) then return false end
+    local id = r.GetTextureFileID and r:GetTextureFileID()
+    if id and RING_FILES[id] then return true end
+    local path = r:GetTexture()
+    if type(path) == "string" then
+        for _, pat in ipairs(RING_PATHS) do if path:find(pat) then return true end end
+    end
+    return false
+end
+
+-- the button's picture: the library's .icon, else the first texture left
+local function IconOf(b)
+    local i = rawget(b, "icon")
+    if type(i) == "table" and i.IsObjectType and i:IsObjectType("Texture") then return i end
+    for _, r in ipairs({ b:GetRegions() }) do
+        if r:IsObjectType("Texture") and not IsRing(r) and r ~= b.hufSqBg and r:GetDrawLayer() ~= "HIGHLIGHT" then return r end
+    end
+end
+
+function Square(b)
+    local d = known[b]
+    if d.sq then return end
+    local sq = { hidden = {} }
+    for _, r in ipairs({ b:GetRegions() }) do
+        if IsRing(r) then
+            sq.hidden[#sq.hidden + 1] = { r = r, a = r:GetAlpha() }
+            r:SetAlpha(0)
+        end
+    end
+    local hl = b.GetHighlightTexture and b:GetHighlightTexture()
+    if hl and IsRing(hl) then sq.hidden[#sq.hidden + 1] = { r = hl, a = hl:GetAlpha() } hl:SetAlpha(0) end
+    local icon = IconOf(b)
+    if icon then
+        sq.icon = icon
+        sq.points = {}
+        for i = 1, icon:GetNumPoints() do sq.points[i] = { icon:GetPoint(i) } end
+        sq.w, sq.h = icon:GetSize()
+        sq.coords = { icon:GetTexCoord() }
+        icon:ClearAllPoints()
+        icon:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+        icon:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    end
+    if not b.hufSqBg then
+        b.hufSqBg = b:CreateTexture(nil, "BACKGROUND", nil, -8)
+        b.hufSqBg:SetAllPoints()
+        b.hufSqBg:SetColorTexture(0.04, 0.04, 0.05, 0.95)
+        b.hufSqBorder = ns.UI.Border(b, 0, 0, 0, 1)
+    end
+    b.hufSqBg:Show()
+    b.hufSqBorder:SetShown(true)
+    d.sq = sq
+end
+
+function Unsquare(b)
+    local d = known[b]
+    local sq = d and d.sq
+    if not sq then return end
+    for _, h in ipairs(sq.hidden) do h.r:SetAlpha(h.a or 1) end
+    local icon = sq.icon
+    if icon then
+        icon:ClearAllPoints()
+        for _, p in ipairs(sq.points) do icon:SetPoint(p[1], p[2], p[3], p[4], p[5]) end
+        if sq.w and sq.w > 0 then icon:SetSize(sq.w, sq.h) end
+        if sq.coords[1] then icon:SetTexCoord(unpack(sq.coords)) end
+    end
+    if b.hufSqBg then b.hufSqBg:Hide() b.hufSqBorder:SetShown(false) end
+    d.sq = nil
 end
 
 local function ToBar(b)
@@ -279,14 +443,64 @@ local function ToBar(b)
     b:SetFrameStrata(bar:GetFrameStrata())
     b:SetFrameLevel(bar:GetFrameLevel() + 3)
     if b.RegisterForDrag then b:RegisterForDrag() end   -- no dragging it round the map from inside the bar
+    if S().barSquare then Square(b) else Unsquare(b) end
+end
+
+-- a pinned button (buttons[name] = "PIN"): out of the bag, in a line that
+-- starts at the bag button, styled like the bag's buttons
+local function ToPin(b)
+    local d = known[b]
+    ToBar(b)                    -- saves where the addon had it (once), squares it
+    d.pin = true
+    if b:GetParent() ~= iconLayer then b:SetParent(iconLayer) end
+    b:SetFrameStrata(iconLayer:GetFrameStrata())
+    b:SetFrameLevel(iconLayer:GetFrameLevel() + 2)
+end
+
+function MM.LayoutPins()
+    if not (barButton and MM.active) then return end
+    local s = S()
+    local list = {}
+    for _, b in ipairs(buttons) do
+        if known[b].pin then list[#list + 1] = b end
+    end
+    local order = s.pinOrder or {}
+    table.sort(list, function(a, b)
+        local oa, ob = order[known[a].name], order[known[b].name]
+        if oa and ob and oa ~= ob then return oa < ob end
+        if oa and not ob then return true end
+        if ob and not oa then return false end
+        return known[a].name < known[b].name
+    end)
+    local size, gap, grow = s.barIconSize, s.pinGap or 2, s.pinGrow or "UP"
+    local show = s.addonBar and Wanted(s.icons.addonbar.mode)
+    for i, b in ipairs(list) do
+        local sc = size / math.max(1, b:GetWidth() or size)
+        b:SetScale(sc)
+        b:ClearAllPoints()
+        local off = gap + (i - 1) * (size + gap)
+        -- a column lines up with the bag button on its side away from the map
+        -- (a bag left of the map: right edges), so it never reaches over it
+        local leftOfMap = (s.icons.addonbar.pos or ""):find("^OUTSIDE_LEFT") ~= nil
+        local side = leftOfMap and "RIGHT" or "LEFT"
+        if grow == "RIGHT" then b:SetPoint("BOTTOMLEFT", barButton, "BOTTOMRIGHT", off / sc, 0)
+        elseif grow == "LEFT" then b:SetPoint("BOTTOMRIGHT", barButton, "BOTTOMLEFT", -off / sc, 0)
+        elseif grow == "DOWN" then b:SetPoint("TOP" .. side, barButton, "BOTTOM" .. side, 0, -off / sc)
+        else b:SetPoint("BOTTOM" .. side, barButton, "TOP" .. side, 0, off / sc) end
+        b:SetAlpha(show and 1 or 0)
+        b:EnableMouse(show and known[b].mouse)
+    end
 end
 
 function MM.ApplyButtons()
     if not MM.active then return end
     local s = S()
     for _, b in ipairs(buttons) do
-        if s.addonBar then
+        if s.addonBar and s.buttons[known[b].name] == "PIN" then
+            ToPin(b)
+        elseif s.addonBar then
             ToBar(b)
+            known[b].pin = nil
             b:SetAlpha(1)
             b:EnableMouse(known[b].mouse)
         else
@@ -298,6 +512,7 @@ function MM.ApplyButtons()
         end
     end
     if barButton then barButton:SetShown(s.addonBar and #buttons > 0 and Wanted(s.icons.addonbar.mode)) end
+    MM.LayoutPins()
     if bar and bar:IsShown() then MM.LayoutBar() end
 end
 
@@ -356,28 +571,69 @@ function MM.LayoutBar()
         grow = (x * barButton:GetEffectiveScale() / UIParent:GetEffectiveScale()) > w / 2 and "LEFT" or "RIGHT"
     end
     local vertical = grow == "UP" or grow == "DOWN"
-    local n = 0
+    local grid = s.barLayout == "GRID"
+    local list = {}
     for _, b in ipairs(buttons) do
-        if b:IsShown() and known[b].inBar then
-            local bw = math.max(1, b:GetWidth() or size)
-            local sc = size / bw
-            b:SetScale(sc)
-            b:ClearAllPoints()
-            local off = pad + n * (size + gap)
-            if vertical then
-                b:SetPoint("TOP", bar, "TOP", 0, -off / sc)
-            else
-                b:SetPoint("LEFT", bar, "LEFT", off / sc, 0)
-            end
-            b:SetAlpha(1)
-            n = n + 1
+        if b:IsShown() and known[b].inBar and not known[b].pin then list[#list + 1] = b end
+    end
+    local n = #list
+    -- LIST: one column, each button with its addon's name
+    local asList = s.barLayout == "LIST"
+    if asList then grid = true end
+    local nameW = 0
+    for _, b in ipairs(list) do
+        if not b.hufName then
+            b.hufName = bar:CreateFontString(nil, "OVERLAY")
+            b.hufName:SetJustifyH("LEFT")
+        end
+        ns.ApplyFont(b.hufName, S().font, math.max(9, math.floor(size * 0.5)), S().outline)
+        b.hufName:SetText((known[b].name or ""):gsub("^LibDBIcon10_", ""))
+        b.hufName:SetShown(asList)
+        if asList then nameW = math.max(nameW, b.hufName:GetStringWidth() or 0) end
+    end
+    for _, b in ipairs(buttons) do
+        if b.hufName and not (asList and known[b].inBar and not known[b].pin) then b.hufName:Hide() end
+    end
+    local cols = asList and 1 or (grid and math.max(1, math.min(n, s.barColumns or 4)) or (vertical and 1 or math.max(1, n)))
+    local rows = grid and math.max(1, math.ceil(n / cols)) or (vertical and math.max(1, n) or 1)
+    for i, b in ipairs(list) do
+        local bw = math.max(1, b:GetWidth() or size)
+        local sc = size / bw
+        b:SetScale(sc)
+        b:ClearAllPoints()
+        local col, row = (i - 1) % cols, math.floor((i - 1) / cols)
+        if not grid and vertical then col, row = 0, i - 1 end
+        b:SetPoint("TOPLEFT", bar, "TOPLEFT", (pad + col * (size + gap)) / sc, -(pad + row * (size + gap)) / sc)
+        b:SetAlpha(1)
+    end
+    local extra = asList and (nameW + 8) or 0
+    bar:SetSize(pad * 2 + cols * size + (cols - 1) * gap + extra, pad * 2 + rows * size + (rows - 1) * gap)
+    if asList then
+        for i, b in ipairs(list) do
+            b.hufName:ClearAllPoints()
+            b.hufName:SetPoint("LEFT", bar, "TOPLEFT", pad + size + 6, -(pad + (i - 1) * (size + gap) + size / 2))
         end
     end
-    local len = pad * 2 + math.max(1, n) * size + math.max(0, n - 1) * gap
-    if vertical then bar:SetSize(size + pad * 2, len) else bar:SetSize(len, size + pad * 2) end
     bar:SetScale(holder:GetEffectiveScale() / UIParent:GetEffectiveScale())
     bar:ClearAllPoints()
-    if grow == "LEFT" then bar:SetPoint("RIGHT", barButton, "LEFT", -3, 0)
+    if grid then
+        -- a grid opens beside the button, towards the screen's middle
+        -- (up from a button in the lower half, down from one in the upper)
+        local _, y = barButton:GetCenter()
+        local h = UIParent:GetHeight() or 0
+        local low = ((y or 0) * barButton:GetEffectiveScale() / UIParent:GetEffectiveScale()) < h / 2
+        local side = (grow == "LEFT") and "LEFT" or (grow == "RIGHT" and "RIGHT")
+        if not side then
+            local x = barButton:GetCenter() or 0
+            local w = UIParent:GetWidth() or 0
+            side = (x * barButton:GetEffectiveScale() / UIParent:GetEffectiveScale()) > w / 2 and "LEFT" or "RIGHT"
+        end
+        if side == "LEFT" then
+            bar:SetPoint(low and "BOTTOMRIGHT" or "TOPRIGHT", barButton, low and "BOTTOMLEFT" or "TOPLEFT", -3, 0)
+        else
+            bar:SetPoint(low and "BOTTOMLEFT" or "TOPLEFT", barButton, low and "BOTTOMRIGHT" or "TOPRIGHT", 3, 0)
+        end
+    elseif grow == "LEFT" then bar:SetPoint("RIGHT", barButton, "LEFT", -3, 0)
     elseif grow == "RIGHT" then bar:SetPoint("LEFT", barButton, "RIGHT", 3, 0)
     elseif grow == "UP" then bar:SetPoint("BOTTOM", barButton, "TOP", 0, 3)
     else bar:SetPoint("TOP", barButton, "BOTTOM", 0, -3) end
@@ -414,7 +670,10 @@ end
 local function UpdateZone()
     local t = texts.zone
     if not t then return end
-    local ok, z = pcall(GetMinimapZoneText)
+    -- the subzone when there is one (sub), else the zone
+    local fn = (S().texts.zone.sub ~= false) and GetMinimapZoneText or GetZoneText
+    local ok, z = pcall(fn)
+    if not ok or z == nil or z == "" then ok, z = pcall(GetMinimapZoneText) end
     pcall(t.fs.SetText, t.fs, ok and z or "")
     TextColor(t.fs, S().texts.zone.color, true)
 end
@@ -465,18 +724,41 @@ local function UpdateSystem()
     local show = S().texts.system.show
     local fps = math.floor((GetFramerate() or 0) + 0.5)
     local _, _, home, world = GetNetStats()
-    local ms = math.max(home or 0, world or 0)
+    local which = S().texts.system.latency
+    local ms = (which == "HOME" and home) or (which == "WORLD" and world) or math.max(home or 0, world or 0)
+    ms = ms or 0
     if show == "FPS" then t.fs:SetFormattedText("%d fps", fps)
     elseif show == "MS" then t.fs:SetFormattedText("%d ms", ms)
     else t.fs:SetFormattedText("%d fps  %d ms", fps, ms) end
 end
 
-local UPDATERS = { zone = UpdateZone, clock = UpdateClock, coords = UpdateCoords, system = UpdateSystem }
+-- the instance's size and difficulty ("5N", "10H", "40"); nothing outside
+local function UpdateDifficulty()
+    local t = texts.difficulty
+    if not t then return end
+    local txt = ""
+    local ok, _, kind, _, diffName, maxPlayers = pcall(GetInstanceInfo)
+    if ok and kind and kind ~= "none" then
+        local letter = ""
+        if type(diffName) == "string" then
+            local l = diffName:lower()
+            if l:find("mythic") then letter = "M"
+            elseif l:find("heroic") then letter = "H"
+            elseif l:find("normal") then letter = "N" end
+        end
+        txt = (type(maxPlayers) == "number" and maxPlayers > 0 and tostring(maxPlayers) or "") .. letter
+    end
+    t.fs:SetText(txt)
+end
+
+local UPDATERS = { zone = UpdateZone, clock = UpdateClock, coords = UpdateCoords, system = UpdateSystem,
+    difficulty = UpdateDifficulty }
 MM.TEXTS = {
     { key = "zone", title = "Zone name" },
     { key = "clock", title = "Clock" },
     { key = "coords", title = "Coordinates" },
     { key = "system", title = "FPS and latency" },
+    { key = "difficulty", title = "Instance difficulty" },
 }
 
 local function BuildText(key)
@@ -522,6 +804,7 @@ local function LayoutTexts()
         b.fs:SetWidth(0)
         Place(b.fs, c)
         TextColor(b.fs, c.color, info.key == "zone")
+        b.fs:SetAlpha(s.textAlpha or 1)
         UPDATERS[info.key]()
     end
 end
@@ -562,9 +845,45 @@ local function SetHover(on)
 end
 
 local tick, slow = 0, 0
+-- zoomed in: back out after zoomReset seconds (0: never)
+local zoomToken = 0
+function MM.ZoomResetSoon()
+    local secs = S().zoomReset or 0
+    if secs <= 0 then return end
+    zoomToken = zoomToken + 1
+    local mine = zoomToken
+    C_Timer.After(secs, function()
+        if mine == zoomToken and Minimap and (Minimap:GetZoom() or 0) > 0 then Minimap:SetZoom(0) end
+    end)
+end
+
+-- visibility: always, only in combat, hidden in combat, on mouseover; only
+-- in instances, hidden while mounted; the opacity when shown
+local function MapAlpha()
+    local s = S()
+    local vis = s.visibility or "ALWAYS"
+    local fight = InCombatLockdown()
+    local on = true
+    if vis == "COMBAT" then on = fight
+    elseif vis == "NOCOMBAT" then on = not fight
+    elseif vis == "HOVER" then on = hovering end
+    if on and s.onlyInstances then
+        local ok, inside = pcall(IsInInstance)
+        on = ok and inside and true or false
+    end
+    if on and s.hideMounted and IsMounted and IsMounted() then on = false end
+    return on and (s.opacity or 1) or 0
+end
+function MM.ApplyVisibility()
+    if not (holder and MM.active) then return end
+    local a = MapAlpha()
+    if holder:GetAlpha() ~= a then holder:SetAlpha(a) end
+end
+
 local function OnTick()
     if not MM.active then return end
     SetHover(OverMap())
+    MM.ApplyVisibility()
     tick = tick + 1
     if texts.coords and texts.coords:IsShown() then UpdateCoords() end
     if tick % 5 == 0 then            -- once a second
@@ -653,6 +972,7 @@ local function Build()
         local z = Minimap:GetZoom() or 0
         local max = (Minimap.GetZoomLevels and Minimap:GetZoomLevels() or 6) - 1
         Minimap:SetZoom(math.max(0, math.min(max, z + (delta > 0 and 1 or -1))))
+        MM.ZoomResetSoon()
     end)
 
     textLayer = CreateFrame("Frame", nil, Minimap)
@@ -687,6 +1007,7 @@ local function Build()
         p[3] = math.floor((p[3] or 0) + (holder:GetLeft() or 0) - (from[1] or 0) + 0.5)
         p[4] = math.floor((p[4] or 0) + (holder:GetTop() or 0) - (from[2] or 0) + 0.5)
         MM.Apply()
+        C_Timer.After(0, function() MM.SetUnlocked(true) end)   -- the icon movers follow
     end)
     mover:SetScript("OnClick", function() if ns.ToggleConfig then ns.ToggleConfig("minimap", true) end end)
     mover:Hide()
@@ -755,6 +1076,8 @@ function MM.Apply()
     end
     RefreshZoom()
     HideDecorations()
+    -- the game's own rotate setting, only when set here
+    if s.rotate == "ON" or s.rotate == "OFF" then pcall(SetCVar, "rotateMinimap", s.rotate == "ON" and "1" or "0") end
 
     textLayer:SetFrameLevel(Minimap:GetFrameLevel() + 6)
     iconLayer:SetFrameLevel(Minimap:GetFrameLevel() + 8)
@@ -768,8 +1091,36 @@ function MM.Apply()
     barButton:ClearAllPoints()
     local p = POS[ab.pos] or POS.RIGHT
     barButton:SetPoint(p[1], Minimap, p[2], ab.x or 0, ab.y or 0)
-    barButton.border:SetColor(A[1], A[2], A[3], 1)
-    for _, t in ipairs(barButton.dots) do t:SetColorTexture(A[1], A[2], A[3], 1) end
+    if MM.LayoutPins then MM.LayoutPins() end
+    -- square buttons: the bag button looks like them (their size, a thin dark
+    -- outline, light dots; the accent under the mouse); else HUF's accent look
+    local sqr = s.barSquare
+    local bs = sqr and math.max(14, s.barIconSize or 18) or 18
+    barButton:SetSize(bs, bs)
+    barButton.sqr = sqr
+    local dot = sqr and math.max(3, math.floor(bs / 5)) or 4
+    for i, t in ipairs(barButton.dots) do
+        t:SetSize(dot, dot)
+        t:ClearAllPoints()
+        local o = dot * 0.75 + (sqr and 1 or 0)
+        t:SetPoint("CENTER", (i % 2 == 1) and -o or o, (i <= 2) and o or -o)
+    end
+    local function BagColors(over)
+        if sqr and not over then
+            barButton.border:SetColor(0, 0, 0, 1)
+            for _, t in ipairs(barButton.dots) do t:SetColorTexture(0.8, 0.8, 0.82, 1) end
+        else
+            barButton.border:SetColor(A[1], A[2], A[3], 1)
+            for _, t in ipairs(barButton.dots) do t:SetColorTexture(A[1], A[2], A[3], 1) end
+        end
+    end
+    BagColors(false)
+    if not barButton.hufHover then
+        barButton.hufHover = true
+        barButton:HookScript("OnEnter", function() if barButton.BagColors then barButton.BagColors(true) end end)
+        barButton:HookScript("OnLeave", function() if barButton.BagColors then barButton.BagColors(false) end end)
+    end
+    barButton.BagColors = BagColors
     bar.border:SetColor(A[1], A[2], A[3], 0.9)
     if not s.addonBar then MM.CloseBar() end
 
@@ -796,16 +1147,124 @@ function MM.Report(add)
     add("minimap addon buttons: " .. table.concat(names, " "))
 end
 
+-- unlock mode: the tracking button and the addon button bag can be dragged
+-- anywhere, on the map or off it (saved as an offset from the map's centre)
+local iconMovers = {}
+local DRAGGABLE = {
+    { key = "tracking", label = "Tracking", get = function() local i = ICON_BY_KEY.tracking return i and Tbl((i.get())) end },
+    { key = "addonbar", label = "Bag", get = function() return barButton end },
+}
+-- the texts move too, keeping their corner (the drag adds to their offset)
+for _, info in ipairs(MM.TEXTS) do
+    DRAGGABLE[#DRAGGABLE + 1] = { key = info.key, label = info.title, text = true,
+        get = function()
+            local c = S().texts[info.key]
+            if not c or c.mode == "NEVER" then return nil end
+            local b = texts[info.key]
+            return b and b.fs
+        end }
+end
+local function IconMover(info)
+    local m = iconMovers[info.key]
+    if m then return m end
+    m = CreateFrame("Button", nil, UIParent)
+    m:SetFrameStrata("DIALOG")
+    m:SetMovable(true)
+    m:SetClampedToScreen(true)
+    m:EnableMouse(true)
+    m:RegisterForDrag("LeftButton")
+    ns.UI.Fill(m, A[1], A[2], A[3], 0.35)
+    ns.UI.Border(m, A[1], A[2], A[3], 1)
+    m.label = m:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    m.label:SetPoint("BOTTOM", m, "TOP", 0, 2)
+    m.label:SetText(info.label)
+    m:SetScript("OnDragStart", function(self)
+        if InCombatLockdown() then return end
+        self.fromX, self.fromY = self:GetCenter()
+        self:StartMoving()
+    end)
+    m:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        if self.SetUserPlaced then self:SetUserPlaced(false) end
+        if info.text then
+            -- how far it moved, in the map's units, added to the text's offset
+            local sx, sy = self:GetCenter()
+            if not (sx and self.fromX) then return end
+            local k = self:GetEffectiveScale() / Minimap:GetEffectiveScale()
+            local c = S().texts[info.key]
+            c.x = math.floor((c.x or 0) + (sx - self.fromX) * k + 0.5)
+            c.y = math.floor((c.y or 0) + (sy - self.fromY) * k + 0.5)
+            MM.Apply()
+            C_Timer.After(0, function() MM.SetUnlocked(true) end)
+            return
+        end
+        -- the offset in the map's units (the icons are placed relative to it)
+        local sx, sy = self:GetCenter()
+        local mx, my = Minimap:GetCenter()
+        if not (sx and mx) then return end
+        local se, me = self:GetEffectiveScale(), Minimap:GetEffectiveScale()
+        local cfg = S().icons[info.key]
+        cfg.pos = "CENTER"
+        cfg.x = math.floor((sx * se - mx * me) / me + 0.5)
+        cfg.y = math.floor((sy * se - my * me) / me + 0.5)
+        if cfg.mode == "NEVER" then cfg.mode = "ALWAYS" end
+        MM.Apply()
+        C_Timer.After(0, function() MM.SetUnlocked(true) end)
+    end)
+    m:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(info.label)
+        GameTooltip:AddLine(info.text and "Drag it; it keeps its corner of the map (Texts: where)."
+            or "Drag it anywhere, on the map or off it.", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    m:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    iconMovers[info.key] = m
+    return m
+end
+
 function MM.SetUnlocked(on)
     if mover and MM.active then mover:SetShown(on and true or false) end
+    for _, info in ipairs(DRAGGABLE) do
+        local m = iconMovers[info.key]
+        local f = MM.active and on and info.get()
+        if f and f.GetCenter and f:GetCenter() then
+            m = IconMover(info)
+            local x, y = f:GetCenter()
+            local fe, ue = f:GetEffectiveScale(), UIParent:GetEffectiveScale()
+            m:ClearAllPoints()
+            m:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x * fe / ue, y * fe / ue)
+            m:SetSize(math.max(16, (f:GetWidth() or 16) * fe / ue + (info.text and 4 or 0)),
+                      math.max(info.text and 12 or 16, (f:GetHeight() or 16) * fe / ue + (info.text and 2 or 0)))
+            m.label:SetShown(not info.text)     -- a text mover shows its name on hover only
+            m:Show()
+        elseif m then
+            m:Hide()
+        end
+    end
 end
 
 ---------------------------------------------------------------------------
 -- Events
 ---------------------------------------------------------------------------
-ns.On("ZONE_CHANGED", UpdateZone)
-ns.On("ZONE_CHANGED_INDOORS", UpdateZone)
-ns.On("ZONE_CHANGED_NEW_AREA", UpdateZone)
+-- a new zone or subzone: its name shows for a while (mode ENTER)
+local function ZoneChanged()
+    UpdateZone()
+    UpdateDifficulty()
+    if not MM.active or S().texts.zone.mode ~= "ENTER" then return end
+    local t = GetTime()
+    zoneShownUntil = t + ZONE_SECONDS
+    TextVisibility()
+    C_Timer.After(ZONE_SECONDS + 0.1, function()
+        if GetTime() >= zoneShownUntil then TextVisibility() end
+    end)
+end
+ns.On("PLAYER_DIFFICULTY_CHANGED", function() UpdateDifficulty() end)
+ns.On("GROUP_ROSTER_UPDATE", function() UpdateDifficulty() end)
+ns.On("ZONE_CHANGED", ZoneChanged)
+ns.On("ZONE_CHANGED_INDOORS", ZoneChanged)
+ns.On("ZONE_CHANGED_NEW_AREA", ZoneChanged)
+ns.On("PLAYER_ENTERING_WORLD", ZoneChanged)
 ns.On("PLAYER_ENTERING_WORLD", function()
     if not (HUFDB and ns.db and S().enabled) then return end
     MM.Apply()

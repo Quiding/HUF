@@ -38,10 +38,10 @@ local function Pair(col, a, b, height)
 end
 
 -- one placed element: show (always / mouseover / never), where, offsets
-local function Element(col, title, T, extra)
+local function Element(col, title, T, extra, modes)
     col:Header(title)
     Pair(col,
-        UI.Dropdown(col.parent, HALF, "Show", ns.Minimap.MODES, Opt(T, "mode")),
+        UI.Dropdown(col.parent, HALF, "Show", modes or ns.Minimap.MODES, Opt(T, "mode")),
         UI.Dropdown(col.parent, HALF, "At", ns.Minimap.POSITIONS, Opt(T, "pos")))
     Pair(col,
         UI.Slider(col.parent, HALF, "Horizontal", -200, 200, 1, Opt(T, "x")),
@@ -77,6 +77,33 @@ local function MapPage(f)
     R:Header("Text")
     R:Cycle("Font", Fonts, Opt(M, "font"))
     R:Cycle("Outline", OUTLINES, Opt(M, "outline"))
+    R:Slider("Text opacity", 0.3, 1, 0.05, function() return M().textAlpha end, function(v) M().textAlpha = v end, "%.2f")
+end
+
+-- behaviour: when the map shows, rotation, zoom
+local function BehaviourPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("When it shows")
+    L:Cycle("Show", {
+        { value = "ALWAYS", text = "Always" },
+        { value = "COMBAT", text = "Only in combat" },
+        { value = "NOCOMBAT", text = "Hidden in combat" },
+        { value = "HOVER", text = "On mouseover" },
+    }, Opt(M, "visibility"))
+    L:Slider("Opacity", 0.1, 1, 0.05, function() return M().opacity end, function(v) M().opacity = v end, "%.2f")
+    local gi, si = Opt(M, "onlyInstances")
+    L:Check("Only in dungeons, raids and battlegrounds", gi, si)
+    local gm, sm = Opt(M, "hideMounted")
+    L:Check("Hidden while mounted", gm, sm)
+
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Map")
+    R:Cycle("Rotate the map", {
+        { value = "GAME", text = "The game's setting" },
+        { value = "ON", text = "Rotate" },
+        { value = "OFF", text = "North up" },
+    }, Opt(M, "rotate"))
+    R:Slider("Zoom out again after, seconds (0: never)", 0, 60, 1, Opt(M, "zoomReset"))
 end
 
 local COLORS = {
@@ -104,13 +131,19 @@ local function TextsPage(f)
             elseif k == "system" then
                 col:Cycle("Shows", { { value = "BOTH", text = "FPS and latency" }, { value = "FPS", text = "FPS" },
                     { value = "MS", text = "Latency" } }, Opt(T(k), "show"))
+                col:Cycle("Latency", { { value = "HIGHER", text = "The higher one" }, { value = "HOME", text = "Home" },
+                    { value = "WORLD", text = "World" } }, Opt(T(k), "latency"))
+            elseif k == "zone" then
+                local gs, ss = Opt(T(k), "sub")
+                col:Check("The subzone when there is one", gs, ss, "Off: always the zone (\"The Barrens\").")
             end
         end
     end
     local L = UI.Column(f, 0, 0, COL_W)
     local R = UI.Column(f, COL2_X, 0, COL_W)
-    Element(L, "Zone name", T("zone"), Extra("zone"))
+    Element(L, "Zone name", T("zone"), Extra("zone"), ns.Minimap.ZONE_MODES)
     Element(L, "Clock", T("clock"), Extra("clock"))
+    Element(L, "Instance difficulty", T("difficulty"), Extra("difficulty"))
     Element(R, "Coordinates", T("coords"), Extra("coords"))
     Element(R, "FPS and latency", T("system"), Extra("system"))
     R:Note("Text alignment follows the position: left, centered or right. Clock: left-click stopwatch, right-click calendar.")
@@ -136,12 +169,25 @@ local function ButtonsPage(f, page)
         { value = "LEFT", text = "To the left" }, { value = "RIGHT", text = "To the right" },
         { value = "UP", text = "Upwards" }, { value = "DOWN", text = "Downwards" },
     }, Opt(M, "barGrow"))
+    L:Cycle("Layout", {
+        { value = "ROW", text = "One row" },
+        { value = "GRID", text = "Grid" },
+        { value = "LIST", text = "List with names" },
+    }, Opt(M, "barLayout"))
+    L:Slider("Grid columns", 1, 10, 1, Opt(M, "barColumns"))
+    local gq, sq = Opt(M, "barSquare")
+    L:Check("Square buttons", gq, sq, "The buttons in the bar as square icons on a dark background, without their round frame. On the map they look as the addon draws them.")
     L:Slider("Icon size in the bar", 14, 40, 1, Opt(M, "barIconSize"))
+    L:Cycle("Pinned buttons go", {
+        { value = "UP", text = "Up from the bag button" }, { value = "RIGHT", text = "Right of it" },
+        { value = "DOWN", text = "Down from it" }, { value = "LEFT", text = "Left of it" },
+    }, Opt(M, "pinGrow"))
     L:Slider("Closes after", 3, 30, 1, function() return M().barTimeout end, function(v) M().barTimeout = v end, "%d s")
     Element(L, "Addon bar button", function() return M().icons.addonbar end)
+    L:Note("In unlock mode (/huf unlock) the tracking button and this button can be dragged anywhere.")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
-    R:Header("On the map (addon bar off)")
+    R:Header("Each addon button")
     R:Cycle("Every addon button", ns.Minimap.MODES, Opt(M, "buttonMode"))
     -- one row per addon button found on the map (filled when the page shows)
     local list = CreateFrame("Frame", nil, f)
@@ -151,7 +197,8 @@ local function ButtonsPage(f, page)
     list.empty = UI.Label(list, "No addon buttons found on the minimap.")
     list.empty:SetPoint("TOPLEFT")
     list.empty:SetTextColor(0.6, 0.6, 0.6)
-    local CHOICES = { { value = "DEFAULT", text = "Like every button" } }
+    local CHOICES = { { value = "DEFAULT", text = "Like every button" },
+        { value = "PIN", text = "Pinned by the bag" } }
     for _, m in ipairs(ns.Minimap.MODES) do CHOICES[#CHOICES + 1] = m end
     list.Refresh = function()
         local l = ns.Minimap.Buttons()
@@ -181,7 +228,7 @@ ns.RegisterPage("minimap", "Minimap", "frames", function(page)
     local on = UI.Check(page, 260, "Use HUF's minimap", function() return M().enabled end,
         function(v) M().enabled = v end, "Shape, size, look, texts and icons of the minimap. Off: Blizzard's minimap after /reload.")
     on:SetPoint("TOPLEFT", 0, 4)
-    local tabs = { { "map", "Map" }, { "texts", "Texts" }, { "icons", "Icons" }, { "buttons", "Addon buttons" } }
+    local tabs = { { "map", "Map" }, { "behaviour", "Behaviour" }, { "texts", "Texts" }, { "icons", "Icons" }, { "buttons", "Addon buttons" } }
     local subs, strip = {}, nil
     local function Show(k)
         for name, sf in pairs(subs) do sf:SetShown(name == k) end
@@ -191,6 +238,7 @@ ns.RegisterPage("minimap", "Minimap", "frames", function(page)
     strip:SetPoint("TOPLEFT", 0, -22)
     strip:SetPoint("TOPRIGHT", 0, -22)
     subs.map = SubFrame(page); MapPage(subs.map)
+    subs.behaviour = SubFrame(page); BehaviourPage(subs.behaviour)
     subs.texts = SubFrame(page); TextsPage(subs.texts)
     subs.icons = SubFrame(page); IconsPage(subs.icons)
     subs.buttons = SubFrame(page); ButtonsPage(subs.buttons, page)
