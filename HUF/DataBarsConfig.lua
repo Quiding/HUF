@@ -31,6 +31,10 @@ ns.RegisterPage("databars", "Data bars", "frames", function(page)
     R:Check("Friends online", gf, sf, "Click: the friends list.")
     local gg, sg = Opt("guild")
     R:Check("Guild members online", gg, sg, "Click: the guild window. Not shown outside a guild.")
+    R:Cycle("Layout", {
+        { value = "SIDE", text = "Icon, then the count" },
+        { value = "STACK", text = "Count above a small icon" },
+    }, Opt("layout"))
     R:Slider("Text size", 8, 20, 1, Opt("fontSize"))
     R:Slider("Space between them", 0, 40, 1, Opt("spacing"))
     R:Note("The tracking button sits on the bar's left end when Minimap > Icons > Tracking is at \"Below, left\".")

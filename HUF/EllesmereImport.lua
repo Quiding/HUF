@@ -909,7 +909,7 @@ local function ConvertMinimap(addon, m, notes)
     if ic.tracking and ic.tracking.mode ~= "NEVER" then
         ic.tracking.mode, ic.tracking.pos, ic.tracking.x, ic.tracking.y = "ALWAYS", "BELOW_LEFT", 0, -(m.borderSize + 1)
     end
-    if ic.addonbar then ic.addonbar.mode, ic.addonbar.pos, ic.addonbar.x, ic.addonbar.y = "ALWAYS", "OUTSIDE_LEFT_BOTTOM", -2, 0 end
+    if ic.addonbar then ic.addonbar.mode, ic.addonbar.pos, ic.addonbar.x, ic.addonbar.y = "ALWAYS", "OUTSIDE_LEFT_BOTTOM", -4, 0 end
 
     -- addon buttons: Ellesmere gathers them in its flyout; HUF's addon bar
     if not G("hideAddonButtons", false) then
@@ -933,6 +933,7 @@ local function ConvertMinimap(addon, m, notes)
             end
         end
         m.pinGrow = "UP"
+        m.pinGap = 4                    -- Ellesmere's column has room between its buttons
     end
 end
 
@@ -964,6 +965,8 @@ local function ConvertDataBar(addon, d, notes)
         end
     end
     d.friends, d.guild = social, guild
+    d.layout = "STACK"                  -- Ellesmere's micro menu: the count above the icon
+    d.fontSize = 11
     notes[#notes + 1] = "Minimap data bar: hide Ellesmere's Minimap Companion bar in its Data Bars (its other bars stay)."
     return true
 end

@@ -1000,8 +1000,35 @@ function MM.Apply()
     local p = POS[ab.pos] or POS.RIGHT
     barButton:SetPoint(p[1], Minimap, p[2], ab.x or 0, ab.y or 0)
     if MM.LayoutPins then MM.LayoutPins() end
-    barButton.border:SetColor(A[1], A[2], A[3], 1)
-    for _, t in ipairs(barButton.dots) do t:SetColorTexture(A[1], A[2], A[3], 1) end
+    -- square buttons: the bag button looks like them (their size, a thin dark
+    -- outline, light dots; the accent under the mouse); else HUF's accent look
+    local sqr = s.barSquare
+    local bs = sqr and math.max(14, s.barIconSize or 18) or 18
+    barButton:SetSize(bs, bs)
+    barButton.sqr = sqr
+    local dot = sqr and math.max(3, math.floor(bs / 5)) or 4
+    for i, t in ipairs(barButton.dots) do
+        t:SetSize(dot, dot)
+        t:ClearAllPoints()
+        local o = dot * 0.75 + (sqr and 1 or 0)
+        t:SetPoint("CENTER", (i % 2 == 1) and -o or o, (i <= 2) and o or -o)
+    end
+    local function BagColors(over)
+        if sqr and not over then
+            barButton.border:SetColor(0, 0, 0, 1)
+            for _, t in ipairs(barButton.dots) do t:SetColorTexture(0.8, 0.8, 0.82, 1) end
+        else
+            barButton.border:SetColor(A[1], A[2], A[3], 1)
+            for _, t in ipairs(barButton.dots) do t:SetColorTexture(A[1], A[2], A[3], 1) end
+        end
+    end
+    BagColors(false)
+    if not barButton.hufHover then
+        barButton.hufHover = true
+        barButton:HookScript("OnEnter", function() if barButton.BagColors then barButton.BagColors(true) end end)
+        barButton:HookScript("OnLeave", function() if barButton.BagColors then barButton.BagColors(false) end end)
+    end
+    barButton.BagColors = BagColors
     bar.border:SetColor(A[1], A[2], A[3], 0.9)
     if not s.addonBar then MM.CloseBar() end
 

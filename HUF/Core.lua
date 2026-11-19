@@ -538,6 +538,7 @@ local function BuildDefaults()
                 bgColor = C(0.067, 0.067, 0.067), bgAlpha = 0.95, borderSize = 1,
                 friends = true, guild = true,
                 fontSize = 12, spacing = 16,
+                layout = "SIDE",            -- SIDE: icon, then the count | STACK: the count above a small icon
             },
         },
         nameplates = {

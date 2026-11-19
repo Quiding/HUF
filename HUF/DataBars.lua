@@ -114,16 +114,25 @@ function DB.Update()
             shown[#shown + 1] = b
         end
     end
-    -- the blocks side by side, centred: icon, then the count
-    local size = math.max(8, s.height - 6)
+    -- the blocks side by side, centred: icon, then the count (SIDE), or the
+    -- count above a small icon (STACK)
+    local stack = s.layout == "STACK"
+    local size = stack and math.max(6, math.floor(s.height * 0.45)) or math.max(8, s.height - 6)
     local widths, total = {}, 0
     for i, b in ipairs(shown) do
         b.icon:SetSize(size, size)
         b.icon:ClearAllPoints()
-        b.icon:SetPoint("LEFT", b, "LEFT", 0, 0)
         b.text:ClearAllPoints()
-        b.text:SetPoint("LEFT", b.icon, "RIGHT", 2, 0)
-        local w = size + 2 + math.max(6, b.text:GetStringWidth() or 0)
+        local w
+        if stack then
+            b.icon:SetPoint("BOTTOM", b, "BOTTOM", 0, 1)
+            b.text:SetPoint("BOTTOM", b.icon, "TOP", 0, 0)
+            w = math.max(size, b.text:GetStringWidth() or 0)
+        else
+            b.icon:SetPoint("LEFT", b, "LEFT", 0, 0)
+            b.text:SetPoint("LEFT", b.icon, "RIGHT", 2, 0)
+            w = size + 2 + math.max(6, b.text:GetStringWidth() or 0)
+        end
         widths[i] = w
         total = total + w + (i > 1 and s.spacing or 0)
     end
