@@ -486,6 +486,19 @@ local function BuildDefaults()
             rowBorder = 0,              -- a border around each bar (0: none)
             barBgColor = C(0, 0, 0), barBgAlpha = 0.35,          -- the empty part of each bar
         },
+        -- buff and debuff bars (HUF's instead of Blizzard's at the top right)
+        auraBars = {
+            buffs = { enabled = true, point = { "TOPRIGHT", "TOPRIGHT", -225, -20 }, scale = 1,
+                      grow = "LEFT", max = 32, columns = 12, rows = 3, padding = 4, size = 32, zoom = 0.08,
+                      borderSize = 1, borderAccent = false, borderColor = C(0.06, 0.06, 0.07),
+                      swipe = true, timer = true, timerFormat = "HHMM", timerPos = "BELOW", timerSize = 12,
+                      countSize = 12, font = "GLOBAL", outline = "GLOBAL", sort = "TIME", sortDir = "-" },
+            debuffs = { enabled = true, point = { "TOPRIGHT", "TOPRIGHT", -225, -175 }, scale = 1,
+                        grow = "LEFT", max = 16, columns = 8, rows = 2, padding = 4, size = 36, zoom = 0.08,
+                        borderSize = 1, borderAccent = false, borderColor = C(0.06, 0.06, 0.07), typeColors = true,
+                        swipe = true, timer = true, timerFormat = "HHMM", timerPos = "BELOW", timerSize = 12,
+                        countSize = 12, font = "GLOBAL", outline = "GLOBAL", sort = "TIME", sortDir = "-" },
+        },
         -- minimap: shape, size, look, texts and icons placed on it (each
         -- shown always, on mouseover or never), addon buttons on the map or
         -- in the addon bar

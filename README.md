@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.4.
+Version 0.4.5.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -50,6 +50,10 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   Blizzard after /reload.
 - **Combo points** (rogues, druids in cat form): a row of points above the target frame and under
   your target's nameplate (on by default; position, size, colour adjustable).
+- **Buff bar and debuff bar**: HUF's own instead of Blizzard's icons at the top right (each can
+  be turned off): growth direction, most icons, rows, columns, padding, icon size, zoom, border
+  (debuffs by type), swipe, time left (an hour or more as h:mm or minutes), stacks, sorting.
+  Right-click cancels a buff, also in combat (the game's secure aura header). Moved in unlock mode.
 - **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
   where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
   and debuff icons.

@@ -207,6 +207,7 @@ function Movers.SetUnlocked(on)
         if group then group:Hide() end
     end
     if ns.Minimap then ns.Minimap.SetUnlocked(ns.unlocked) end
+    if ns.PlayerAuras then ns.PlayerAuras.SetUnlocked(ns.unlocked) end
     if ns.RefreshConfig then ns.RefreshConfig() end
 end
 

@@ -61,6 +61,13 @@ function Units.HideBlizzardAuras()
     for _, name in ipairs(BLIZZARD_AURAS) do Kill(name) end
 end
 
+-- HUF's buff / debuff bars replace Blizzard's (back after /reload when off)
+function Units.HideBlizzardBars()
+    local b = ns.db.auraBars
+    if b.buffs.enabled then Kill("BuffFrame") Kill("TemporaryEnchantFrame") end
+    if b.debuffs.enabled then Kill("DebuffFrame") end
+end
+
 function Units.HideBlizzard()
     Units.HideBlizzardAuras()
     if not ns.db.global.hideBlizzard then return end

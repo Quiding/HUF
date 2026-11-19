@@ -250,6 +250,7 @@ function ns.FrameReport(add)
     if ns.Group then ns.Group.Report(add) end
     if ns.DamageMeter then ns.DamageMeter.Report(add) end
     if ns.Minimap then ns.Minimap.Report(add) end
+    if ns.PlayerAuras then ns.PlayerAuras.Report(add) end
     if ns.ClickCast then ns.ClickCast.Report(add) end
     if ns.Auras then
         for _, l in ipairs(ns.Auras.Report()) do add("auras " .. l) end
