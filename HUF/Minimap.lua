@@ -752,6 +752,7 @@ local function LayoutTexts()
         b.fs:SetWidth(0)
         Place(b.fs, c)
         TextColor(b.fs, c.color, info.key == "zone")
+        b.fs:SetAlpha(s.textAlpha or 1)
         UPDATERS[info.key]()
     end
 end

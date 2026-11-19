@@ -77,6 +77,7 @@ local function MapPage(f)
     R:Header("Text")
     R:Cycle("Font", Fonts, Opt(M, "font"))
     R:Cycle("Outline", OUTLINES, Opt(M, "outline"))
+    R:Slider("Text opacity", 0.3, 1, 0.05, function() return M().textAlpha end, function(v) M().textAlpha = v end, "%.2f")
 end
 
 local COLORS = {

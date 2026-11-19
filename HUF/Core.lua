@@ -498,6 +498,7 @@ local function BuildDefaults()
             shade = 14, shadeAlpha = 0.6,   -- dark shade outside the map: width, strength
             mouseZoom = true,
             font = "GLOBAL", outline = "GLOBAL",
+            textAlpha = 1,              -- the texts on and around the map
             iconScale = 1,              -- the game's icons (tracking, calendar ...)
             -- pos: inside the map (TOPLEFT ... BOTTOMRIGHT) or outside (ABOVE_*, BELOW_*)
             texts = {

@@ -860,6 +860,10 @@ local function ConvertMinimap(addon, m, notes)
     end
     m.shade = 0
     m.mouseZoom = G("scrollZoom", true) and true or false
+    -- Ellesmere's map texts: a soft shadow, not a hard outline (HUF's general
+    -- shadow setting draws it), a little see-through
+    m.outline = "NONE"
+    m.textAlpha = 0.9
 
     -- texts: Ellesmere's size 10 x its scale; "edge" = just outside the map
     local function Place(t, mode, posKey, scale, base)
