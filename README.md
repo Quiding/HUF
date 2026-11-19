@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.9.
+Version 0.4.10.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -49,6 +49,13 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   one). Or the **addon bar**: one button that opens a small bar with every addon button; it closes
   after a click on one of them or after 10 seconds. Turning it off gives the minimap back to
   Blizzard after /reload.
+- **Chat**: font, size, outline, window background and opacity; short channel names at the start of
+  a line ([1], [2], [S], [Y], [P], [PL], [G], [GO], [R], [RL], [RW], [W], [I], each editable);
+  names in class colours; web addresses as links (click: copy box); tooltips over item / spell /
+  quest links; chat kept over /reload and logout (up to 2000 lines a window); buttons beside the
+  chat: copy chat, guild (members online, hover for who), friends, to the end; the game's chat
+  settings (bubbles, timestamps, style, whispers, filter) and chat colours on one page. Lines the
+  game hides from addons (instance chat lockdown) stay as they are.
 - **Combo points** (rogues, druids in cat form): a row of points above the target frame and under
   your target's nameplate (on by default; position, size, colour adjustable).
 - **Buff bar and debuff bar**: HUF's own instead of Blizzard's icons at the top right (each can

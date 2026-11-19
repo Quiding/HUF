@@ -488,6 +488,20 @@ local function BuildDefaults()
             rowBorder = 0,              -- a border around each bar (0: none)
             barBgColor = C(0, 0, 0), barBgAlpha = 0.35,          -- the empty part of each bar
         },
+        -- chat window: look, short channel names, links, history, buttons
+        chat = {
+            enabled = true,
+            font = "GLOBAL", fontSize = 14, outline = "GLOBAL",
+            bgColor = C(0.03, 0.03, 0.04), bgAlpha = 0.5,
+            abbreviate = true,
+            abbr = { CHANNEL = "%d", SAY = "S", YELL = "Y", PARTY = "P", PARTY_LEADER = "PL", GUILD = "G",
+                     OFFICER = "GO", RAID = "R", RAID_LEADER = "RL", RAID_WARNING = "RW", WHISPER = "W",
+                     INSTANCE_CHAT = "I", INSTANCE_CHAT_LEADER = "IL" },
+            classColors = true, urls = true, linkTooltips = true,
+            history = true, historyLines = 2000,
+            buttons = { copy = true, guild = true, social = false, bottom = true },
+            buttonSide = "RIGHT", buttonX = 0, buttonY = 0,
+        },
         -- buff and debuff bars (HUF's instead of Blizzard's at the top right)
         auraBars = {
             buffs = { enabled = true, point = { "TOPRIGHT", "TOPRIGHT", -225, -20 }, scale = 1,

@@ -156,6 +156,8 @@ local function NameFromString(name)
     return first
 end
 
+ns.NameFromString = NameFromString
+
 -- the unit (in your group) a meter row belongs to, if HUF can tell
 local function RowUnit(src)
     if src.unit then return src.unit end

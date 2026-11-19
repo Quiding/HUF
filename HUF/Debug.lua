@@ -251,6 +251,7 @@ function ns.FrameReport(add)
     if ns.DamageMeter then ns.DamageMeter.Report(add) end
     if ns.Minimap then ns.Minimap.Report(add) end
     if ns.PlayerAuras then ns.PlayerAuras.Report(add) end
+    if ns.Chat then ns.Chat.Report(add) end
     do
         local api = C_PetInfo and C_PetInfo.GetPetHappiness and "C_PetInfo" or (GetPetHappiness and "global" or "none")
         local okH, h = pcall(function() return (C_PetInfo and C_PetInfo.GetPetHappiness or GetPetHappiness)() end)
