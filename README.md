@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.4.6.
+Version 0.4.7.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -12,7 +12,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
 ## Frames
 - **Player, Target, Target of target, Pet**: health and power bar, each with a thin dark border.
   Player / Target 175 x 24, Target of target (health only) and Pet hang off the target and
-  player frame. Incoming heals (yours and others') show as a semi-transparent green bar after
+  player frame. The pet frame shows a hunter pet's happiness (icon or text) on the right of its
+  health bar. Incoming heals (yours and others') show as a semi-transparent green bar after
   the filled part and may run past the bar's end (overheal). Every frame can be anchored to the screen or to another HUF frame.
 - **Group (party)**: real secure unit frames (SecureGroupHeader), so `[@mouseover]` macros and
   click-casting work on them. Show myself or not, sort by name / Blizzard's party order / class,
@@ -53,7 +54,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
 - **Buff bar and debuff bar**: HUF's own instead of Blizzard's icons at the top right (each can
   be turned off): growth direction, most icons, rows, columns, padding, icon size, zoom, border
   (debuffs by type), swipe, time left (an hour or more as h:mm or minutes), stacks, sorting.
-  Right-click cancels a buff (out of combat). Moved in unlock mode.
+  Drawn by the game's own aura containers (like EllesmereUI's), so right-click cancels a buff also
+  in combat. Moved in unlock mode.
 - **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
   where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
   and debuff icons.

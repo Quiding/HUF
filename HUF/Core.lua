@@ -396,6 +396,8 @@ local function BuildDefaults()
     pet.debuffs.enabled = false
     pet.buffs.enabled = false
     pet.healPred.enabled = false
+    -- hunter pet happiness on the right side of the health bar
+    pet.happiness = { enabled = true, mode = "ICON", size = 14, x = -2, y = 0 }
     u.pet = pet
 
     -- Group (party): 200 x 25, health 18 + power 7, class colours; missing

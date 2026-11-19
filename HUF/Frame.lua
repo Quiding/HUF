@@ -205,6 +205,13 @@ function Frame.Build(f, key, secure)
 
     f.textLayer = CreateFrame("Frame", nil, f)    -- every text, above both bars
     f.textLayer:SetAllPoints()
+    if key == "pet" then
+        f.happyIcon = f.textLayer:CreateTexture(nil, "OVERLAY")
+        f.happyIcon:Hide()
+        f.happyText = f.textLayer:CreateFontString(nil, "OVERLAY")
+        ns.ApplyFont(f.happyText, "GLOBAL", 12, "OUTLINE")
+        f.happyText:Hide()
+    end
 
     f.bars = {}
     for _, which in ipairs(BARS) do f.bars[which] = BuildBar(f, which) end
@@ -923,12 +930,67 @@ function Frame.UpdatePortrait(f)
     end
 end
 
+---------------------------------------------------------------------------
+-- Hunter pet happiness (right side of the pet's health bar)
+---------------------------------------------------------------------------
+local HAPPY_COORDS = {
+    [1] = { 0.375, 0.5625, 0, 0.359375 },    -- unhappy
+    [2] = { 0.1875, 0.375, 0, 0.359375 },    -- content
+    [3] = { 0, 0.1875, 0, 0.359375 },        -- happy
+}
+local HAPPY_TEXT = { [1] = { "Unhappy", 1, 0.25, 0.25 }, [2] = { "Content", 1, 0.82, 0 }, [3] = { "Happy", 0.3, 1, 0.3 } }
+
+function Frame.UpdateHappiness(f)
+    if not f.happyIcon then return end
+    local c = f.s.happiness
+    local h
+    if c and c.enabled then
+        if f.fake then h = 3
+        elseif GetPetHappiness then
+            local ok, v = pcall(GetPetHappiness)
+            if ok and not ns.IsSecret(v) then h = v end
+        end
+    end
+    if not HAPPY_COORDS[h] then f.happyIcon:Hide() f.happyText:Hide() return end
+    local anchor = f.health
+    if c.mode == "TEXT" then
+        f.happyIcon:Hide()
+        local t = HAPPY_TEXT[h]
+        ns.ApplyFont(f.happyText, "GLOBAL", c.size, "OUTLINE")
+        f.happyText:ClearAllPoints()
+        f.happyText:SetPoint("RIGHT", anchor, "RIGHT", c.x, c.y)
+        f.happyText:SetText(t[1])
+        f.happyText:SetTextColor(t[2], t[3], t[4])
+        f.happyText:Show()
+    else
+        f.happyText:Hide()
+        f.happyIcon:SetTexture("Interface\\PetPaperDollFrame\\UI-PetHappiness")
+        f.happyIcon:SetTexCoord(unpack(HAPPY_COORDS[h]))
+        f.happyIcon:SetSize(c.size, c.size)
+        f.happyIcon:ClearAllPoints()
+        f.happyIcon:SetPoint("RIGHT", anchor, "RIGHT", c.x, c.y)
+        f.happyIcon:Show()
+    end
+end
+
+do
+    local hev = CreateFrame("Frame")
+    hev:SetScript("OnEvent", function(_, event, unit, ptype)
+        if event == "UNIT_POWER_UPDATE" and ptype ~= "HAPPINESS" then return end
+        local f = ns.singles and ns.singles.pet
+        if f then Frame.UpdateHappiness(f) end
+    end)
+    for _, e in ipairs({ "UNIT_HAPPINESS", "PET_UI_UPDATE", "UNIT_PET" }) do pcall(hev.RegisterEvent, hev, e) end
+    pcall(hev.RegisterUnitEvent, hev, "UNIT_POWER_UPDATE", "pet")
+end
+
 function Frame.Update(f)
     if not f.fake and not (f.hunit and Exists(f.hunit)) then return end
     Frame.UpdateHealth(f)
     Frame.UpdatePower(f)
     Frame.UpdateTexts(f)
     Frame.UpdatePortrait(f)
+    Frame.UpdateHappiness(f)
     local cb = f.s.castBar
     if not f.fake and cb and cb.enabled and f.cast then ns.Cast.Start(f.cast, f.hunit) end
     f:SetAlpha(f.s.alpha)

@@ -763,6 +763,20 @@ local function CastPage(f, key)
     R:Color("Colour", Opt(C, "interruptColor"))
 end
 
+-- Pet happiness (hunter pets)
+local function HappinessPage(f, key)
+    local C = function() return U(key).happiness end
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Happiness")
+    local ge, se = Opt(C, "enabled")
+    L:Check("Show the pet's happiness", ge, se, "Hunter pets: happy, content or unhappy, on the right side of the health bar.")
+    L:Cycle("Shown as", { { value = "ICON", text = "Icon (the game's faces)" }, { value = "TEXT", text = "Text (Happy / Content / Unhappy)" } },
+        Opt(C, "mode"))
+    L:Slider("Size", 6, 32, 1, Opt(C, "size"))
+    L:Slider("Horizontal offset", -100, 100, 1, Opt(C, "x"))
+    L:Slider("Vertical offset", -40, 40, 1, Opt(C, "y"))
+end
+
 -- Combo points (target frame)
 local function ComboPage(f, key)
     local C = function() return U(key).combo end
@@ -819,6 +833,7 @@ local function UnitPage(key)
         if not info.noAuras then tabs[#tabs + 1] = { "auras", "Buffs & debuffs" } end
         if not info.polled then tabs[#tabs + 1] = { "cast", "Cast bar" } end
         if key == "target" then tabs[#tabs + 1] = { "combo", "Combo points" } end
+        if key == "pet" then tabs[#tabs + 1] = { "happy", "Happiness" } end
         local subs = {}
         local strip
         local function Show(k)
@@ -835,6 +850,7 @@ local function UnitPage(key)
         if not info.noAuras then subs.auras = SubFrame(page); AuraPage(subs.auras, key) end
         if not info.polled then subs.cast = SubFrame(page); CastPage(subs.cast, key) end
         if key == "target" then subs.combo = SubFrame(page); ComboPage(subs.combo, key) end
+        if key == "pet" then subs.happy = SubFrame(page); HappinessPage(subs.happy, key) end
         strip:Bind(subs, Show)
         Show("frame")
     end
