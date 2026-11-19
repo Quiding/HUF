@@ -466,8 +466,10 @@ MM.TEXTS = {
 local function BuildText(key)
     local b = CreateFrame("Button", nil, textLayer)
     b.fs = b:CreateFontString(nil, "OVERLAY")
-    b.fs:SetAllPoints()
     b.fs:SetWordWrap(false)
+    -- the text itself sits at the chosen point (as wide as its text, so the
+    -- point alone decides left / center / right); the button covers the text
+    b:SetAllPoints(b.fs)
     b:EnableMouse(false)
     if key == "clock" then
         -- left: stopwatch and alarm, right: calendar
@@ -501,8 +503,8 @@ local function LayoutTexts()
         local c = s.texts[info.key]
         ns.ApplyFont(b.fs, s.font, c.size, s.outline)
         b.fs:SetJustifyH(Justify(c.pos))
-        b:SetSize(math.max(20, s.size - 8), c.size + 4)
-        Place(b, c)
+        b.fs:SetWidth(0)
+        Place(b.fs, c)
         TextColor(b.fs, c.color, info.key == "zone")
         UPDATERS[info.key]()
     end
