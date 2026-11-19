@@ -251,6 +251,15 @@ function ns.FrameReport(add)
     if ns.DamageMeter then ns.DamageMeter.Report(add) end
     if ns.Minimap then ns.Minimap.Report(add) end
     if ns.PlayerAuras then ns.PlayerAuras.Report(add) end
+    do
+        local api = C_PetInfo and C_PetInfo.GetPetHappiness and "C_PetInfo" or (GetPetHappiness and "global" or "none")
+        local okH, h = pcall(function() return (C_PetInfo and C_PetInfo.GetPetHappiness or GetPetHappiness)() end)
+        local okU, petUI, hunter = pcall(HasPetUI)
+        local pf = ns.singles and ns.singles.pet
+        add(("pet happiness: api=%s value=%s petUI=%s/%s icon=%s text=%s"):format(api, tostring(okH and h),
+            tostring(okU and petUI), tostring(okU and hunter), tostring(pf and pf.happyIcon and pf.happyIcon:IsShown()),
+            tostring(pf and pf.happyText and pf.happyText:IsShown())))
+    end
     if ns.ClickCast then ns.ClickCast.Report(add) end
     if ns.Auras then
         for _, l in ipairs(ns.Auras.Report()) do add("auras " .. l) end

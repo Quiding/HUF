@@ -933,25 +933,28 @@ end
 ---------------------------------------------------------------------------
 -- Hunter pet happiness (right side of the pet's health bar)
 ---------------------------------------------------------------------------
-local HAPPY_COORDS = {
-    [1] = { 0.375, 0.5625, 0, 0.359375 },    -- unhappy
-    [2] = { 0.1875, 0.375, 0, 0.359375 },    -- content
-    [3] = { 0, 0.1875, 0, 0.359375 },        -- happy
-}
+-- Forever: C_PetInfo.GetPetHappiness() (1 unhappy, 2 content, 3 happy),
+-- hunter pets only (HasPetUI), with the stock pet frame's atlases
+local HAPPY_ATLAS = { [1] = "UI-PetMad", [2] = "UI-PetNeutral", [3] = "UI-PetHappiness" }
 local HAPPY_TEXT = { [1] = { "Unhappy", 1, 0.25, 0.25 }, [2] = { "Content", 1, 0.82, 0 }, [3] = { "Happy", 0.3, 1, 0.3 } }
+
+local function ReadHappiness()
+    local fn = (C_PetInfo and C_PetInfo.GetPetHappiness) or GetPetHappiness
+    if not fn then return nil end
+    if HasPetUI then
+        local okH, _, hunterPet = pcall(HasPetUI)
+        if okH and not ns.IsSecret(hunterPet) and not hunterPet then return nil end
+    end
+    local ok, v = pcall(fn)
+    if ok and not ns.IsSecret(v) then return v end
+end
 
 function Frame.UpdateHappiness(f)
     if not f.happyIcon then return end
     local c = f.s.happiness
     local h
-    if c and c.enabled then
-        if f.fake then h = 3
-        elseif GetPetHappiness then
-            local ok, v = pcall(GetPetHappiness)
-            if ok and not ns.IsSecret(v) then h = v end
-        end
-    end
-    if not HAPPY_COORDS[h] then f.happyIcon:Hide() f.happyText:Hide() return end
+    if c and c.enabled then h = f.fake and 3 or ReadHappiness() end
+    if not HAPPY_ATLAS[h] then f.happyIcon:Hide() f.happyText:Hide() return end
     local anchor = f.health
     if c.mode == "TEXT" then
         f.happyIcon:Hide()
@@ -964,8 +967,15 @@ function Frame.UpdateHappiness(f)
         f.happyText:Show()
     else
         f.happyText:Hide()
-        f.happyIcon:SetTexture("Interface\\PetPaperDollFrame\\UI-PetHappiness")
-        f.happyIcon:SetTexCoord(unpack(HAPPY_COORDS[h]))
+        if f.happyAtlas ~= h then
+            if not (f.happyIcon.SetAtlas and pcall(f.happyIcon.SetAtlas, f.happyIcon, HAPPY_ATLAS[h])) then
+                -- older clients: the classic face sheet
+                local coords = { [1] = { 0.375, 0.5625 }, [2] = { 0.1875, 0.375 }, [3] = { 0, 0.1875 } }
+                f.happyIcon:SetTexture("Interface\\PetPaperDollFrame\\UI-PetHappiness")
+                f.happyIcon:SetTexCoord(coords[h][1], coords[h][2], 0, 0.359375)
+            end
+            f.happyAtlas = h
+        end
         f.happyIcon:SetSize(c.size, c.size)
         f.happyIcon:ClearAllPoints()
         f.happyIcon:SetPoint("RIGHT", anchor, "RIGHT", c.x, c.y)
@@ -978,9 +988,15 @@ do
     hev:SetScript("OnEvent", function(_, event, unit, ptype)
         if event == "UNIT_POWER_UPDATE" and ptype ~= "HAPPINESS" then return end
         local f = ns.singles and ns.singles.pet
-        if f then Frame.UpdateHappiness(f) end
+        if f then
+            Frame.UpdateHappiness(f)
+            -- the pet's state may not read yet right after it appears
+            C_Timer.After(1, function() Frame.UpdateHappiness(f) end)
+        end
     end)
-    for _, e in ipairs({ "UNIT_HAPPINESS", "PET_UI_UPDATE", "UNIT_PET" }) do pcall(hev.RegisterEvent, hev, e) end
+    for _, e in ipairs({ "PET_UI_UPDATE", "PLAYER_ENTERING_WORLD" }) do pcall(hev.RegisterEvent, hev, e) end
+    pcall(hev.RegisterUnitEvent, hev, "UNIT_HAPPINESS", "pet")
+    pcall(hev.RegisterUnitEvent, hev, "UNIT_PET", "player")
     pcall(hev.RegisterUnitEvent, hev, "UNIT_POWER_UPDATE", "pet")
 end
 
