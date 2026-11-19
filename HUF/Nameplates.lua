@@ -614,15 +614,22 @@ ns.On("ZONE_CHANGED_NEW_AREA", QuestChanged)
 -- set here; not in combat, the game may refuse it there)
 local function ApplyStacking()
     local s = S()
+    if not C_CVar then return end
     local types = Enum and Enum.NamePlateStackType
-    if not (types and C_CVar and C_CVar.SetCVarBitfield) then return end
     local function Set(idx, mode)
-        if idx == nil or mode == nil or mode == "GAME" then return end
+        if idx == nil or mode == nil or mode == "GAME" or not C_CVar.SetCVarBitfield then return end
         pcall(C_CVar.SetCVarBitfield, "nameplateStackingTypes", idx, mode == "ON")
     end
     ns.RunOOC("nameplate stacking", function()
-        Set(types.Enemy, s.stackEnemies)
-        Set(types.Friendly, s.stackFriendly)
+        if types then
+            Set(types.Enemy, s.stackEnemies)
+            Set(types.Friendly, s.stackFriendly)
+        end
+        -- older clients (WoW Forever): one switch for all plates,
+        -- nameplateMotion 0 = overlap, 1 = stack; it follows the enemies setting
+        if s.stackEnemies == "ON" or s.stackEnemies == "OFF" then
+            pcall(C_CVar.SetCVar, "nameplateMotion", s.stackEnemies == "ON" and "1" or "0")
+        end
     end)
 end
 NP.ApplyStacking = ApplyStacking

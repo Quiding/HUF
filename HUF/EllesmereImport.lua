@@ -705,8 +705,19 @@ end
 -- Group frames (EllesmereUIRaidFrames: its party size, raid look)
 ---------------------------------------------------------------------------
 local GROWTH = { DOWN = "DOWN", UP = "UP", RIGHT = "RIGHT", LEFT = "LEFT" }
+local RF_SPOT = { topleft = "TOPLEFT", top = "TOP", topright = "TOPRIGHT", left = "LEFT", center = "CENTER",
+    right = "RIGHT", bottomleft = "BOTTOMLEFT", bottom = "BOTTOM", bottomright = "BOTTOMRIGHT" }
+local RF_HP = { percent = "[hp%]", number = "[hp]" }
+local RF_MP = { percent = "[mp%]", percentNoSign = "[mp%]", number = "[mp]", numberPercent = "[mp] | [mp%]", percentNumber = "[mp%] | [mp]" }
 local function ConvertGroup(rf, g, notes)
-    local function G(k, d) local v = rf[k] if v == nil then return d end return v end
+    -- party frames read Ellesmere's party_<key> where it set one apart from
+    -- the raid's, else the raid's
+    local function G(k, d)
+        local v = rf["party_" .. k]
+        if v == nil then v = rf[k] end
+        if v == nil then return d end
+        return v
+    end
     local bs = math.max(0, math.floor(Num(G("borderSize"), 1) + 0.5))
     g.enabled = true
     g.width = math.max(40, math.floor(Num(G("partyFrameWidth"), Num(G("frameWidth"), 125)) - 2 * bs + 0.5))
@@ -734,13 +745,57 @@ local function ConvertGroup(rf, g, notes)
         if mode ~= "custom" then notes[#notes + 1] = ("Group: health colour \"%s\" is a static colour in HUF."):format(tostring(mode)) end
     end
     if type(g.healPred) == "table" then g.healPred.enabled = G("healPrediction", false) == true end
+    -- texts: Ellesmere's name (with the level before it), health and power
+    -- texts over the frame; HUF's own group texts go
+    local th, tp = EmptyTexts(), EmptyTexts()
+    local function Put(set, spot, tpl, size, cm, col, x, y)
+        local anchor = RF_SPOT[spot or "center"] or "CENTER"
+        if set[anchor].text ~= "" then return end
+        local a = NewAnchor(tpl, math.floor(Num(size, 10) + 0.5))
+        a.x, a.y = math.floor(Num(x, 0) + 0.5), math.floor(Num(y, 0) + 0.5)
+        if cm == "class" then a.colorMode = "CLASS"
+        elseif cm == "accent" then a.colorMode = "ACCENT"
+        elseif type(col) == "table" and not (col.r == 1 and col.g == 1 and col.b == 1) then
+            a.colorMode, a.color = "CUSTOM", Color(col, { r = 1, g = 1, b = 1 })
+        end
+        set[anchor] = a
+    end
+    local lvl = G("levelTextPosition", "name")
+    local nameTpl = (lvl == "name" and "[level] [name]") or (lvl == "nameDiv" and "[level] | [name]") or "[name]"
+    Put(th, G("namePosition", "topleft"), nameTpl, G("nameSize", 10), G("nameColorMode", "custom"), G("nameCustomColor"),
+        G("nameOffsetX"), G("nameOffsetY"))
+    if RF_SPOT[lvl] then Put(th, lvl, "[level]", G("levelTextSize", 10), "custom", nil, G("levelTextOffsetX"), G("levelTextOffsetY")) end
+    local hp = RF_HP[G("healthTextMode", "none")]
+    if hp then
+        Put(th, G("healthTextPosition", "center"), hp, G("healthTextSize", 9), G("healthTextColorMode", "custom"),
+            G("healthTextCustomColor"), G("healthTextOffsetX"), G("healthTextOffsetY"))
+    end
+    local mp = RF_MP[G("powerTextMode", "none")]
+    if mp and power then
+        Put(tp, G("powerTextPosition", "bottom"), mp, G("powerTextSize", 8), G("powerTextColorMode", "custom"),
+            G("powerTextCustomColor"), G("powerTextOffsetX"), G("powerTextOffsetY"))
+    end
+    g.texts.health, g.texts.power = th, tp
+    -- buffs: Ellesmere shows them only as its buff indicators (none set by
+    -- default); debuffs stay
+    local ind = G("bmIndicators")
+    local anyInd = false
+    if type(ind) == "table" then for _, list in pairs(ind) do if type(list) == "table" and next(list) then anyInd = true end end end
+    if g.buffs then g.buffs.enabled = anyInd end
+    if anyInd then notes[#notes + 1] = "Group: Ellesmere's buff indicators become HUF's buff row (your HoTs)." end
+    if G("powerShowForDPS", false) == false and power then
+        notes[#notes + 1] = "Group: HUF shows the power bar for every role (Ellesmere: healers and tanks)."
+    end
+    if G("roleIconStyle", "modern") ~= "none" then notes[#notes + 1] = "Group: HUF has no role icons." end
+
     g.group = g.group or {}
-    g.group.orientation = GROWTH[G("unitGrowth", "DOWN")] or "DOWN"
-    g.group.spacing = math.max(0, math.floor(Num(G("cellSpacing"), -1) + 2 * bs + 0.5))
+    -- party direction: down (or up), sideways with \"horizontal\"
+    local horiz, flip = G("partyHorizontal", false) == true, G("partyFlipGrowth", false) == true
+    g.group.orientation = horiz and (flip and "LEFT" or "RIGHT") or (flip and "UP" or "DOWN")
+    g.group.spacing = math.max(0, math.floor(Num(rf.partyCellSpacing, Num(G("cellSpacing"), -1)) + 2 * bs + 0.5))
     g.group.spacingH = g.group.spacing
     g.group.sort = (G("sortMode", "ROLE") == "INDEX") and "INDEX" or "NAME"
     g.group.showPlayer = true
-    notes[#notes + 1] = "Group: size, bars, border, colours and growth imported; texts, auras and role icons keep HUF's."
 end
 
 ---------------------------------------------------------------------------
