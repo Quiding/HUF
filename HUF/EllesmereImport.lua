@@ -825,6 +825,98 @@ local function ConvertGroup(rf, g, notes)
 end
 
 ---------------------------------------------------------------------------
+-- Minimap (EllesmereUIMinimap)
+---------------------------------------------------------------------------
+local MM_FOLDER = "EllesmereUIMinimap"
+-- Ellesmere's position keys -> HUF's (inside the map, or above / below it)
+local MM_POS = {
+    belowMap = "BELOW", aboveMap = "ABOVE", topLeft = "TOPLEFT", top = "TOP", topRight = "TOPRIGHT",
+    left = "LEFT", right = "RIGHT", bottomLeft = "BOTTOMLEFT", bottom = "BOTTOM", bottomRight = "BOTTOMRIGHT",
+    center = "CENTER",
+}
+local MM_CORNER = { TOPLEFT = "TOPLEFT", TOPRIGHT = "TOPRIGHT", BOTTOMLEFT = "BOTTOMLEFT", BOTTOMRIGHT = "BOTTOMRIGHT",
+    TOP = "TOP", BOTTOM = "BOTTOM", LEFT = "LEFT", RIGHT = "RIGHT" }
+
+local function ConvertMinimap(addon, m, notes)
+    local p = type(addon.minimap) == "table" and addon.minimap or addon
+    local function G(k, d) local v = p[k] if v == nil then return d end return v end
+    m.enabled = true
+    m.shape = (G("shape", "square") == "square") and "SQUARE" or "ROUND"
+    m.size = math.max(80, math.floor(Num(G("mapSize"), 140) + 0.5))
+    local pos = G("position")
+    if type(pos) == "table" and type(pos.x) == "number" and type(pos.y) == "number" then
+        m.point = { pos.point or "CENTER", pos.relPoint or pos.point or "CENTER", math.floor(pos.x + 0.5), math.floor(pos.y + 0.5) }
+    end
+    -- border: Ellesmere's, no shade around the map
+    m.borderSize = math.max(0, math.floor(Num(G("borderSize"), 1) + 0.5))
+    m.borderAccent = false
+    if G("useClassColor", false) or G("borderUseClassColor", false) then
+        local cc = ns.ClassColor(select(2, UnitClass("player")))
+        if cc then m.borderColor = { r = cc.r, g = cc.g, b = cc.b } end
+    elseif type(G("borderColor")) == "table" then
+        m.borderColor = Color(G("borderColor"), { r = 0, g = 0, b = 0 })
+    else
+        m.borderColor = { r = Num(G("borderR"), 0), g = Num(G("borderG"), 0), b = Num(G("borderB"), 0) }
+    end
+    m.shade = 0
+    m.mouseZoom = G("scrollZoom", true) and true or false
+
+    -- texts: Ellesmere's size 10 x its scale; "edge" = just outside the map
+    local function Place(t, mode, posKey, scale, base)
+        if mode == "none" then t.mode = "NEVER" return end
+        t.mode = (mode == "hover" or mode == "mouseover") and "HOVER" or "ALWAYS"
+        local hp = MM_POS[posKey or "top"] or "TOP"
+        if mode == "edge" then hp = (posKey == "bottom" or posKey == "belowMap") and "BELOW" or "ABOVE" end
+        t.pos, t.x, t.y = hp, 0, 0
+        t.size = math.max(6, math.floor(Num(base, 10) * Num(scale, 1.15) + 0.5))
+    end
+    -- the older settings carry zoneInside / clockInside instead of the modes
+    local clockMode = G("clockMode") or ((G("showClock") == false) and "none") or ((G("clockInside") == false) and "edge" or "inside")
+    local locMode = G("locationMode") or ((G("hideZoneText") == true) and "none") or (G("zoneInside") and "inside" or "edge")
+    local tx = m.texts
+    Place(tx.zone, locMode, G("locationPosition", "bottom"), G("locationScale", 1.15))
+    tx.zone.color = G("zoneReactiveColor", false) and "ZONE" or "WHITE"
+    Place(tx.clock, clockMode, G("clockPosition", "top"), G("clockScale", 1.15))
+    tx.clock.format = (G("clockFormat", "12h") == "24h") and "24" or "12"
+    local cMode = G("coordsMode") or (G("coordsBelow") and "always") or "always"
+    if G("showCoords") == false and G("coordsMode") == nil and not G("coordsBelow") then cMode = "none" end
+    Place(tx.coords, cMode, G("coordsPosition") or (G("coordsBelow") and "belowMap") or "topLeft", G("coordsScale", 1))
+    tx.coords.decimals = math.floor(Num(G("coordPrecision"), 0))
+    Place(tx.system, G("showFPS", false) and "always" or "none", G("fpsPosition", "bottomLeft"), G("fpsScale", 1), Num(G("fpsTextSize"), 12))
+    local lms, wms = G("fpsShowLocalMS", true), G("fpsShowWorldMS", false)
+    tx.system.show = (lms or wms) and "BOTH" or "FPS"
+
+    -- the game's icons Ellesmere hides; the others keep HUF's places
+    local ic = m.icons
+    local function Off(key, hide) if hide and ic[key] then ic[key].mode = "NEVER" end end
+    Off("zoom", G("hideZoomButtons", false))
+    Off("tracking", G("hideTrackingButton", false))
+    Off("calendar", G("hideGameTime", false))
+    Off("mail", G("hideMail", false))
+    Off("crafting", G("hideCraftingOrder", false))
+    Off("difficulty", G("hideRaidDifficulty", false))
+    local mp = MM_CORNER[G("mailPosition", "button")]
+    if mp and ic.mail and ic.mail.mode ~= "NEVER" then ic.mail.pos, ic.mail.x, ic.mail.y = mp, 0, 0 end
+    if G("diffTextEnabled", false) and ic.difficulty and ic.difficulty.mode ~= "NEVER" then
+        ic.difficulty.mode = "ALWAYS"
+        ic.difficulty.pos = MM_POS[G("diffTextPosition", "topLeft")] or "TOPLEFT"
+        ic.difficulty.x, ic.difficulty.y = 0, 0
+        notes[#notes + 1] = "Minimap: Ellesmere's difficulty text is the game's difficulty icon in HUF."
+    end
+
+    -- addon buttons: Ellesmere gathers them in its flyout; HUF's addon bar
+    if not G("hideAddonButtons", false) then
+        m.addonBar = true
+        m.barIconSize = math.max(16, math.floor(Num(G("addonBtnSize"), 24) + 0.5))
+    else
+        m.addonBar, m.buttonMode = false, "NEVER"
+    end
+    if type(G("ungroupedButtons")) == "table" and next(G("ungroupedButtons")) then
+        notes[#notes + 1] = "Minimap: buttons Ellesmere keeps outside its flyout are in HUF's addon bar with the others."
+    end
+end
+
+---------------------------------------------------------------------------
 -- Public
 ---------------------------------------------------------------------------
 -- prof: Ellesmere profile data (addons, fonts); uf / np its Unit Frames /
@@ -856,6 +948,14 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         out.nameplates.enabled = npOn ~= false
         parts[#parts + 1] = { title = "Nameplates", tbl = out.nameplates, on = out.nameplates.enabled,
             why = "EllesmereUI Nameplates is off", folder = NP_FOLDER, module = "EllesmereUI Nameplates" }
+    end
+    local mmA = prof and prof.addons and prof.addons[MM_FOLDER]
+    if type(mmA) == "table" and type(out.minimap) == "table" then
+        local okM, err = pcall(ConvertMinimap, mmA, out.minimap, notes)
+        if not okM then return false, "Could not convert the minimap: " .. tostring(err) end
+        what[#what + 1] = "minimap"
+        parts[#parts + 1] = { title = "Minimap", tbl = out.minimap, on = true,
+            why = "off in Ellesmere", folder = MM_FOLDER, module = "EllesmereUI Minimap" }
     end
     local rf = prof and prof.addons and prof.addons[RF_FOLDER]
     if type(rf) == "table" and out.units.party then

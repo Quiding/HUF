@@ -266,7 +266,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
     -- frame Ellesmere has off can be turned on), and while EllesmereUI
     -- Nameplates is loaded, whether to turn it off (two plates otherwise)
     local dlg
-    local MAX_ROWS, MAX_EXTRA = 8, 3
+    local MAX_ROWS, MAX_EXTRA = 10, 5
     local function ImportWindow()
         if dlg then return dlg end
         local f = CreateFrame("Frame", "HUFEllesmereImportFrame", UIParent)
