@@ -211,6 +211,19 @@ function Frame.Build(f, key, secure)
         f.happyText = f.textLayer:CreateFontString(nil, "OVERLAY")
         ns.ApplyFont(f.happyText, "GLOBAL", 12, "OUTLINE")
         f.happyText:Hide()
+        -- hover area for the tooltip: mouse motion only, clicks reach the unit button
+        local hv = CreateFrame("Frame", nil, f.textLayer)
+        if hv.EnableMouseMotion then
+            hv:EnableMouseMotion(true)
+            if hv.EnableMouseClicks then pcall(hv.EnableMouseClicks, hv, false) end
+        else
+            hv:EnableMouse(true)
+            if hv.SetPropagateMouseClicks then pcall(hv.SetPropagateMouseClicks, hv, true) end
+        end
+        hv:SetScript("OnEnter", function(self) Frame.HappinessTooltip(self) end)
+        hv:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        hv:Hide()
+        f.happyHover = hv
     end
 
     f.bars = {}
@@ -954,7 +967,11 @@ function Frame.UpdateHappiness(f)
     local c = f.s.happiness
     local h
     if c and c.enabled then h = f.fake and 3 or ReadHappiness() end
-    if not HAPPY_ATLAS[h] then f.happyIcon:Hide() f.happyText:Hide() return end
+    if not HAPPY_ATLAS[h] then
+        f.happyIcon:Hide() f.happyText:Hide()
+        if f.happyHover then f.happyHover:Hide() end
+        return
+    end
     local anchor = f.health
     if c.mode == "TEXT" then
         f.happyIcon:Hide()
@@ -965,6 +982,9 @@ function Frame.UpdateHappiness(f)
         f.happyText:SetText(t[1])
         f.happyText:SetTextColor(t[2], t[3], t[4])
         f.happyText:Show()
+        f.happyHover:ClearAllPoints()
+        f.happyHover:SetAllPoints(f.happyText)
+        f.happyHover:Show()
     else
         f.happyText:Hide()
         if f.happyAtlas ~= h then
@@ -980,7 +1000,42 @@ function Frame.UpdateHappiness(f)
         f.happyIcon:ClearAllPoints()
         f.happyIcon:SetPoint("RIGHT", anchor, "RIGHT", c.x, c.y)
         f.happyIcon:Show()
+        f.happyHover:ClearAllPoints()
+        f.happyHover:SetAllPoints(f.happyIcon)
+        f.happyHover:Show()
     end
+end
+
+-- the stock pet frame's tooltip: mood, damage share, loyalty trend, diet
+function Frame.HappinessTooltip(owner)
+    local fn = (C_PetInfo and C_PetInfo.GetPetHappiness) or GetPetHappiness
+    if not fn then return end
+    local ok, h, dmg, loyalty = pcall(fn)
+    if not ok or ns.IsSecret(h) then return end
+    local text = (h == 1 and (PET_HAPPINESS1 or "Unhappy")) or (h == 2 and (PET_HAPPINESS2 or "Content"))
+        or (h == 3 and (PET_HAPPINESS3 or "Happy"))
+    local fake = owner:GetParent() and owner:GetParent():GetParent() and owner:GetParent():GetParent().fake
+    if fake then text, dmg, loyalty = PET_HAPPINESS3 or "Happy", 125, 1 end
+    if not text then return end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:SetText(text)
+    if dmg and not ns.IsSecret(dmg) and PET_DAMAGE_PERCENTAGE then
+        GameTooltip:AddLine(PET_DAMAGE_PERCENTAGE:format(dmg), 1, 1, 1)
+    end
+    if loyalty and not ns.IsSecret(loyalty) then
+        if loyalty < 0 and LOSING_LOYALTY then GameTooltip:AddLine(LOSING_LOYALTY, 1, 0.3, 0.3)
+        elseif loyalty > 0 and GAINING_LOYALTY then GameTooltip:AddLine(GAINING_LOYALTY, 0.3, 1, 0.3) end
+    end
+    local foods = C_PetInfo and C_PetInfo.GetPetFoodTypes
+    if foods then
+        local okF, diet = pcall(foods)
+        if okF and type(diet) == "table" and #diet > 0 then
+            local line = PET_DIET_TEMPLATE and PET_DIET_TEMPLATE:format(table.concat(diet, PET_FOOD_DELIMIT or ", "))
+                or ("Diet: " .. table.concat(diet, ", "))
+            GameTooltip:AddLine(line, 1, 0.82, 0, true)
+        end
+    end
+    GameTooltip:Show()
 end
 
 do
