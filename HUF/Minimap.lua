@@ -43,6 +43,8 @@ local POS = {
     ABOVE_LEFT = { "BOTTOMLEFT", "TOPLEFT" }, ABOVE = { "BOTTOM", "TOP" }, ABOVE_RIGHT = { "BOTTOMRIGHT", "TOPRIGHT" },
     BELOW_LEFT = { "TOPLEFT", "BOTTOMLEFT" }, BELOW = { "TOP", "BOTTOM" }, BELOW_RIGHT = { "TOPRIGHT", "BOTTOMRIGHT" },
     OUTSIDE_LEFT = { "RIGHT", "LEFT" }, OUTSIDE_RIGHT = { "LEFT", "RIGHT" },
+    OUTSIDE_LEFT_TOP = { "TOPRIGHT", "TOPLEFT" }, OUTSIDE_LEFT_BOTTOM = { "BOTTOMRIGHT", "BOTTOMLEFT" },
+    OUTSIDE_RIGHT_TOP = { "TOPLEFT", "TOPRIGHT" }, OUTSIDE_RIGHT_BOTTOM = { "BOTTOMLEFT", "BOTTOMRIGHT" },
 }
 MM.POSITIONS = {
     { value = "TOPLEFT", text = "Inside: top left" }, { value = "TOP", text = "Inside: top" },
@@ -55,6 +57,8 @@ MM.POSITIONS = {
     { value = "BELOW_LEFT", text = "Below, left" }, { value = "BELOW", text = "Below, centered" },
     { value = "BELOW_RIGHT", text = "Below, right" },
     { value = "OUTSIDE_LEFT", text = "Left of the map" }, { value = "OUTSIDE_RIGHT", text = "Right of the map" },
+    { value = "OUTSIDE_LEFT_TOP", text = "Left of the map, top" }, { value = "OUTSIDE_LEFT_BOTTOM", text = "Left of the map, bottom" },
+    { value = "OUTSIDE_RIGHT_TOP", text = "Right of the map, top" }, { value = "OUTSIDE_RIGHT_BOTTOM", text = "Right of the map, bottom" },
 }
 MM.MODES = {
     { value = "ALWAYS", text = "Always" },
@@ -127,6 +131,9 @@ local function ShowFrame(f, on, mouse)
 end
 
 -- place one of the game's icons: on HUF's icon layer, where the setting says
+-- tracking in the data bar's slot (defined below with IconVisibility)
+local trackBtn, trackSlotted, TrackingButton
+
 local function PlaceIcon(info, f, second)
     local d = placed[f]
     if not d then
@@ -165,9 +172,13 @@ local function PlaceIcon(info, f, second)
         local slot = info.key == "tracking" and ns.DataBars and ns.DataBars.TrackingSlot and ns.DataBars.TrackingSlot()
         if slot then
             f:SetPoint("CENTER", slot, "CENTER", 0, 0)
-            if f.SetFrameStrata then f:SetFrameStrata(slot:GetFrameStrata()) end
-            f:SetFrameLevel(slot:GetFrameLevel() + 3)
+            trackSlotted = true
+            TrackingButton(slot, f)
         else
+            if info.key == "tracking" then
+                trackSlotted = false
+                if trackBtn then trackBtn:Hide() end
+            end
             f:SetPoint(p[1], Minimap, p[2], (cfg.x or 0) / sc, (cfg.y or 0) / sc)
         end
     end
@@ -187,10 +198,59 @@ function MM.PlaceIcons(only)
     end
 end
 
+-- tracking on the data bar's end: HUF's own clear button (the game's
+-- magnifier art) opens the game's tracking menu; the game's button stays
+-- hidden in the slot (the menu opens there)
+local function OpenTracking(f)
+    local b = f and (type(f.Button) == "table" and f.Button or f)
+    if not b then return end
+    if b.OpenMenu then pcall(b.OpenMenu, b)
+    elseif b.Click then pcall(b.Click, b, "LeftButton") end
+end
+TrackingButton = function(slot, f)
+    if not trackBtn then
+        trackBtn = CreateFrame("Button", "HUF_MinimapTrackingButton", slot)
+        trackBtn.icon = trackBtn:CreateTexture(nil, "ARTWORK")
+        trackBtn.icon:SetAllPoints()
+        if not (pcall(trackBtn.icon.SetAtlas, trackBtn.icon, "UI-HUD-Minimap-Tracking-Up") and trackBtn.icon:GetAtlas()) then
+            trackBtn.icon:SetTexture("Interface\\Minimap\\Tracking\\None")
+        end
+        trackBtn.icon:SetVertexColor(0.85, 0.85, 0.88)
+        trackBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        trackBtn:SetScript("OnClick", function(self) OpenTracking(self.game) end)
+        trackBtn:SetScript("OnEnter", function(self)
+            local a = ns.ACCENT
+            self.icon:SetVertexColor(a[1], a[2], a[3])
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText("Tracking")
+            GameTooltip:AddLine("Click: what the minimap shows", 0.8, 0.8, 0.8)
+            GameTooltip:Show()
+        end)
+        trackBtn:SetScript("OnLeave", function(self)
+            self.icon:SetVertexColor(0.85, 0.85, 0.88)
+            GameTooltip:Hide()
+        end)
+    end
+    trackBtn.game = f
+    trackBtn:SetParent(slot)
+    trackBtn:SetFrameLevel(slot:GetFrameLevel() + 4)
+    trackBtn:ClearAllPoints()
+    trackBtn:SetPoint("CENTER", slot, "CENTER")
+    local h = math.max(10, (slot:GetHeight() or 22) - 4)
+    trackBtn:SetSize(h, h)
+    trackBtn:Show()
+end
+
 local function IconVisibility()
     for f, d in pairs(placed) do
         local on = Wanted(S().icons[d.info.key].mode)
-        ShowFrame(f, on, d.mouse)
+        if d.info.key == "tracking" and trackSlotted then
+            ShowFrame(f, false, d.mouse)        -- HUF's button stands for it
+            if trackBtn then trackBtn:SetShown(on) end
+            on = false
+        else
+            ShowFrame(f, on, d.mouse)
+        end
         if type(f.Button) == "table" and d.buttonMouse ~= nil then f.Button:EnableMouse(on and d.buttonMouse) end
     end
 end

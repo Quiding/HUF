@@ -909,7 +909,7 @@ local function ConvertMinimap(addon, m, notes)
     if ic.tracking and ic.tracking.mode ~= "NEVER" then
         ic.tracking.mode, ic.tracking.pos, ic.tracking.x, ic.tracking.y = "ALWAYS", "BELOW_LEFT", 0, -(m.borderSize + 1)
     end
-    if ic.addonbar then ic.addonbar.mode, ic.addonbar.pos, ic.addonbar.x, ic.addonbar.y = "ALWAYS", "BOTTOMLEFT", 2, 2 end
+    if ic.addonbar then ic.addonbar.mode, ic.addonbar.pos, ic.addonbar.x, ic.addonbar.y = "ALWAYS", "OUTSIDE_LEFT_BOTTOM", -2, 0 end
 
     -- addon buttons: Ellesmere gathers them in its flyout; HUF's addon bar
     if not G("hideAddonButtons", false) then

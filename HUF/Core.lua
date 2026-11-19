@@ -514,7 +514,7 @@ local function BuildDefaults()
                 difficulty  = { mode = "ALWAYS", pos = "TOPLEFT", x = 2, y = -2 },
                 landing     = { mode = "HOVER", pos = "LEFT", x = 2, y = -30 },
                 zoom        = { mode = "NEVER", pos = "BOTTOMRIGHT", x = -2, y = 24 },
-                addonbar    = { mode = "ALWAYS", pos = "BOTTOMLEFT", x = 2, y = 2 },    -- the button bag, lower left
+                addonbar    = { mode = "ALWAYS", pos = "OUTSIDE_LEFT_BOTTOM", x = -2, y = 0 },   -- the button bag, outside the lower left
             },
             buttonMode = "HOVER",       -- addon buttons on the map: ALWAYS | HOVER | NEVER (each one can differ: buttons[name])
             buttons = {},
@@ -998,6 +998,17 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 15
+    end
+    -- 16: the addon button bag just outside the map's lower left corner
+    -- (only where still the 15 place)
+    if HUFDB.dataVersion < 16 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local ab = prof.minimap and prof.minimap.icons and prof.minimap.icons.addonbar
+            if ab and ab.pos == "BOTTOMLEFT" and ab.x == 2 and ab.y == 2 then
+                ab.pos, ab.x, ab.y = "OUTSIDE_LEFT_BOTTOM", -2, 0
+            end
+        end
+        HUFDB.dataVersion = 16
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}
