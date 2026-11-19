@@ -608,6 +608,8 @@ local function BuildDefaults()
                 iconColor = "MONO",         -- MONO (flat light grey) | GAME (the art's colours) | CLASS | ACCENT | CUSTOM
                 iconCustom = C(0.85, 0.85, 0.88),
             },
+            -- free bars anywhere on screen, each with its blocks (DataBars.lua)
+            bars = {},
         },
         nameplates = {
             enabled = true,

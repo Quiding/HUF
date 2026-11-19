@@ -1110,6 +1110,121 @@ local function ConvertDataBar(addon, d, notes)
     return true
 end
 
+
+-- Ellesmere's other data bars (not the Minimap Companion): one HUF bar each,
+-- with the blocks HUF has. Returns the bars; the block types left out go in
+-- the notes.
+local DB_VIS = { always = "ALWAYS", in_combat = "COMBAT", out_of_combat = "NOCOMBAT", mouseover = "HOVER", never = "NEVER" }
+local function BlockColors(blk, c)
+    if blk.useClassColor then c.textColor = "CLASS"
+    elseif blk.useAccentColor then c.textColor = "ACCENT"
+    elseif blk.useDynamicColor then c.textColor = "DYNAMIC"
+    elseif type(blk.color) == "table" then c.textColor, c.textCustom = "CUSTOM", Color(blk.color, c.textCustom)
+    else c.textColor = "WHITE" end
+    if blk.useIconClassColor then c.iconColor = "CLASS"
+    elseif blk.useIconAccentColor then c.iconColor = "ACCENT"
+    elseif not blk.useIconDefaultColor and type(blk.iconColor) == "table" then
+        c.iconColor, c.iconCustom = "CUSTOM", Color(blk.iconColor, c.iconCustom)
+    else c.iconColor = "MONO" end
+end
+-- adds the block's HUF block(s) to out; returns its type when HUF has none
+local function ConvertBlock(blk, bar, out)
+    local BL = ns.DataBlocks
+    local st = type(blk.settings) == "table" and blk.settings or {}
+    local function Add(key)
+        local c = BL.New(key)
+        c.scale = math.floor(Num(blk.scale, 100) + 0.5)
+        local al = blk.align
+        c.align = (al == "LEFT" or al == "RIGHT") and al or "CENTER"
+        local base = Num(blk.contentGap, 10)
+        c.padL = math.floor(Num(blk.contentGapL, base) + 0.5)
+        c.padR = math.floor(Num(blk.contentGapR, base) + 0.5)
+        c.fill = bar.fillBlockId ~= nil and blk.id == bar.fillBlockId
+        BlockColors(blk, c)
+        if st.showIcon ~= nil then c.showIcon = st.showIcon and true or false end
+        out[#out + 1] = c
+        return c
+    end
+    local t = blk.type
+    if t == "fps" or t == "durability" then
+        Add(t)
+    elseif t == "ms" then
+        local c = Add("ms")
+        local m = st.latencyMode
+        c.settings.latency = (m == "world" and "WORLD") or ((m == "both" or m == "higher") and "HIGHER") or "HOME"
+    elseif t == "clock" then
+        local c = Add("clock")
+        c.settings.twentyFour = st.twentyFour ~= false
+        c.settings.localTime = st.localTime ~= false
+    elseif t == "gold" then
+        local c = Add("gold")
+        c.settings.showSmall = st.showSmall and true or false
+        c.settings.coinIcons = st.coinIcons and true or false
+        c.settings.coinColor = blk.useCoinColor and true or false
+        c.settings.abbreviate = st.abbreviate and true or false
+        c.showIcon = false
+    elseif t == "audio" then
+        local c = Add("audio")
+        local ch = st.channel or "master"
+        c.settings.channel = BL.CHANNELS[ch] and ch or "master"
+    elseif t == "combat" then
+        local c = Add("combat")
+        c.settings.onlyInCombat = st.onlyInCombat and true or false
+        if c.textColor == "WHITE" then c.textColor = "DYNAMIC" end
+    elseif t == "micromenu" then
+        if st.social then Add("friends") end
+        if st.guild then Add("guild") end
+        if not (st.social or st.guild) then return t end
+    else
+        return t
+    end
+end
+local function ConvertBars(addon, notes)
+    local bars, skipped, seen = {}, {}, {}
+    for _, b in ipairs(type(addon.bars) == "table" and addon.bars or {}) do
+        if type(b) == "table" and b.name ~= "Minimap Companion" then
+            if b.orientation == "V" then
+                notes[#notes + 1] = ("Data bar \"%s\": upright bars are not in HUF yet; left out."):format(tostring(b.name))
+            else
+                local c = ns.CopyTable(ns.DataBars.BAR_DEFAULTS)
+                c.name = tostring(b.name or ("Bar " .. (#bars + 1)))
+                c.enabled = true
+                c.visibility = DB_VIS[b.visibility] or "ALWAYS"
+                local sp = type(b.savedPos) == "table" and b.savedPos or {}
+                c.point, c.relPoint = sp.point or "CENTER", sp.relPoint or sp.point or "CENTER"
+                c.x, c.y = math.floor(Num(sp.x, 0) + 0.5), math.floor(Num(sp.y, 0) + 0.5)
+                if b.lengthMode == "full" then c.width = math.floor(UIParent:GetWidth() + 0.5)
+                else c.width = math.floor(Num(b.length, 400) + 0.5) end
+                c.height = math.max(10, math.floor(Num(b.thickness, 22) + 0.5))
+                local th = type(b.theme) == "table" and b.theme or {}
+                if th.style == "modern" then
+                    c.look = "FLAT"
+                    local mc = type(th.modernColor) == "table" and th.modernColor
+                    if mc then c.bgColor, c.bgAlpha = Color(mc, c.bgColor), Num(mc.a, 0.95) end
+                else
+                    c.look = "SOFT"
+                    c.softAlpha = Num(th.euiAlpha, 0.5)
+                end
+                c.borderSize = b.hideBorder and 0 or 1
+                c.sizing = (b.sizingMode == "even") and "EVEN" or "AUTO"
+                c.fontSize = math.max(6, math.floor(12 * Num(b.fontScale, 100) / 100 + 0.5))
+                c.blocks = {}
+                for _, blk in ipairs(type(b.blocks) == "table" and b.blocks or {}) do
+                    if type(blk) == "table" then
+                        local left = ConvertBlock(blk, b, c.blocks)
+                        if left and not seen[left] then seen[left] = true skipped[#skipped + 1] = left end
+                    end
+                end
+                bars[#bars + 1] = c
+            end
+        end
+    end
+    if #skipped > 0 then
+        notes[#notes + 1] = "Data bars: blocks not in HUF yet, left out: " .. table.concat(skipped, ", ") .. "."
+    end
+    return bars
+end
+
 ---------------------------------------------------------------------------
 -- Public
 ---------------------------------------------------------------------------
@@ -1158,6 +1273,17 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         if res then
             what[#what + 1] = "minimap data bar"
             parts[#parts + 1] = { title = "Minimap data bar", tbl = out.dataBars.minimap, on = true, why = "off in Ellesmere" }
+        end
+        local okF, bars = pcall(ConvertBars, dbA, notes)
+        if not okF then return false, "Could not convert the data bars: " .. tostring(bars) end
+        if #bars > 0 then
+            out.dataBars.bars = bars
+            what[#what + 1] = "data bars"
+            for i, b in ipairs(bars) do
+                local last = i == #bars
+                parts[#parts + 1] = { title = "Data bar: " .. b.name, tbl = b, on = true, why = "off in Ellesmere",
+                    folder = last and DB_FOLDER or nil, module = last and "EllesmereUI Data Bars" or nil }
+            end
         end
     end
     local rf = prof and prof.addons and prof.addons[RF_FOLDER]
