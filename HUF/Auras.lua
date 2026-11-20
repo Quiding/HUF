@@ -130,8 +130,9 @@ local teamTypes, teamKey = {}, ""
 local teamCand, teamCandSated
 
 local function Plain(v) if v == nil or ns.IsSecret(v) then return nil end return v end
--- the role a member has; without one (a group made by hand, like an MMT
--- team) the role of their spec, as far as the game knows it
+-- the role of a member's spec, as far as the game knows it (others: once
+-- inspected). Their group role is no help: a group made by hand, like an
+-- MMT team, often has everyone as damage, healers too.
 local function SpecRole(unit)
     if unit == "player" then
         if not (GetSpecialization and GetSpecializationRole) then return nil end
@@ -148,14 +149,36 @@ local function SpecRole(unit)
     local okR, r = pcall(GetSpecializationRoleByID, id)
     return okR and Plain(r) or nil
 end
+local unknownSpec = {}      -- members whose spec isn't known yet
 local function UnitHeals(unit)
-    local ok, role = pcall(UnitGroupRolesAssigned, unit)
-    role = ok and Plain(role) or nil
-    if role == nil or role == "NONE" then role = SpecRole(unit) end
-    if role == "HEALER" then return true end
-    if role == "TANK" or role == "DAMAGER" then return false end
-    -- spec not known yet (not inspected): they might heal, so count it
+    local role = SpecRole(unit)
+    if role then return role == "HEALER" end
+    local ok, r = pcall(UnitGroupRolesAssigned, unit)
+    if ok and Plain(r) == "HEALER" then return true end
+    -- spec not known yet: they might heal, so count it, and ask the game
+    if unit ~= "player" then unknownSpec[#unknownSpec + 1] = unit end
     return true
+end
+
+-- inspect one member whose spec isn't known (the game answers with
+-- INSPECT_READY, which reads the group again); out of combat only, never
+-- while you have the inspect window open, a few tries per member
+local inspectTries, inspectBusy = {}, false
+local function InspectNext()
+    if inspectBusy or #unknownSpec == 0 or not NotifyInspect then return end
+    if InCombatLockdown() or (InspectFrame and InspectFrame:IsShown()) then return end
+    for _, unit in ipairs(unknownSpec) do
+        local okG, guid = pcall(UnitGUID, unit)
+        guid = okG and Plain(guid) or nil
+        local okC, can = pcall(CanInspect, unit)
+        if guid and okC and Plain(can) and (inspectTries[guid] or 0) < 5 then
+            inspectTries[guid] = (inspectTries[guid] or 0) + 1
+            inspectBusy = true
+            pcall(NotifyInspect, unit)
+            C_Timer.After(3, function() inspectBusy = false end)
+            return
+        end
+    end
 end
 
 local function GroupUnits()
@@ -173,6 +196,7 @@ end
 -- works out the types again; true when they changed
 local function ReadTeam()
     local set = {}
+    wipe(unknownSpec)
     for _, unit in ipairs(GroupUnits()) do
         local okE, exists = pcall(UnitExists, unit)
         if okE and Plain(exists) then
@@ -765,8 +789,16 @@ end
 ns.On("PLAYER_REGEN_ENABLED", RetryResize)
 
 -- the group changed: rows on "Ones my group can dispel" take the new types
+local retrying = false
 local function TeamChanged()
-    if not ReadTeam() then return end
+    local changed = ReadTeam()
+    InspectNext()
+    -- members out of range: try again in a while
+    if #unknownSpec > 0 and not retrying then
+        retrying = true
+        C_Timer.After(10, function() retrying = false TeamChanged() end)
+    end
+    if not changed then return end
     ns.Log("auras", "group can dispel: %s", teamKey ~= "" and teamKey or "nothing")
     for _, r in ipairs(rows) do
         local cfg = r.cfg
@@ -781,9 +813,10 @@ local function TeamChanged()
     end
 end
 for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_SPECIALIZATION_CHANGED",
-                     "PLAYER_ENTERING_WORLD", "INSPECT_READY" }) do
+                     "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }) do
     pcall(ns.On, e, TeamChanged)
 end
+pcall(ns.On, "INSPECT_READY", function() inspectBusy = false TeamChanged() end)
 ns.On("ZONE_CHANGED_NEW_AREA", RetryResize)
 
 ---------------------------------------------------------------------------
