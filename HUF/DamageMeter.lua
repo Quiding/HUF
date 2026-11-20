@@ -740,6 +740,9 @@ local function BuildHover()
     h.lines = {}
     for i = 1, HOVER_LINES do
         local l = {}
+        l.bar = h:CreateTexture(nil, "BORDER", nil, 1)
+        l.icon = h:CreateTexture(nil, "ARTWORK")
+        l.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         l.left = h:CreateFontString(nil, "OVERLAY")
         l.right = h:CreateFontString(nil, "OVERLAY")
         l.left:SetJustifyH("LEFT")
@@ -813,6 +816,7 @@ local function HoverLook(c)
     h.head:SetPoint("LEFT", h.icon, "RIGHT", 4, 0)
     h.head:SetPoint("RIGHT", h, "TOPRIGHT", -6, -th / 2)
     ns.ApplyFont(h.head, c.font, c.titleSize, c.outline)
+    h.head:SetTextColor(1, 1, 1)
     return h
 end
 
@@ -867,10 +871,33 @@ DrawHover = function(c, lines, w)
         local e = lines[i]
         l.left:ClearAllPoints()
         l.right:ClearAllPoints()
+        l.icon:ClearAllPoints()
+        l.bar:ClearAllPoints()
         if e then
             ns.ApplyFont(l.left, c.font, e[3] and math.max(8, c.fontSize - 2) or c.fontSize, c.outline)
             ns.ApplyFont(l.right, c.font, c.fontSize, c.outline)
-            l.left:SetPoint("TOPLEFT", 6, y)
+            -- a spell line: its icon, and a bar in the player's colour
+            local x = 6
+            if e.icon then
+                l.icon:SetTexture(e.icon)
+                l.icon:SetSize(lh - 2, lh - 2)
+                l.icon:SetPoint("TOPLEFT", 6, y + 1)
+                l.icon:Show()
+                x = 6 + lh
+            else
+                l.icon:Hide()
+            end
+            if e.frac and e.color then
+                local full = c.width - x - 4
+                l.bar:SetTexture(ns.TexturePath(c.texture))
+                l.bar:SetVertexColor(e.color.r, e.color.g, e.color.b, 0.55)
+                l.bar:SetPoint("TOPLEFT", x - 2, y + 1)
+                l.bar:SetSize(math.max(1, full * math.min(1, e.frac)), lh - 2)
+                l.bar:Show()
+            else
+                l.bar:Hide()
+            end
+            l.left:SetPoint("TOPLEFT", x, y)
             l.left:SetPoint("TOPRIGHT", -6, y)
             l.right:SetPoint("TOPRIGHT", -6, y)
             local okL = pcall(l.left.SetText, l.left, e[1])
@@ -888,6 +915,8 @@ DrawHover = function(c, lines, w)
         else
             l.left:Hide()
             l.right:Hide()
+            l.icon:Hide()
+            l.bar:Hide()
         end
     end
     h:SetSize(c.width, -y + 6)
@@ -926,6 +955,10 @@ ShowNameHover = function(row)
     local _, icon = SpellInfo(first and first.spellID)
     h.icon:SetTexture(icon or 134400)
     if not pcall(h.head.SetFormattedText, h.head, "%s - %s", row.name or "?", t.text) then h.head:SetText(t.text) end
+    local class = src.classFilename
+    local col = Plain(class) and ns.ClassColor(class) or nil
+    if col then h.head:SetTextColor(col.r, col.g, col.b) end
+    col = col or ns.AccentColor()
     local lines = {}
     local function Add(l, r, head) lines[#lines + 1] = { l, r, head } end
     if spells and #spells > 0 then
@@ -934,9 +967,11 @@ ShowNameHover = function(row)
             local a = sp.totalAmount
             if Plain(a) and type(a) == "number" then sum = sum + a else plain = false end
         end
+        local top = spells[1].totalAmount
+        if not (Plain(top) and type(top) == "number" and top > 0) then top = nil end
         for i = 1, math.min(#spells, HOVER_LINES - 1) do
             local sp = spells[i]
-            local sname = SpellInfo(sp.spellID)
+            local sname, sicon = SpellInfo(sp.spellID)
             local label = sname or sp.creatureName or "Melee / other"
             local txt = Short(sp.totalAmount)
             if plain and sum > 0 then
@@ -944,6 +979,10 @@ ShowNameHover = function(row)
                 if okF then txt = s2 end
             end
             Add(label, txt)
+            local e = lines[#lines]
+            e.icon = sicon or 134400
+            local a = sp.totalAmount
+            if top and Plain(a) and type(a) == "number" then e.frac, e.color = a / top, col end
         end
     else
         Add(InCombatLockdown() and "Spells: after the fight" or "Nothing in this fight", nil, true)
