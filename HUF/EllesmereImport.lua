@@ -835,7 +835,7 @@ local function ConvertGroup(rf, g, notes)
                 end
             else
                 cc = dm.cc == true
-                if dm.dispel then filter = "DISPELLABLE"
+                if dm.dispel then filter = (dm.dispelMode == "typed") and "TEAM" or "DISPELLABLE"
                 elseif dm.raid or dm.raidcombat then filter = "RAID"
                 elseif cc then filter, cc = "CC", false
                 else filter = nil end
@@ -848,8 +848,8 @@ local function ConvertGroup(rf, g, notes)
                     notes[#notes + 1] = ("Group: Ellesmere's debuff kinds %s are not in HUF; it shows the %s debuffs."):format(
                         table.concat(other, ", "), filter == "RAID" and "important" or "picked")
                 end
-                if filter == "DISPELLABLE" and dm.dispelMode == "typed" then
-                    notes[#notes + 1] = "Group: HUF's dispellable filter means the ones you can dispel (Ellesmere: any with a type)."
+                if filter == "TEAM" then
+                    notes[#notes + 1] = "Group: Ellesmere's \"any dispel type\" debuffs become HUF's \"Ones my group can dispel\"."
                 end
             end
             if type(dm.tiles) == "table" and next(dm.tiles) then

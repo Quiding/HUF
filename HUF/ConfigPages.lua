@@ -716,6 +716,7 @@ local DEBUFF_FILTERS = {
     { value = "ALL", text = "All debuffs" },
     { value = "RAID", text = "Important (Blizzard's raid frames)" },
     { value = "DISPELLABLE", text = "Only ones I can dispel" },
+    { value = "TEAM", text = "Ones my group can dispel" },
     { value = "CC", text = "Only crowd control" },
 }
 local BUFF_FILTERS = {
@@ -733,6 +734,9 @@ local function AuraPage(f, key, which)
     local gm, sm = Opt(T, "mine")
     L:Check("Only mine", gm, sm, debuffs and "Only the debuffs you cast." or "Only the buffs you cast.")
     L:Cycle("Filter", debuffs and DEBUFF_FILTERS or BUFF_FILTERS, Opt(T, "filter"))
+    if debuffs then
+        L:Note("\"Ones my group can dispel\": every debuff someone in your group (with MMT: your team) can remove, from their class and healer role.")
+    end
     if debuffs then
         local gc, sc = Opt(T, "ccFirst")
         L:Check("Crowd control first", gc, sc, "Stuns, fears and the like lead the row.")

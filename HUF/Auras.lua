@@ -107,9 +107,102 @@ end
 local SATED = { [57723] = true, [57724] = true, [80354] = true, [95809] = true,
                 [160455] = true, [264689] = true, [390435] = true }
 local SATED_CAND = { excludeSpellIDs = SATED }
-local function Cand(cfg)
-    if cfg.kind == "HARMFUL" and cfg.hideSated then return SATED_CAND end
+
+---------------------------------------------------------------------------
+-- "Ones my group can dispel" (filter TEAM): the debuff types anyone in the
+-- group can remove - with MMT that is your whole team, not just the
+-- character you play. Read from each member's class, and for the types
+-- only healers remove (magic), from the role they have. The game then shows
+-- only debuffs of those types (its own type filter: works in combat too).
+---------------------------------------------------------------------------
+local CLASS_DISPELS = {
+    PRIEST  = { all = { "Disease" }, healer = { "Magic" } },
+    PALADIN = { all = { "Poison", "Disease" }, healer = { "Magic" } },
+    SHAMAN  = { all = { "Curse" }, healer = { "Magic" } },
+    DRUID   = { all = { "Curse", "Poison" }, healer = { "Magic" } },
+    MONK    = { all = { "Poison", "Disease" }, healer = { "Magic" } },
+    EVOKER  = { all = { "Poison" }, healer = { "Magic" } },
+    MAGE    = { all = { "Curse" } },
+}
+A.CLASS_DISPELS = CLASS_DISPELS
+local TYPE_ORDER = { "Magic", "Curse", "Disease", "Poison", "Bleed" }
+local teamTypes, teamKey = {}, ""
+local teamCand, teamCandSated
+
+local function Plain(v) if v == nil or ns.IsSecret(v) then return nil end return v end
+local function UnitHeals(unit)
+    local ok, role = pcall(UnitGroupRolesAssigned, unit)
+    role = ok and Plain(role) or nil
+    if role == "HEALER" then return true end
+    if (role == nil or role == "NONE") and unit == "player" and GetSpecialization and GetSpecializationRole then
+        local okS, spec = pcall(GetSpecialization)
+        spec = okS and Plain(spec) or nil
+        if spec then
+            local okR, r = pcall(GetSpecializationRole, spec)
+            return okR and Plain(r) == "HEALER"
+        end
+    end
+    return false
+end
+
+local function GroupUnits()
+    local list = { "player" }
+    local raid = IsInRaid and IsInRaid()
+    local n = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+    if raid then
+        for i = 1, n do list[#list + 1] = "raid" .. i end
+    else
+        for i = 1, math.max(0, n - 1) do list[#list + 1] = "party" .. i end
+    end
+    return list
+end
+
+-- works out the types again; true when they changed
+local function ReadTeam()
+    local set = {}
+    for _, unit in ipairs(GroupUnits()) do
+        local okE, exists = pcall(UnitExists, unit)
+        if okE and Plain(exists) then
+            local okC, _, class = pcall(UnitClass, unit)
+            class = okC and Plain(class) or nil
+            local d = class and CLASS_DISPELS[class]
+            if d then
+                for _, t in ipairs(d.all or {}) do set[t] = true end
+                if d.healer and UnitHeals(unit) then
+                    for _, t in ipairs(d.healer) do set[t] = true end
+                end
+            end
+        end
+    end
+    local key = {}
+    for _, t in ipairs(TYPE_ORDER) do if set[t] then key[#key + 1] = t end end
+    key = table.concat(key, ",")
+    if key == teamKey and teamCand then return false end
+    teamKey, teamTypes = key, set
+    teamCand = { includeDispelTypes = set }
+    teamCandSated = { includeDispelTypes = set, excludeSpellIDs = SATED }
+    return true
+end
+function A.TeamTypes()
+    if not teamCand then ReadTeam() end
+    return teamKey
+end
+
+-- the candidate filter of a group slot ("lead": crowd control keeps every type)
+local function Cand(cfg, key)
+    if cfg.kind ~= "HARMFUL" then return nil end
+    if cfg.filter == "TEAM" and key ~= "lead" then
+        if not teamCand then ReadTeam() end
+        return cfg.hideSated and teamCandSated or teamCand
+    end
+    if cfg.hideSated then return SATED_CAND end
     return nil
+end
+-- the group can dispel nothing: the TEAM row shows nothing
+local function TeamEmpty(cfg)
+    if cfg.kind ~= "HARMFUL" or cfg.filter ~= "TEAM" then return false end
+    if not teamCand then ReadTeam() end
+    return teamKey == ""
 end
 
 -- a debuff's border in its type's colour (magic blue, curse purple, ...)
@@ -307,11 +400,12 @@ function Row:BuildEngine()
     end
     -- debuffs: lead (crowd control), main, extra; buffs: main, extra. The
     -- slots stay; their filters change with the settings.
-    local g, cand = A.Groups(cfg), Cand(cfg)
+    local g = A.Groups(cfg)
     self.slots = cfg.kind == "HARMFUL" and { "lead", "main", "extra" } or { "main", "extra" }
     self.filters, self.cands = {}, {}
     for _, key in ipairs(self.slots) do
         local filter = g[key] or (key == "lead" and Make(cfg.kind, false, "CROWD_CONTROL")) or g.main
+        local cand = Cand(cfg, key)
         c:AddAuraGroup(key, filter, {
             maxFrameCount = cap,
             candidateFilters = cand,
@@ -374,10 +468,12 @@ function Row:ApplyEngine()
     -- engine counts the space after the last icon)
     Call(c, "SetFlowLayoutMaximumLineSize", "SetAuraLayoutRowWidth", cfg.perRow * (cfg.size + cfg.gap) + 0.4)
     local cap = cfg.perRow * cfg.rows
-    local g, cand = A.Groups(cfg), Cand(cfg)
+    local g, empty = A.Groups(cfg), TeamEmpty(cfg)
     for _, key in ipairs(self.slots) do
+        local cand = Cand(cfg, key)
         pcall(c.SetAuraGroupLayout, c, key, GroupLayout(cfg))
         local filter, show = g[key], g[key] ~= nil
+        if empty and key ~= "lead" then show = false end
         if filter and filter ~= self.filters[key] then
             local ok, err = Call(c, "SetAuraGroupFilterString", nil, key, filter)
             if ok then self.filters[key] = filter
@@ -483,6 +579,8 @@ function Row:Scan()
         local max = cfg.perRow * cfg.rows
         local seen = {}
         local sated = cfg.kind == "HARMFUL" and cfg.hideSated
+        local team = cfg.kind == "HARMFUL" and cfg.filter == "TEAM"
+        if team and not teamCand then ReadTeam() end
         local ring = WantDispel(cfg)
         for _, key in ipairs(A.SLOTS) do
           local filter = g[key]
@@ -494,6 +592,11 @@ function Row:Scan()
             local id, sid = a.auraInstanceID, a.spellId
             if ns.IsSecret(id) then id = nil end
             local skip = (id and seen[id]) or (sated and not ns.IsSecret(sid) and SATED[sid])
+            if not skip and team and key ~= "lead" then
+                local dn = a.dispelName
+                if ns.IsSecret(dn) then dn = nil end
+                skip = not (dn and teamTypes[dn])
+            end
             if not skip then
             if id then seen[id] = true end
             n = n + 1
@@ -647,6 +750,27 @@ local function RetryResize()
     end
 end
 ns.On("PLAYER_REGEN_ENABLED", RetryResize)
+
+-- the group changed: rows on "Ones my group can dispel" take the new types
+local function TeamChanged()
+    if not ReadTeam() then return end
+    ns.Log("auras", "group can dispel: %s", teamKey ~= "" and teamKey or "nothing")
+    for _, r in ipairs(rows) do
+        local cfg = r.cfg
+        if cfg and cfg.enabled and cfg.filter == "TEAM" and cfg.kind == "HARMFUL" and not r.preview then
+            if r.c then
+                local ok, err = pcall(r.ApplyEngine, r)
+                if not ok then r:Fail("group dispels", err) end
+            else
+                r:Scan()
+            end
+        end
+    end
+end
+for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_SPECIALIZATION_CHANGED",
+                     "PLAYER_ENTERING_WORLD" }) do
+    pcall(ns.On, e, TeamChanged)
+end
 ns.On("ZONE_CHANGED_NEW_AREA", RetryResize)
 
 ---------------------------------------------------------------------------
