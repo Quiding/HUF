@@ -295,8 +295,9 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         for i = 1, MAX_EXTRA do f.extras[i] = NewRow() end
         local function Accept()
             local fn = f.onAccept
+            f.onAccept = nil
+            if fn then fn() end      -- first: it may ask for a reload
             f:Hide()
-            if fn then fn() end
         end
         f.accept = UI.Button(f, 116, "Import", Accept)
         f.accept:SetPoint("BOTTOMLEFT", 16, 14)
@@ -363,6 +364,16 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         end
         f:SetHeight(-y + 64)
         f.onAccept = function()
+            -- a module to turn off needs a reload. The game allows it only from
+            -- a click and only when asked first thing in it; the client
+            -- reloads once this click's code is done, so the import below
+            -- still runs and is saved. In combat: ask again after the fight.
+            local reload = false
+            for _, row in ipairs(f.extras) do
+                if row.part and row.check:IsShown() and row.on then reload = true end
+            end
+            local fight = InCombatLockdown()
+            if reload and not fight then ReloadUI() end
             for _, row in ipairs(f.rows) do
                 if row.part then row.part.tbl.enabled = row.on end
             end
@@ -370,28 +381,21 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
             area.edit:SetText("")
             msg:SetText(("EllesmereUI %s imported%s"):format(list, #notes > 0 and " (details in chat)." or "."))
             for _, line in ipairs(notes) do ns.Print("Ellesmere import: %s", line) end
-            local reload = false
             for _, row in ipairs(f.extras) do
                 local part = row.part
                 if part and row.check:IsShown() then
                     if row.on then
                         pcall(C_AddOns.DisableAddOn, part.folder, UnitName("player"))
-                        reload = true
                     elseif part.tbl.enabled then
                         ns.Print("%s is still on next to HUF's %s: both draw it.", part.module or part.folder, part.title:lower())
                     end
                 end
             end
-            if reload then
-                -- the game refuses a reload in combat: ask again after the fight
-                if InCombatLockdown() then
-                    ns.Print("A reload has to wait for the end of the fight.")
-                    ns.RunOOC("reload", function()
-                        UI.Confirm("Reload now to finish turning the EllesmereUI module off?", "Reload", ReloadUI, "Later")
-                    end)
-                else
-                    ReloadUI()
-                end
+            if reload and fight then
+                ns.Print("A reload has to wait for the end of the fight.")
+                ns.RunOOC("reload", function()
+                    UI.Confirm("Reload now to finish turning the EllesmereUI module off?", "Reload", ReloadUI, "Later")
+                end)
             end
         end
         f:Show()
