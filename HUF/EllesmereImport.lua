@@ -97,6 +97,13 @@ local POWER_CONTENT = {
     perpp = "[mp%]", curpp = "[mp]", curmaxpp = "[mp] / [mp:max]", both = "[mp] | [mp%]", smart = "[mp]",
 }
 
+-- Ellesmere's raid frame debuff spots (on the health bar)
+local RF_DEBUFF_POS = {
+    topleft = "INSIDE_TOPLEFT", top = "INSIDE_TOP", topright = "INSIDE_TOPRIGHT",
+    left = "INSIDE_LEFT", center = "INSIDE_CENTER", right = "INSIDE_RIGHT",
+    bottomleft = "INSIDE_BOTTOMLEFT", bottom = "INSIDE_BOTTOM", bottomright = "INSIDE_BOTTOMRIGHT",
+}
+
 local AURA_POS = {
     topleft = "ABOVE_LEFT", topright = "ABOVE_RIGHT",
     bottomleft = "BELOW_LEFT", bottomright = "BELOW_RIGHT",
@@ -776,6 +783,87 @@ local function ConvertGroup(rf, g, notes)
             G("powerTextCustomColor"), G("powerTextOffsetX"), G("powerTextOffsetY"))
     end
     g.texts.health, g.texts.power = th, tp
+    -- debuffs: on the health bar, where Ellesmere puts them, filtered as its
+    -- Debuff Manager filters them
+    local d = g.debuffs
+    if d then
+        local pos = tostring(G("debuffPosition", "bottomright"))
+        local grow = G("debuffGrowDirection", "LEFT")
+        d.position = RF_DEBUFF_POS[pos] or "INSIDE_BOTTOMRIGHT"
+        d.grow = "AUTO"
+        if grow == "CENTER" then
+            d.position = (pos:find("top") and "INSIDE_TOP") or (pos:find("bottom") and "INSIDE_BOTTOM") or "INSIDE_CENTER"
+        elseif grow == "LEFT" or grow == "RIGHT" then
+            local p = ns.Frame.AURA_POS[d.position]
+            if p and p[4] ~= grow then d.grow = grow end
+        else
+            notes[#notes + 1] = "Group: debuffs grow sideways in HUF (Ellesmere: up or down)."
+        end
+        d.offset = 0
+        d.x = math.floor(Num(G("debuffOffsetX"), 0) + 0.5)
+        d.y = math.floor(Num(G("debuffOffsetY"), 0) + 0.5)
+        -- HUF's frame includes the power bar: lift bottom rows onto the health bar
+        if power and d.position:find("BOTTOM") then d.y = d.y + g.power.size + (g.power.gap or 0) end
+        d.size = math.max(8, math.floor(Num(G("debuffSize"), 18) + 0.5))
+        d.gap = math.max(0, math.floor(Num(G("debuffSpacing"), 1) + 0.5))
+        local cap = math.max(1, math.floor(Num(G("debuffCap"), 3) + 0.5))
+        local per = math.max(1, math.floor(Num(G("debuffPerRow"), 5) + 0.5))
+        d.perRow = math.min(per, cap)
+        d.rows = math.min(6, math.ceil(cap / d.perRow))
+        d.borderSize = math.max(0, math.floor(Num(G("debuffBorderSize"), 1) + 0.5))
+        d.dispelBorder = true
+        d.countSize = math.max(6, math.floor(Num(G("debuffStacksTextSize"), 8) + 0.5))
+        d.timer = G("debuffShowSwipe", true) ~= false
+        d.timerText = G("debuffShowDurText", false) == true
+        d.timerSize = math.floor(Num(G("debuffDurTextSize"), 0) + 0.5)
+        d.hideSated = G("hideLustDebuff", true) ~= false
+        d.mine = false
+        d.enabled = true
+        -- filters: the Debuff Manager, or the older preset before it
+        local dm = rf.dmDebuff
+        local filter, cc = "ALL", true
+        if type(dm) == "table" then
+            local neg = type(dm.neg) == "table" and dm.neg or {}
+            if dm.all ~= false then
+                cc = not neg.cc
+                local hid = {}
+                for _, k in ipairs({ "boss", "role", "priority", "raid", "raidcombat", "dispel", "nonplayer" }) do
+                    if neg[k] then hid[#hid + 1] = k end
+                end
+                if #hid > 0 then
+                    notes[#notes + 1] = "Group: HUF shows all debuffs; Ellesmere hid these kinds: " .. table.concat(hid, ", ") .. "."
+                end
+            else
+                cc = dm.cc == true
+                if dm.dispel then filter = "DISPELLABLE"
+                elseif dm.raid or dm.raidcombat then filter = "RAID"
+                elseif cc then filter, cc = "CC", false
+                else filter = nil end
+                local other = {}
+                for _, k in ipairs({ "boss", "role", "priority", "nonplayer" }) do
+                    if dm[k] then other[#other + 1] = k end
+                end
+                if filter == nil and #other > 0 then filter = "RAID" end
+                if #other > 0 then
+                    notes[#notes + 1] = ("Group: Ellesmere's debuff kinds %s are not in HUF; it shows the %s debuffs."):format(
+                        table.concat(other, ", "), filter == "RAID" and "important" or "picked")
+                end
+                if filter == "DISPELLABLE" and dm.dispelMode == "typed" then
+                    notes[#notes + 1] = "Group: HUF's dispellable filter means the ones you can dispel (Ellesmere: any with a type)."
+                end
+            end
+            if type(dm.tiles) == "table" and next(dm.tiles) then
+                notes[#notes + 1] = "Group: Ellesmere's extra debuff spots (Debuff Manager tiles) are not in HUF."
+            end
+        else
+            local preset = G("debuffFilter", "all")
+            if preset == "raid" then filter = "RAID"
+            elseif preset == "dispellable" then filter = "DISPELLABLE"
+            elseif preset == "none" then filter = nil end
+        end
+        if filter then d.filter, d.ccFirst = filter, cc and true or false
+        else d.enabled = false end
+    end
     -- buffs: Ellesmere shows them only as its buff indicators (none set by
     -- default); debuffs stay
     local ind = G("bmIndicators")

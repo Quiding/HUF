@@ -600,27 +600,50 @@ end
 ---------------------------------------------------------------------------
 -- Buffs and debuffs (Auras.lua does the work)
 ---------------------------------------------------------------------------
--- where a row sits: point on the row, point on the frame, growth, offset sign
+-- where a row sits: point on the row, point on the frame, the corner the
+-- first icon takes, growth, offset sign (x, y). The row is as big as its
+-- icons, so a row pinned by an edge's middle stays centred there. INSIDE_*
+-- rows sit on the frame, "distance" keeps them off its edge.
 local AURA_POS = {
-    BELOW_LEFT  = { "TOPLEFT", "BOTTOMLEFT", "RIGHT", "DOWN", 0, -1 },
-    BELOW_RIGHT = { "TOPRIGHT", "BOTTOMRIGHT", "LEFT", "DOWN", 0, -1 },
-    ABOVE_LEFT  = { "BOTTOMLEFT", "TOPLEFT", "RIGHT", "UP", 0, 1 },
-    ABOVE_RIGHT = { "BOTTOMRIGHT", "TOPRIGHT", "LEFT", "UP", 0, 1 },
-    LEFT        = { "TOPRIGHT", "TOPLEFT", "LEFT", "DOWN", -1, 0 },
-    RIGHT       = { "TOPLEFT", "TOPRIGHT", "RIGHT", "DOWN", 1, 0 },
+    BELOW_LEFT   = { "TOPLEFT", "BOTTOMLEFT", "TOPLEFT", "RIGHT", "DOWN", 0, -1 },
+    BELOW_CENTER = { "TOP", "BOTTOM", "TOPLEFT", "RIGHT", "DOWN", 0, -1 },
+    BELOW_RIGHT  = { "TOPRIGHT", "BOTTOMRIGHT", "TOPRIGHT", "LEFT", "DOWN", 0, -1 },
+    ABOVE_LEFT   = { "BOTTOMLEFT", "TOPLEFT", "BOTTOMLEFT", "RIGHT", "UP", 0, 1 },
+    ABOVE_CENTER = { "BOTTOM", "TOP", "BOTTOMLEFT", "RIGHT", "UP", 0, 1 },
+    ABOVE_RIGHT  = { "BOTTOMRIGHT", "TOPRIGHT", "BOTTOMRIGHT", "LEFT", "UP", 0, 1 },
+    LEFT         = { "TOPRIGHT", "TOPLEFT", "TOPRIGHT", "LEFT", "DOWN", -1, 0 },
+    RIGHT        = { "TOPLEFT", "TOPRIGHT", "TOPLEFT", "RIGHT", "DOWN", 1, 0 },
+    INSIDE_TOPLEFT     = { "TOPLEFT", "TOPLEFT", "TOPLEFT", "RIGHT", "DOWN", 1, -1 },
+    INSIDE_TOP         = { "TOP", "TOP", "TOPLEFT", "RIGHT", "DOWN", 0, -1 },
+    INSIDE_TOPRIGHT    = { "TOPRIGHT", "TOPRIGHT", "TOPRIGHT", "LEFT", "DOWN", -1, -1 },
+    INSIDE_LEFT        = { "LEFT", "LEFT", "TOPLEFT", "RIGHT", "DOWN", 1, 0 },
+    INSIDE_CENTER      = { "CENTER", "CENTER", "TOPLEFT", "RIGHT", "DOWN", 0, 0 },
+    INSIDE_RIGHT       = { "RIGHT", "RIGHT", "TOPRIGHT", "LEFT", "DOWN", -1, 0 },
+    INSIDE_BOTTOMLEFT  = { "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOMLEFT", "RIGHT", "UP", 1, 1 },
+    INSIDE_BOTTOM      = { "BOTTOM", "BOTTOM", "BOTTOMLEFT", "RIGHT", "UP", 0, 1 },
+    INSIDE_BOTTOMRIGHT = { "BOTTOMRIGHT", "BOTTOMRIGHT", "BOTTOMRIGHT", "LEFT", "UP", -1, 1 },
 }
 Frame.AURA_POS = AURA_POS
 
 local function AuraCfg(f, which)
     local a = f.s[which]
     local pos = AURA_POS[a.position] or AURA_POS.BELOW_LEFT
+    local flow, growH = pos[3], pos[4]
+    -- growth picked by hand: the first icon moves to the other side
+    if (a.grow == "LEFT" or a.grow == "RIGHT") and a.grow ~= growH then
+        growH = a.grow
+        flow = (flow:find("^TOP") and "TOP" or "BOTTOM") .. (growH == "LEFT" and "RIGHT" or "LEFT")
+    end
     return {
         enabled = a.enabled and f.s.enabled,
         kind = which == "debuffs" and "HARMFUL" or "HELPFUL",
         mine = a.mine, size = a.size, gap = a.gap, perRow = a.perRow, rows = a.rows,
         countSize = a.countSize, timer = a.timer, timerText = a.timerText, timerSize = a.timerSize,
-        anchor = pos[1], growH = pos[3], growV = pos[4],
-        point = { pos[1], f, pos[2], a.x + pos[5] * a.offset, a.y + pos[6] * a.offset },
+        filter = a.filter, ccFirst = a.ccFirst, hideSated = a.hideSated,
+        borderSize = a.borderSize, dispelBorder = a.dispelBorder,
+        anchor = flow, growH = growH, growV = pos[5],
+        point = { pos[1], f, pos[2], a.x + pos[6] * a.offset, a.y + pos[7] * a.offset },
+        level = f.textLayer and (f.textLayer:GetFrameLevel() + 2) or nil,
     }
 end
 

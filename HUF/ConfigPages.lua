@@ -1,6 +1,6 @@
 -- HUF: the pages of the configuration window.
 -- GENERAL: General, Names & MMT, Profiles, Help. FRAMES: one page per frame
--- with sub pages: Frame, Health bar, Power bar, Texts, Buffs & debuffs.
+-- with sub pages: Frame, Health bar, Power bar, Texts, Debuffs, Buffs.
 
 local _, ns = ...
 local UI = ns.UI
@@ -686,47 +686,88 @@ local function TextsPage(f, key, page)
     R:Slider("Vertical (Y)", -80, 80, 1, Opt(T, "y"))
 end
 
--- Buffs & debuffs: two icon rows, debuffs left column, buffs right
+-- Debuffs / Buffs: one tab each. Left: what shows and how it looks;
+-- right: where it goes.
 local AURA_POSITIONS = {
     { value = "BELOW_LEFT", text = "Below, from the left" },
+    { value = "BELOW_CENTER", text = "Below, centred" },
     { value = "BELOW_RIGHT", text = "Below, from the right" },
     { value = "ABOVE_LEFT", text = "Above, from the left" },
+    { value = "ABOVE_CENTER", text = "Above, centred" },
     { value = "ABOVE_RIGHT", text = "Above, from the right" },
     { value = "LEFT", text = "Left of the frame" },
     { value = "RIGHT", text = "Right of the frame" },
+    { value = "INSIDE_TOPLEFT", text = "Inside, top left" },
+    { value = "INSIDE_TOP", text = "Inside, top centre" },
+    { value = "INSIDE_TOPRIGHT", text = "Inside, top right" },
+    { value = "INSIDE_LEFT", text = "Inside, left" },
+    { value = "INSIDE_CENTER", text = "Inside, centre" },
+    { value = "INSIDE_RIGHT", text = "Inside, right" },
+    { value = "INSIDE_BOTTOMLEFT", text = "Inside, bottom left" },
+    { value = "INSIDE_BOTTOM", text = "Inside, bottom centre" },
+    { value = "INSIDE_BOTTOMRIGHT", text = "Inside, bottom right" },
 }
-local function AuraColumn(col, key, which, title)
+local AURA_GROW = {
+    { value = "AUTO", text = "Away from the position" },
+    { value = "RIGHT", text = "To the right" },
+    { value = "LEFT", text = "To the left" },
+}
+local DEBUFF_FILTERS = {
+    { value = "ALL", text = "All debuffs" },
+    { value = "RAID", text = "Important (Blizzard's raid frames)" },
+    { value = "DISPELLABLE", text = "Only ones I can dispel" },
+    { value = "CC", text = "Only crowd control" },
+}
+local BUFF_FILTERS = {
+    { value = "ALL", text = "All buffs" },
+    { value = "RAID", text = "Important (Blizzard's raid frames)" },
+    { value = "DEFENSIVE", text = "Only defensives and externals" },
+    { value = "CANCELABLE", text = "Only ones that can be cancelled" },
+}
+local function AuraPage(f, key, which)
     local T = function() return U(key)[which] end
-    col:Header(title)
-    col:Check("Show " .. which, Opt(T, "enabled"))
-    local gm, sm = Opt(T, "mine")
-    col:Check("Only mine", gm, sm, which == "debuffs" and "Only the debuffs you cast." or "Only the buffs you cast.")
-    col:Cycle("Position", AURA_POSITIONS, Opt(T, "position"))
-    col:Slider("Icon size", 8, 40, 1, Opt(T, "size"))
-    col:Slider("Icons per row", 1, 12, 1, Opt(T, "perRow"))
-    col:Slider("Rows", 1, 6, 1, Opt(T, "rows"))
-    col:Slider("Space between icons", 0, 8, 1, Opt(T, "gap"))
-    col:Slider("Distance to the frame", 0, 20, 1, Opt(T, "offset"))
-    col:Slider("Horizontal offset", -200, 200, 1, Opt(T, "x"))
-    col:Slider("Vertical offset", -200, 200, 1, Opt(T, "y"))
-    col:Slider("Stack number size", 6, 16, 1, Opt(T, "countSize"))
-    local gt, st = Opt(T, "timer")
-    col:Check("Time left as a dark sweep", gt, st)
-    local gx, sx = Opt(T, "timerText")
-    col:Check("Time left as numbers", gx, sx)
-    col:Slider("Time size (0: automatic)", 0, 20, 1, Opt(T, "timerSize"))
-end
-
-local function AuraPage(f, key)
+    local debuffs = which == "debuffs"
     local L = UI.Column(f, 0, 0, COL_W)
-    AuraColumn(L, key, "debuffs", "Debuffs")
+    L:Header(debuffs and "Which debuffs" or "Which buffs")
+    L:Check("Show " .. which, Opt(T, "enabled"))
+    local gm, sm = Opt(T, "mine")
+    L:Check("Only mine", gm, sm, debuffs and "Only the debuffs you cast." or "Only the buffs you cast.")
+    L:Cycle("Filter", debuffs and DEBUFF_FILTERS or BUFF_FILTERS, Opt(T, "filter"))
+    if debuffs then
+        local gc, sc = Opt(T, "ccFirst")
+        L:Check("Crowd control first", gc, sc, "Stuns, fears and the like lead the row.")
+        local gs, ss = Opt(T, "hideSated")
+        L:Check("Hide Sated and Exhaustion", gs, ss, "The debuffs Bloodlust and Heroism leave behind.")
+    end
+    L:Header("Look")
+    L:Slider("Icon size", 8, 40, 1, Opt(T, "size"))
+    L:Slider("Edge around the icon", 0, 4, 1, Opt(T, "borderSize"))
+    if debuffs then
+        local gd, sd = Opt(T, "dispelBorder")
+        L:Check("Edge in the debuff type's colour", gd, sd, "Magic blue, curse purple, disease brown, poison green, bleed red. Needs an edge of 1 or more.")
+    end
+    L:Slider("Stack number size", 6, 16, 1, Opt(T, "countSize"))
+    local gt, st = Opt(T, "timer")
+    L:Check("Time left as a dark sweep", gt, st)
+    local gx, sx = Opt(T, "timerText")
+    L:Check("Time left as numbers", gx, sx)
+    L:Slider("Time size (0: automatic)", 0, 20, 1, Opt(T, "timerSize"))
+
     local R = UI.Column(f, COL2_X, 0, COL_W)
-    AuraColumn(R, key, "buffs", "Buffs")
+    R:Header("Place")
+    R:Cycle("Position", AURA_POSITIONS, Opt(T, "position"))
+    R:Cycle("Growth", AURA_GROW, Opt(T, "grow"))
+    R:Slider("Icons per row", 1, 12, 1, Opt(T, "perRow"))
+    R:Slider("Rows", 1, 6, 1, Opt(T, "rows"))
+    R:Slider("Space between icons", 0, 8, 1, Opt(T, "gap"))
+    R:Slider("Distance to the frame's edge", 0, 20, 1, Opt(T, "offset"))
+    R:Slider("Horizontal offset", -200, 200, 1, Opt(T, "x"))
+    R:Slider("Vertical offset", -200, 200, 1, Opt(T, "y"))
     R:Note("Unlock frames to see where the icons go. They fill a row, then start the next one.")
-    if key == "player" then
+    if key == "player" and not debuffs then
         local S = function() return U(key) end
-        L:Header("Blizzard")
-        local L2 = L
+        R:Header("Blizzard")
+        local L2 = R
         local gb = function() return S().hideBlizzardAuras end
         L2:Check("Hide Blizzard's buff and debuff icons", gb, function(v)
             S().hideBlizzardAuras = v
@@ -839,7 +880,10 @@ local function UnitPage(key)
         local tabs = {
             { "frame", "Frame" }, { "health", "Health bar" }, { "power", "Power bar" }, { "texts", "Texts" },
         }
-        if not info.noAuras then tabs[#tabs + 1] = { "auras", "Buffs & debuffs" } end
+        if not info.noAuras then
+            tabs[#tabs + 1] = { "debuffs", "Debuffs" }
+            tabs[#tabs + 1] = { "buffs", "Buffs" }
+        end
         if not info.polled then tabs[#tabs + 1] = { "cast", "Cast bar" } end
         if key == "target" then tabs[#tabs + 1] = { "combo", "Combo points" } end
         if key == "pet" then tabs[#tabs + 1] = { "happy", "Happiness" } end
@@ -856,7 +900,10 @@ local function UnitPage(key)
         subs.health = SubFrame(page); BarPage(subs.health, key, "health")
         subs.power = SubFrame(page); BarPage(subs.power, key, "power")
         subs.texts = SubFrame(page); TextsPage(subs.texts, key, page)
-        if not info.noAuras then subs.auras = SubFrame(page); AuraPage(subs.auras, key) end
+        if not info.noAuras then
+            subs.debuffs = SubFrame(page); AuraPage(subs.debuffs, key, "debuffs")
+            subs.buffs = SubFrame(page); AuraPage(subs.buffs, key, "buffs")
+        end
         if not info.polled then subs.cast = SubFrame(page); CastPage(subs.cast, key) end
         if key == "target" then subs.combo = SubFrame(page); ComboPage(subs.combo, key) end
         if key == "pet" then subs.happy = SubFrame(page); HappinessPage(subs.happy, key) end

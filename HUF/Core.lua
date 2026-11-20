@@ -310,7 +310,13 @@ end
 local function AuraRow(on, position)
     return { enabled = on, mine = false, size = 20, gap = 2, perRow = 6, rows = 4,
              position = position, offset = 2, x = 0, y = 0, countSize = 9, timer = true,
-             timerText = false, timerSize = 0 }      -- time left as numbers; size 0: from the icon size
+             timerText = false, timerSize = 0,       -- time left as numbers; size 0: from the icon size
+             filter = "ALL",         -- debuffs ALL | RAID | DISPELLABLE | CC; buffs ALL | RAID | DEFENSIVE | CANCELABLE
+             ccFirst = false,        -- debuffs: crowd control first
+             hideSated = false,      -- debuffs: no Sated / Exhaustion
+             grow = "AUTO",          -- AUTO (from the position) | LEFT | RIGHT
+             borderSize = 1,         -- the black edge around each icon
+             dispelBorder = false }  -- debuffs: the edge in the debuff type's colour
 end
 
 local function UnitDefaults(point)
