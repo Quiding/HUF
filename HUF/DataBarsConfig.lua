@@ -1,5 +1,5 @@
--- HUF: settings page for the data bars (FRAMES > Data bars). For now the
--- minimap data bar.
+-- HUF: settings for the data bars, a tab of the Minimap page (FRAMES >
+-- Minimap > Data bar). For now the minimap data bar.
 
 local _, ns = ...
 local UI = ns.UI
@@ -8,12 +8,12 @@ local COL_W, COL2_X = 330, 366
 local function D() return ns.db.dataBars.minimap end
 local function Opt(k) return function() return D()[k] end, function(v) D()[k] = v end end
 
-ns.RegisterPage("databars", "Data bars", "frames", function(page)
+function ns.DataBarsTab(page)
     local on = UI.Check(page, 300, "Minimap data bar", function() return D().enabled end,
         function(v) D().enabled = v end, "A strip under the minimap with friends and guild members online.")
-    on:SetPoint("TOPLEFT", 0, 4)
+    on:SetPoint("TOPLEFT", 0, 0)
 
-    local L = UI.Column(page, 0, -30, COL_W)
+    local L = UI.Column(page, 0, -28, COL_W)
     L:Header("Minimap data bar")
     L:Cycle("Place", {
         { value = "BELOW", text = "Under the map" },
@@ -25,7 +25,7 @@ ns.RegisterPage("databars", "Data bars", "frames", function(page)
     L:Slider("Background opacity", 0, 1, 0.05, function() return D().bgAlpha end, function(v) D().bgAlpha = v end, "%.2f")
     L:Slider("Line around it", 0, 2, 1, Opt("borderSize"))
 
-    local R = UI.Column(page, COL2_X, -30, COL_W)
+    local R = UI.Column(page, COL2_X, -28, COL_W)
     R:Header("What it shows")
     local gf, sf = Opt("friends")
     R:Check("Friends online", gf, sf, "Click: the friends list.")
@@ -46,4 +46,4 @@ ns.RegisterPage("databars", "Data bars", "frames", function(page)
     R:Slider("Text size", 8, 20, 1, Opt("fontSize"))
     R:Slider("Space between them", 0, 40, 1, Opt("spacing"))
     R:Note("The tracking button sits on the bar's left end when Minimap > Icons > Tracking is at \"Below, left\".")
-end, function() return ns.db.dataBars.minimap.enabled end)
+end

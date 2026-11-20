@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.6.
+Version 0.5.7.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -54,7 +54,7 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   Blizzard after /reload.
 - **Data bars**: the minimap data bar, a strip as wide as the map under (or over) it with friends
   and guild members online (click: friends list / guild window); icon colour, size and place
-  configurable (Frames > Data bars).
+  configurable (Frames > Minimap > Data bar).
 - **Chat**: font, size, outline, window background and opacity; short channel names at the start of
   a line ([1], [2], [S], [Y], [P], [PL], [G], [GO], [R], [RL], [RW], [W], [I], each editable);
   names in class colours; web addresses as links (click: copy box); tooltips over item / spell /

@@ -8,6 +8,7 @@ local A = UI.ACCENT
 
 local WIDTH, HEIGHT, NAV = 880, 620, 150
 local NAV_ROW, NAV_HEAD, NAV_TOP = 26, 22, -58
+local NAV_VIEW = HEIGHT + NAV_TOP - 92     -- height of the page list (above the unlock button)
 local SCALE_MIN, SCALE_MAX, SCALE_STEP = 0.6, 2.0, 0.05
 ns.PAGE_W, ns.PAGE_H = WIDTH - NAV - 32, HEIGHT - 56
 
@@ -70,6 +71,7 @@ local function Select(key)
     window.pageTitle:SetText(pages[key].title)
     RefreshPage(pages[key])
     RefreshNav()
+    if window.ShowInNav then window.ShowInNav(key) end
 end
 
 ---------------------------------------------------------------------------
@@ -106,10 +108,13 @@ local function Tab(parent, page)
     return b
 end
 
-local function Header(parent, text, y)
-    local l = UI.Label(parent, text)
-    l:SetPoint("TOPLEFT", 16, y - 4)
+local function Header(parent, text)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetSize(NAV, NAV_HEAD)
+    local l = UI.Label(f, text)
+    l:SetPoint("TOPLEFT", 16, -4)
     l:SetTextColor(A[1], A[2], A[3], 0.8)
+    return f
 end
 
 local function Build()
@@ -161,21 +166,98 @@ local function Build()
     sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
     sub:SetTextColor(0.6, 0.6, 0.6)
 
-    local y = NAV_TOP
-    for _, section in ipairs({ { "general", "GENERAL" }, { "frames", "FRAMES" } }) do
-        Header(nav, section[2], y)
-        y = y - NAV_HEAD
+    -- page list: as many entries as fit, the mouse wheel scrolls (as MMT's window)
+    local items = {}
+    for si, section in ipairs({ { "general", "GENERAL" }, { "frames", "FRAMES" } }) do
+        items[#items + 1] = { kind = "head", frame = Header(nav, section[2]), height = NAV_HEAD + (si > 1 and 6 or 0) }
         for _, key in ipairs(order) do
             local page = pages[key]
             if page.section == section[1] then
                 local tab = Tab(nav, page)
-                tab:SetPoint("TOPLEFT", nav, "TOPLEFT", 0, y)
-                y = y - NAV_ROW
+                tab.target = key
                 w.tabs[#w.tabs + 1] = tab
+                items[#items + 1] = { kind = "tab", frame = tab, height = NAV_ROW }
             end
         end
-        y = y - 6
     end
+    -- scroll position marker and arrows, only while the list is longer than the view
+    local track = nav:CreateTexture(nil, "ARTWORK")
+    track:SetColorTexture(1, 1, 1, 0.05)
+    track:SetWidth(2)
+    track:SetPoint("TOPRIGHT", nav, "TOPRIGHT", -2, NAV_TOP)
+    track:SetHeight(NAV_VIEW)
+    local thumb = nav:CreateTexture(nil, "OVERLAY")
+    thumb:SetColorTexture(A[1], A[2], A[3], 0.6)
+    thumb:SetWidth(2)
+    local arrowUp = UI.ScrollArrow(nav, "UP", function() nav:GetScript("OnMouseWheel")(nav, 1) end)
+    arrowUp:SetPoint("TOP", nav, "TOP", 0, NAV_TOP + 2)
+    local arrowDown = UI.ScrollArrow(nav, "DOWN", function() nav:GetScript("OnMouseWheel")(nav, -1) end)
+    arrowDown:SetPoint("TOP", nav, "TOP", 0, NAV_TOP - NAV_VIEW - 2)
+
+    local offset = 0   -- entries scrolled away at the top
+    local function Fit(from)       -- last entry that fits after `from`
+        local used, last = 0, from
+        for i = from + 1, #items do
+            if used + items[i].height > NAV_VIEW then break end
+            used = used + items[i].height
+            last = i
+        end
+        return last
+    end
+    local function MaxOffset()
+        for k = 0, #items do if Fit(k) >= #items then return k end end
+        return #items
+    end
+    local function LayoutNav()
+        local maxOffset = MaxOffset()
+        offset = math.max(0, math.min(offset, maxOffset))
+        local last = Fit(offset)
+        local y = NAV_TOP
+        for i, it in ipairs(items) do
+            if i > offset and i <= last then
+                it.frame:ClearAllPoints()
+                -- a section header after the first sits a little lower (6 px gap above it)
+                local gap = (it.kind == "head" and i > 1 and i > offset + 1) and 6 or 0
+                it.frame:SetPoint("TOPLEFT", nav, "TOPLEFT", 0, y - gap)
+                it.frame:Show()
+                y = y - it.height
+            else
+                it.frame:Hide()
+            end
+        end
+        local scrolls = maxOffset > 0
+        track:SetShown(scrolls)
+        thumb:SetShown(scrolls)
+        arrowUp:SetShown(offset > 0)
+        arrowDown:SetShown(offset < maxOffset)
+        if scrolls then
+            local size = math.max(16, NAV_VIEW * (#items - maxOffset) / #items)
+            thumb:SetHeight(size)
+            thumb:ClearAllPoints()
+            thumb:SetPoint("TOPRIGHT", nav, "TOPRIGHT", -2, NAV_TOP - (NAV_VIEW - size) * offset / maxOffset)
+        end
+    end
+    -- scroll so a page's entry is in view
+    w.ShowInNav = function(key)
+        for i, it in ipairs(items) do
+            if it.kind == "tab" and it.frame.target == key then
+                if i <= offset then
+                    offset = i - 1
+                    if offset > 0 and items[offset].kind == "head" then offset = offset - 1 end
+                else
+                    while Fit(offset) < i and offset < i - 1 do offset = offset + 1 end
+                end
+                break
+            end
+        end
+        LayoutNav()
+    end
+    nav:EnableMouseWheel(true)
+    nav:SetScript("OnMouseWheel", function(_, delta)
+        offset = offset - delta
+        LayoutNav()
+    end)
+    LayoutNav()
 
     -- footer: unlock, window scale, version
     nav.widgets = {}

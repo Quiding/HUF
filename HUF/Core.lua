@@ -497,7 +497,7 @@ local function BuildDefaults()
             enabled = true,
             oneBag = true,              -- the game's "combined bags" option
             point = { "BOTTOMRIGHT", "BOTTOMRIGHT", -60, 110 },
-            cols = 10, size = 34, spacing = 4, padding = 8, scale = 1,
+            cols = 10, size = 34, spacing = 4, scale = 1,
             bgColor = C(0.04, 0.04, 0.05), bgAlpha = 0.92,
             borderAccent = true, borderColor = C(0.2, 0.2, 0.22), borderSize = 1,
             qualityBorders = true, showEmpty = true,
@@ -560,25 +560,25 @@ local function BuildDefaults()
             iconScale = 1,              -- the game's icons (tracking, calendar ...)
             -- pos: inside the map (TOPLEFT ... BOTTOMRIGHT) or outside (ABOVE_*, BELOW_*)
             texts = {
-                zone   = { mode = "ALWAYS", pos = "TOP", x = 0, y = -4, size = 13, color = "ZONE", sub = true },   -- sub: the subzone when there is one
-                clock  = { mode = "ALWAYS", pos = "BOTTOM", x = 0, y = 4, size = 13, color = "WHITE", format = "24", localTime = true },
-                coords = { mode = "HOVER", pos = "BOTTOMLEFT", x = 4, y = 4, size = 11, color = "WHITE", decimals = 1 },
-                system = { mode = "HOVER", pos = "BOTTOMRIGHT", x = -4, y = 4, size = 11, color = "WHITE", show = "BOTH", latency = "HIGHER" },
+                zone   = { mode = "ALWAYS", pos = "ABOVE", x = 0, y = -4, size = 13, color = "ZONE", sub = true },   -- sub: the subzone when there is one
+                clock  = { mode = "ALWAYS", pos = "BELOW", x = 0, y = 4, size = 13, color = "WHITE", format = "24", localTime = true },
+                coords = { mode = "ALWAYS", pos = "BOTTOMLEFT", x = 0, y = 2, size = 12, color = "WHITE", decimals = 1 },
+                system = { mode = "ALWAYS", pos = "BOTTOMRIGHT", x = 0, y = 2, size = 12, color = "WHITE", show = "BOTH", latency = "HIGHER" },
                 difficulty = { mode = "NEVER", pos = "TOPRIGHT", x = -4, y = -4, size = 12, color = "WHITE" },   -- "5N", "10H" in instances
             },
             icons = {
-                tracking    = { mode = "ALWAYS", pos = "BELOW_LEFT", x = 0, y = -2 },   -- on the data bar's left end
+                tracking    = { mode = "HOVER", pos = "TOPLEFT", x = 0, y = -2 },
                 calendar    = { mode = "HOVER", pos = "TOPRIGHT", x = -2, y = -2 },
                 mail        = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = 0 },
-                crafting    = { mode = "ALWAYS", pos = "RIGHT", x = -2, y = -26 },
+                crafting    = { mode = "HOVER", pos = "LEFT", x = 0, y = 0 },
                 difficulty  = { mode = "ALWAYS", pos = "TOPLEFT", x = 2, y = -2 },
-                landing     = { mode = "HOVER", pos = "LEFT", x = 2, y = -30 },
+                landing     = { mode = "NEVER", pos = "LEFT", x = 2, y = -30 },
                 zoom        = { mode = "NEVER", pos = "BOTTOMRIGHT", x = -2, y = 24 },
                 addonbar    = { mode = "ALWAYS", pos = "OUTSIDE_LEFT_BOTTOM", x = -2, y = 0 },   -- the button bag, outside the lower left
             },
             buttonMode = "HOVER",       -- addon buttons on the map: ALWAYS | HOVER | NEVER (each one can differ: buttons[name])
             buttons = {},
-            addonBar = false,           -- every addon button in one "addon bar" button
+            addonBar = true,            -- every addon button in one "addon bar" button
             barGrow = "AUTO",           -- AUTO (towards the screen's middle) | LEFT | RIGHT | UP | DOWN
             barIconSize = 26, barTimeout = 10,
             barLayout = "ROW",          -- ROW (one line) | GRID (barColumns wide) | LIST (one column with names)
@@ -1103,6 +1103,31 @@ ns.On("ADDON_LOADED", function(name)
             if type(h) == "table" and h.size == 14 then h.size = 20 end
         end
         HUFDB.dataVersion = 19
+    end
+    -- 0.5.7: bag window edge fixed (no setting); new minimap defaults, applied where a
+    -- profile still has the old default (anything changed by hand stays)
+    if HUFDB.dataVersion < 20 then
+        local function Move(t, old, new)
+            if type(t) ~= "table" then return end
+            for k, v in pairs(old) do if t[k] ~= v then return end end
+            for k, v in pairs(new) do t[k] = v end
+        end
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            if type(prof.bags) == "table" then prof.bags.padding = nil end
+            local m = prof.minimap
+            if type(m) == "table" then
+                if m.addonBar == false then m.addonBar = true end
+                local i, t = m.icons or {}, m.texts or {}
+                Move(i.tracking, { mode = "ALWAYS", pos = "BELOW_LEFT", x = 0, y = -2 }, { mode = "HOVER", pos = "TOPLEFT", x = 0, y = -2 })
+                Move(i.crafting, { mode = "ALWAYS", pos = "RIGHT", x = -2, y = -26 }, { mode = "HOVER", pos = "LEFT", x = 0, y = 0 })
+                Move(i.landing, { mode = "HOVER" }, { mode = "NEVER" })
+                Move(t.zone, { pos = "TOP", x = 0, y = -4 }, { mode = "ALWAYS", pos = "ABOVE" })
+                Move(t.clock, { pos = "BOTTOM", x = 0, y = 4 }, { mode = "ALWAYS", pos = "BELOW", size = 13 })
+                Move(t.coords, { mode = "HOVER", pos = "BOTTOMLEFT", x = 4, y = 4, size = 11 }, { mode = "ALWAYS", x = 0, y = 2, size = 12 })
+                Move(t.system, { mode = "HOVER", pos = "BOTTOMRIGHT", x = -4, y = 4, size = 11 }, { mode = "ALWAYS", x = 0, y = 2, size = 12 })
+            end
+        end
+        HUFDB.dataVersion = 20
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

@@ -229,7 +229,7 @@ ns.RegisterPage("minimap", "Minimap", "frames", function(page)
     local on = UI.Check(page, 260, "Use HUF's minimap", function() return M().enabled end,
         function(v) M().enabled = v end, "Shape, size, look, texts and icons of the minimap. Off: Blizzard's minimap after /reload.")
     on:SetPoint("TOPLEFT", 0, 4)
-    local tabs = { { "map", "Map" }, { "behaviour", "Behaviour" }, { "texts", "Texts" }, { "icons", "Icons" }, { "buttons", "Addon buttons" } }
+    local tabs = { { "map", "Map" }, { "behaviour", "Behaviour" }, { "texts", "Texts" }, { "icons", "Icons" }, { "buttons", "Addon buttons" }, { "databar", "Data bar" } }
     local subs, strip = {}, nil
     local function Show(k)
         for name, sf in pairs(subs) do sf:SetShown(name == k) end
@@ -243,6 +243,7 @@ ns.RegisterPage("minimap", "Minimap", "frames", function(page)
     subs.texts = SubFrame(page); TextsPage(subs.texts)
     subs.icons = SubFrame(page); IconsPage(subs.icons)
     subs.buttons = SubFrame(page); ButtonsPage(subs.buttons, page)
+    if ns.DataBarsTab then subs.databar = SubFrame(page); ns.DataBarsTab(subs.databar) end
     if strip.Bind then strip:Bind(subs, Show) end
     Show("map")
 end, function() return ns.db.minimap.enabled end)

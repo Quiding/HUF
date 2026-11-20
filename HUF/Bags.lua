@@ -20,6 +20,7 @@ local function S() return ns.db.bags end
 local function IsSecret(v) return issecretvalue and issecretvalue(v) or false end
 
 local HEADER_H, SEARCH_H, FOOTER_H = 26, 24, 20
+local PAD = 6                 -- slots to the window edge (fixed)
 local function T(v) return type(v) == "table" and v or nil end   -- a region of a template, if there
 
 ---------------------------------------------------------------------------
@@ -357,7 +358,7 @@ end
 local function Place(b, i, s, cols, grid)
     local col = (i - 1) % cols
     local row = math.floor((i - 1) / cols)
-    local x = s.padding + col * (s.size + s.spacing)
+    local x = PAD + col * (s.size + s.spacing)
     local y = -(row * (s.size + s.spacing))
     local target = b.hufParent or b
     target:ClearAllPoints()
@@ -574,23 +575,23 @@ function Bags.Refresh()
     frame.free:SetText(("%d / %d"):format(cnt.main[1], cnt.main[2]))
     -- size
     local rows = math.max(1, math.ceil(#main / cols))
-    local w = s.padding * 2 + cols * s.size + (cols - 1) * s.spacing
+    local w = PAD * 2 + cols * s.size + (cols - 1) * s.spacing
     local gridH = rows * s.size + (rows - 1) * s.spacing
     local searchH = frame.searchBox:IsShown() and SEARCH_H or 0
     frame.grid:ClearAllPoints()
     frame.grid:SetPoint("TOPLEFT", 0, -(HEADER_H + searchH))
     frame.grid:SetSize(w, gridH)
-    frame:SetSize(math.max(w, 260), HEADER_H + searchH + gridH + s.padding + FOOTER_H)
+    frame:SetSize(math.max(w, 260), HEADER_H + searchH + gridH + PAD + FOOTER_H)
     -- the reagent bag beside the window
     local rp = frame.reagent
     if sep and cnt.rea[2] > 0 then
         local rc = math.max(1, s.reagentCols)
         Draw(rea, rp.grid, rc)
         local rrows = math.max(1, math.ceil(#rea / rc))
-        local rw = s.padding * 2 + rc * s.size + (rc - 1) * s.spacing
+        local rw = PAD * 2 + rc * s.size + (rc - 1) * s.spacing
         local rh = rrows * s.size + (rrows - 1) * s.spacing
         rp.grid:SetSize(rw, rh)
-        rp:SetSize(math.max(rw, 90), HEADER_H + rh + s.padding + FOOTER_H)
+        rp:SetSize(math.max(rw, 90), HEADER_H + rh + PAD + FOOTER_H)
         rp:ClearAllPoints()
         if s.reagentSide == "RIGHT" then
             rp:SetPoint("TOPLEFT", frame, "TOPRIGHT", 4, 0)
