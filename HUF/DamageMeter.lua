@@ -559,6 +559,7 @@ local function BarColor(bar, src)
     bar:SetStatusBarColor(0.45, 0.45, 0.48)
 end
 
+local ShowNameHover, HideHover     -- the hover box, further down
 local function Row(i)
     local r = win.rows[i]
     if r then return r end
@@ -592,11 +593,17 @@ local function Row(i)
     end)
     r:SetScript("OnEnter", function(self)
         if not self.src or self.isThreat then return end
+        if S().nameHover then
+            DM.UseWindow(self.win)
+            local ok, err = pcall(ShowNameHover, self)
+            if ok then return end
+            ns.Log("meter", "name details: %s", tostring(err))
+        end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText("Click: what this was made of", 1, 1, 1)
         GameTooltip:Show()
     end)
-    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    r:SetScript("OnLeave", function() GameTooltip:Hide() HideHover() end)
     win.rows[i] = r
     return r
 end
@@ -733,6 +740,9 @@ local function BuildHover()
     h.lines = {}
     for i = 1, HOVER_LINES do
         local l = {}
+        l.bar = h:CreateTexture(nil, "BORDER", nil, 1)
+        l.icon = h:CreateTexture(nil, "ARTWORK")
+        l.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         l.left = h:CreateFontString(nil, "OVERLAY")
         l.right = h:CreateFontString(nil, "OVERLAY")
         l.left:SetJustifyH("LEFT")
@@ -789,14 +799,10 @@ local function TargetsOf(c, realName)
     return list
 end
 
-local function ShowHover(row)
-    local sp = row.sp
-    if not sp then return end
+-- the box in the meter's look, its title bar set up (icon and title come after)
+local function HoverLook(c)
     BuildHover()
-    local c = S()
     local h = hover
-    local w = bd.win or win
-    -- look: the meter's
     local bg, tc = c.bgColor or { r = 0.04, g = 0.04, b = 0.05 }, c.titleColor or { r = 0.08, g = 0.08, b = 0.09 }
     h:SetScale(c.scale)
     h.fill:SetColorTexture(bg.r, bg.g, bg.b, math.max(0.9, c.bgAlpha))
@@ -810,6 +816,19 @@ local function ShowHover(row)
     h.head:SetPoint("LEFT", h.icon, "RIGHT", 4, 0)
     h.head:SetPoint("RIGHT", h, "TOPRIGHT", -6, -th / 2)
     ns.ApplyFont(h.head, c.font, c.titleSize, c.outline)
+    h.head:SetTextColor(1, 1, 1)
+    return h
+end
+
+-- the lines (label, value, header?) under the title, the box beside window w
+local DrawHover
+
+local function ShowHover(row)
+    local sp = row.sp
+    if not sp then return end
+    local c = S()
+    local w = bd.win or win
+    local h = HoverLook(c)
     local sname, icon = SpellInfo(sp.spellID)
     h.icon:SetTexture(icon or 134400)
     if sname ~= nil then h.head:SetText(sname)
@@ -840,17 +859,45 @@ local function ShowHover(row)
         end
     end
     Add("Hits, crits and misses: not in the game's meter data", nil, true)
+    DrawHover(c, lines, w)
+end
 
+DrawHover = function(c, lines, w)
+    local h = hover
+    local th = c.titleHeight or 20
     local lh = math.max(c.fontSize + 4, 14)
     local y = -(th + 4)
     for i, l in ipairs(h.lines) do
         local e = lines[i]
         l.left:ClearAllPoints()
         l.right:ClearAllPoints()
+        l.icon:ClearAllPoints()
+        l.bar:ClearAllPoints()
         if e then
             ns.ApplyFont(l.left, c.font, e[3] and math.max(8, c.fontSize - 2) or c.fontSize, c.outline)
             ns.ApplyFont(l.right, c.font, c.fontSize, c.outline)
-            l.left:SetPoint("TOPLEFT", 6, y)
+            -- a spell line: its icon, and a bar in the player's colour
+            local x = 6
+            if e.icon then
+                l.icon:SetTexture(e.icon)
+                l.icon:SetSize(lh - 2, lh - 2)
+                l.icon:SetPoint("TOPLEFT", 6, y + 1)
+                l.icon:Show()
+                x = 6 + lh
+            else
+                l.icon:Hide()
+            end
+            if e.frac and e.color then
+                local full = c.width - x - 4
+                l.bar:SetTexture(ns.TexturePath(c.texture))
+                l.bar:SetVertexColor(e.color.r, e.color.g, e.color.b, 0.55)
+                l.bar:SetPoint("TOPLEFT", x - 2, y + 1)
+                l.bar:SetSize(math.max(1, full * math.min(1, e.frac)), lh - 2)
+                l.bar:Show()
+            else
+                l.bar:Hide()
+            end
+            l.left:SetPoint("TOPLEFT", x, y)
             l.left:SetPoint("TOPRIGHT", -6, y)
             l.right:SetPoint("TOPRIGHT", -6, y)
             local okL = pcall(l.left.SetText, l.left, e[1])
@@ -868,6 +915,8 @@ local function ShowHover(row)
         else
             l.left:Hide()
             l.right:Hide()
+            l.icon:Hide()
+            l.bar:Hide()
         end
     end
     h:SetSize(c.width, -y + 6)
@@ -884,7 +933,65 @@ local function ShowHover(row)
     h:Show()
 end
 
-local function HideHover()
+-- a name (option): its top spells in the same box; a click still opens
+-- the whole breakdown
+ShowNameHover = function(row)
+    local src, w = row.src, row.win
+    if not (src and w and w.cfg) then return end
+    local c = S()
+    local t = TYPE_BY_KEY[w.cfg.meterType or "DamageDone"] or TYPES[1]
+    if t.threat or t.deaths then return end
+    local mtype = Enum.DamageMeterType[t.key]
+    local spells
+    if src.sourceGUID ~= nil or src.sourceCreatureID ~= nil then
+        spells = FetchSource(w.cfg, mtype, src.sourceGUID, src.sourceCreatureID)
+    end
+    if spells == nil then
+        local guid, cid = RowIdentity(src)
+        if guid or cid then spells = FetchSource(w.cfg, mtype, guid, cid) end
+    end
+    local h = HoverLook(c)
+    local first = spells and spells[1]
+    local _, icon = SpellInfo(first and first.spellID)
+    h.icon:SetTexture(icon or 134400)
+    if not pcall(h.head.SetFormattedText, h.head, "%s - %s", row.name or "?", t.text) then h.head:SetText(t.text) end
+    local class = src.classFilename
+    local col = Plain(class) and ns.ClassColor(class) or nil
+    if col then h.head:SetTextColor(col.r, col.g, col.b) end
+    col = col or ns.AccentColor()
+    local lines = {}
+    local function Add(l, r, head) lines[#lines + 1] = { l, r, head } end
+    if spells and #spells > 0 then
+        local sum, plain = 0, true
+        for _, sp in ipairs(spells) do
+            local a = sp.totalAmount
+            if Plain(a) and type(a) == "number" then sum = sum + a else plain = false end
+        end
+        local top = spells[1].totalAmount
+        if not (Plain(top) and type(top) == "number" and top > 0) then top = nil end
+        for i = 1, math.min(#spells, HOVER_LINES - 1) do
+            local sp = spells[i]
+            local sname, sicon = SpellInfo(sp.spellID)
+            local label = sname or sp.creatureName or "Melee / other"
+            local txt = Short(sp.totalAmount)
+            if plain and sum > 0 then
+                local okF, s2 = pcall(string.format, "%s  %d%%", txt, math.floor(sp.totalAmount / sum * 100 + 0.5))
+                if okF then txt = s2 end
+            end
+            Add(label, txt)
+            local e = lines[#lines]
+            e.icon = sicon or 134400
+            local a = sp.totalAmount
+            if top and Plain(a) and type(a) == "number" then e.frac, e.color = a / top, col end
+        end
+    else
+        Add(InCombatLockdown() and "Spells: after the fight" or "Nothing in this fight", nil, true)
+    end
+    Add("Click: the whole breakdown", nil, true)
+    DrawHover(c, lines, w)
+end
+
+HideHover = function()
     if hover then hover:Hide() end
 end
 

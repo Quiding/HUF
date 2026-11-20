@@ -310,7 +310,13 @@ end
 local function AuraRow(on, position)
     return { enabled = on, mine = false, size = 20, gap = 2, perRow = 6, rows = 4,
              position = position, offset = 2, x = 0, y = 0, countSize = 9, timer = true,
-             timerText = false, timerSize = 0 }      -- time left as numbers; size 0: from the icon size
+             timerText = false, timerSize = 0,       -- time left as numbers; size 0: from the icon size
+             filter = "ALL",         -- debuffs ALL | RAID | DISPELLABLE | TEAM (my group can) | CC; buffs ALL | RAID | DEFENSIVE | CANCELABLE
+             ccFirst = false,        -- debuffs: crowd control first
+             hideSated = false,      -- debuffs: no Sated / Exhaustion
+             grow = "AUTO",          -- AUTO (from the position) | LEFT | RIGHT
+             borderSize = 1,         -- the black edge around each icon
+             dispelBorder = false }  -- debuffs: the edge in the debuff type's colour
 end
 
 local function UnitDefaults(point)
@@ -486,6 +492,7 @@ local function BuildDefaults()
             titleIcons = false,         -- the type's name at the left, meter type and fight as icon buttons at the right
             titleIconSize = 18,         -- those icons (may stand out of a lower title bar)
             titleIconsMuted = true,     -- those icons grey and dimmed, accent colour under the mouse
+            nameHover = false,          -- hovering a name: its top spells beside the window (a click still opens the breakdown)
             breakdownInline = true,     -- a clicked name's breakdown and the meter list in its window (< back); off: the breakdown beside it
             icons = "NONE",             -- NONE | CLASS: class icon before each bar
             rowBorder = 0,              -- a border around each bar (0: none)
@@ -602,6 +609,8 @@ local function BuildDefaults()
                 iconColor = "MONO",         -- MONO (flat light grey) | GAME (the art's colours) | CLASS | ACCENT | CUSTOM
                 iconCustom = C(0.85, 0.85, 0.88),
             },
+            -- free bars anywhere on screen, each with its blocks (DataBars.lua)
+            bars = {},
         },
         nameplates = {
             enabled = true,
@@ -636,6 +645,7 @@ local function BuildDefaults()
             friendlyLevel = "SAME",     -- SAME | SHOW | HIDE
             friendlyNameColor = "SAME", -- SAME | REACTION (class for players) | WHITE
             showLevel = true,           -- "55E" before the name, in difficulty colour
+            levelAlways = false,        -- also when the game hides the level (earlier value, else uncoloured)
             showHealth = false,         -- health % at the right end of the bar
             healthTag = "[hp%]",        -- [hp%] | [hp%:nosign] | [hp]
             healthSize = 0,             -- 0: the name's size - 2
@@ -658,6 +668,13 @@ local function BuildDefaults()
             threatMode = "GLOW", threatSize = 10, threatPos = "RIGHT", threatColors = true,
             threatGlowSize = 5, threatGlowColor = C(1.00, 0.60, 0.00),
             threatGlowAggro = false, threatAggroColor = C(1.00, 0.15, 0.15),
+            -- threat colours on the bar: OFF | ALWAYS | INSTANCES (dungeons, raids, scenarios)
+            threatBar = "OFF",
+            threatDpsSafeOn = true, threatDpsSafe = C(0.35, 0.75, 0.35),
+            threatDpsNear = C(0.95, 0.75, 0.20), threatDpsAggro = C(1.00, 0.30, 0.15),
+            threatTankHoldOn = true, threatTankHold = C(0.10, 0.70, 0.55),
+            threatTankLosing = C(0.95, 0.75, 0.20), threatTankLost = C(1.00, 0.20, 0.15),
+            threatOffTankOn = true, threatOffTank = C(0.20, 0.60, 0.85),
             -- combo points (rogue, cat druid) under your target's plate
             comboShow = true, comboHeight = 4, comboGap = 2, comboSpace = 2,
             comboColor = C(1.00, 0.82, 0.10), comboHideEmpty = true,

@@ -13,6 +13,7 @@
 
 local _, ns = ...
 local IsSecret, Bool = ns.IsSecret, ns.Bool
+local function Plain(v) if v == nil or IsSecret(v) then return nil end return v end
 local Frame = ns.Frame
 
 local NP = {}
@@ -272,14 +273,113 @@ local function Layout(p)
             t:SetAllPoints()
             p.bounds[np] = sb
         end
-        sb:ClearAllPoints()
-        sb:SetPoint("CENTER", np, "CENTER", 0, s.yOffset)
+        -- from the bar's bottom up to the top of the name and the icon row,
+        -- so a plate's icons don't sit on the plate above
         local sh = s.height + ((showName and not inside) and (s.fontSize + s.nameGap) or 0)
+        if s.showDebuffs or s.showBuffs then
+            sh = sh + bs + s.auraGap + s.auraSize * (s.auraRows or 1)
+        end
+        sb:ClearAllPoints()
+        sb:SetPoint("BOTTOM", np, "CENTER", 0, s.yOffset - s.height / 2)
         sb:SetSize(s.width, math.max(1, sh * (s.stackSpacing or 100) / 100))
         sb:Show()
         pcall(np.SetStackingBoundsFrame, np, sb)
     end
     if NP.PlaceQuestie then NP.PlaceQuestie(p) end
+end
+
+---------------------------------------------------------------------------
+-- Threat colours on the bar (option): what the mob's threat means for you.
+-- Damage and healers: safe / about to pull it / it attacks you. Tanks:
+-- holding it / losing it / lost it (or another tank has it). You count as a
+-- tank with the tank role or a tank spec, and on WoW Forever in bear form,
+-- defensive stance or with Righteous Fury up (the game's role there is
+-- often "damage" for everyone).
+---------------------------------------------------------------------------
+local function ThreatShared()
+    if IsInGroup and IsInGroup() then return true end
+    local ok, e = pcall(UnitExists, "pet")
+    return ok and Bool(e)
+end
+
+local PLAYER_CLASS = select(2, UnitClass("player"))
+local TANK_FORMS = { [5] = true, [8] = true, [18] = true }   -- bear, dire bear, defensive stance
+local FURY_IDS = { 25780, 407627, 407628 }                   -- Righteous Fury
+local hasFury = false
+local playerTanks = false
+
+-- Righteous Fury: read when the game lets us; a refused read keeps the last answer
+local function ReadFury()
+    if PLAYER_CLASS ~= "PALADIN" or not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then return end
+    local answered = false
+    for _, id in ipairs(FURY_IDS) do
+        local ok, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+        if ok and not IsSecret(aura) then
+            if aura then hasFury = true return end
+            answered = true
+        end
+    end
+    if answered then hasFury = false end
+end
+
+local function TankCheck()
+    local ok, role = pcall(UnitGroupRolesAssigned, "player")
+    if ok and Plain(role) == "TANK" then return true end
+    if PLAYER_CLASS == "DRUID" or PLAYER_CLASS == "WARRIOR" then
+        local okF, form = pcall(GetShapeshiftFormID)
+        form = okF and Plain(form) or nil
+        if TANK_FORMS[form or 0] then return true end
+        -- a druid out of bear form / a warrior in another stance: not tanking
+        if okF and (form ~= nil or PLAYER_CLASS == "DRUID") then return false end
+    end
+    if PLAYER_CLASS == "PALADIN" and hasFury then return true end
+    if GetSpecialization and GetSpecializationRole then
+        local okS, spec = pcall(GetSpecialization)
+        spec = okS and Plain(spec) or nil
+        if spec then
+            local okR, r = pcall(GetSpecializationRole, spec)
+            return okR and Plain(r) == "TANK"
+        end
+    end
+    return false
+end
+
+-- another group member with the tank role has the mob (off-tanking)
+local function OtherTankHolds(unit)
+    if not (IsInGroup and IsInGroup()) then return false end
+    local raid = IsInRaid and IsInRaid()
+    local n = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+    for i = 1, raid and n or math.max(0, n - 1) do
+        local m = (raid and "raid" or "party") .. i
+        local okU, me = pcall(UnitIsUnit, m, "player")
+        local okR, role = pcall(UnitGroupRolesAssigned, m)
+        if not (okU and Bool(me)) and okR and Plain(role) == "TANK" then
+            local ok, tanking = pcall(UnitDetailedThreatSituation, m, unit)
+            if ok and tanking == true then return true end
+        end
+    end
+    return false
+end
+
+local function ThreatBarColor(unit, s)
+    local mode = s.threatBar
+    if mode ~= "ALWAYS" and mode ~= "INSTANCES" then return nil end
+    if mode == "INSTANCES" then
+        local _, kind = IsInInstance()
+        if kind ~= "party" and kind ~= "raid" and kind ~= "scenario" then return nil end
+    end
+    local ok, status = pcall(UnitThreatSituation, "player", unit)
+    if not ok or status == nil or IsSecret(status) then return nil end   -- not fighting your group
+    if playerTanks then
+        if status >= 3 then return s.threatTankHoldOn and s.threatTankHold or nil end
+        if status >= 1 then return s.threatTankLosing end
+        if s.threatOffTankOn and OtherTankHolds(unit) then return s.threatOffTank end
+        return s.threatTankLost
+    end
+    if not ThreatShared() then return nil end    -- alone without a pet: always yours
+    if status >= 3 then return s.threatDpsAggro end
+    if status >= 2 then return s.threatDpsNear end
+    return s.threatDpsSafeOn and s.threatDpsSafe or nil
 end
 
 ---------------------------------------------------------------------------
@@ -300,6 +400,8 @@ local function UpdateHealth(p)
         local ok, t = pcall(UnitIsTapDenied, unit)
         if ok and Bool(t) then h:SetStatusBarColor(0.5, 0.5, 0.5) return end
     end
+    local tc = ThreatBarColor(unit, s)
+    if tc then h:SetStatusBarColor(tc.r, tc.g, tc.b) return end
     if s.colorMode == "STATUS" then
         local ok, r, g, b = ns.UnitStatusColor(unit, s, false)
         if ok then h:SetStatusBarColor(r, g, b) return end
@@ -327,6 +429,36 @@ local function UpdateHealth(p)
     else h:SetStatusBarColor(c.r, c.g, c.b) end
 end
 
+local LEVEL_CLASS = { elite = "E", rareelite = "RE", rare = "R", worldboss = "B" }
+
+-- the difficulty colour of a mob whose level is hidden: the game ranks it
+-- itself (trivial .. impossible) without telling the level. "" when it
+-- won't say either.
+local DIFF_COLOR_NAMES = {
+    Trivial = "TRIVIAL_DIFFICULTY_COLOR", Easy = "EASY_DIFFICULTY_COLOR", Fair = "FAIR_DIFFICULTY_COLOR",
+    Difficult = "DIFFICULT_DIFFICULTY_COLOR", Impossible = "IMPOSSIBLE_DIFFICULTY_COLOR",
+}
+local DIFF_FALLBACK = { [0] = { 0.5, 0.5, 0.5 }, { 0.25, 0.75, 0.25 }, { 1, 0.82, 0 }, { 1, 0.5, 0.25 }, { 1, 0.1, 0.1 } }
+local function HiddenLevelColor(unit)
+    local api = C_PlayerInfo and C_PlayerInfo.GetContentDifficultyCreatureForPlayer
+    if not api then return "" end
+    local ok, diff = pcall(api, unit)
+    if not ok or diff == nil or IsSecret(diff) then return "" end
+    local c
+    if GetDifficultyColor then
+        local okC, col = pcall(GetDifficultyColor, diff)
+        if okC and type(col) == "table" and type(col.r) == "number" then c = { col.r, col.g, col.b } end
+    end
+    if not c and Enum and Enum.RelativeContentDifficulty then
+        for name, v in pairs(Enum.RelativeContentDifficulty) do
+            local g = v == diff and _G[DIFF_COLOR_NAMES[name] or ""]
+            if type(g) == "table" and type(g.r) == "number" then c = { g.r, g.g, g.b } end
+        end
+    end
+    c = c or DIFF_FALLBACK[diff]
+    if not c then return "" end
+    return ("|cff%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5))
+end
 local function UpdateName(p)
     local s = S()
     local unit = p.unit
@@ -340,8 +472,25 @@ local function UpdateName(p)
         -- level + classification ("55E") in difficulty colour, then the name
         ns.SetTemplateText(p.name, holder, "[levelclass:color]")
         local okL, lvl = pcall(p.name.GetText, p.name)
+        local sep = s.levelSep or " "
         if okL and lvl ~= nil and not IsSecret(lvl) and lvl ~= "" then
-            pcall(p.name.SetFormattedText, p.name, "%s%s%s", lvl, s.levelSep or " ", name)
+            p.levelText = lvl       -- kept while this unit is on the plate
+            pcall(p.name.SetFormattedText, p.name, "%s%s%s", lvl, sep, name)
+        elseif s.levelAlways and p.levelText then
+            -- the game hides the level now: the one read earlier, in colour
+            pcall(p.name.SetFormattedText, p.name, "%s%s%s", p.levelText, sep, name)
+        elseif s.levelAlways then
+            -- hidden since the plate came: the game's value as it is (it
+            -- can't be checked), in the colour the game ranks the mob, the
+            -- classification after it
+            local ok, level = pcall(UnitLevel, unit)
+            local okC, cl = pcall(UnitClassification, unit)
+            cl = (okC and not IsSecret(cl) and LEVEL_CLASS[cl]) or ""
+            local hex = HiddenLevelColor(unit)
+            local fmt = hex ~= "" and "%s%s%s|r%s%s" or "%s%s%s%s%s"
+            if not (ok and level ~= nil and pcall(p.name.SetFormattedText, p.name, fmt, hex, level, cl, sep, name)) then
+                pcall(p.name.SetText, p.name, name)
+            end
         else
             pcall(p.name.SetText, p.name, name)
         end
@@ -516,12 +665,6 @@ end
 -- be secret: the percent goes straight into the text, a secret situation
 -- shows nothing.
 ---------------------------------------------------------------------------
-local function ThreatShared()
-    if IsInGroup and IsInGroup() then return true end
-    local ok, e = pcall(UnitExists, "pet")
-    return ok and Bool(e)
-end
-
 local function LayoutThreat(p)
     local s = S()
     local t = p.threat
@@ -632,7 +775,9 @@ local function OnUnitEvent(ev, event, _, castGUID, spellID, interruptedBy)
     local p = ev.plate
     if not p.unit then return end
     if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then UpdateHealth(p)
-    elseif event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then UpdateThreat(p)
+    elseif event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
+        UpdateThreat(p)
+        if S().threatBar ~= "OFF" then UpdateHealth(p) end
     elseif CAST_EVENT[event] then
         if not S().showCast then StopCast(p) return end
         CastSetup(p)
@@ -656,6 +801,7 @@ local function Attach(unit)
     NP.plates[unit] = p
     p.unit = unit
     p.hunit = unit              -- for the text templates
+    p.levelText = nil
     p.nameplate = nameplate
     p:SetParent(nameplate)
     p:SetFrameLevel(nameplate:GetFrameLevel() + 2)
@@ -682,7 +828,7 @@ local function Detach(unit)
     p:SetParent(nil)
     if NP.QuestieRelease then NP.QuestieRelease(p.nameplate) end
     if p.nameplate and p.nameplate.UnitFrame then owned[p.nameplate.UnitFrame] = nil end
-    p.unit, p.hunit, p.nameplate = nil, nil, nil
+    p.unit, p.hunit, p.nameplate, p.levelText = nil, nil, nil, nil
     pool[#pool + 1] = p
 end
 
@@ -692,6 +838,23 @@ ns.On("NAME_PLATE_UNIT_ADDED", function(unit)
     if not ok then ns.LogError("nameplate " .. tostring(unit), err) end
 end)
 ns.On("NAME_PLATE_UNIT_REMOVED", function(unit) Detach(unit) end)
+
+-- tank or not: forms, stances, Righteous Fury, role and spec
+local function TankChanged()
+    ReadFury()
+    local now = TankCheck()
+    if now == playerTanks then return end
+    playerTanks = now
+    if S().threatBar == "OFF" then return end
+    for _, p in pairs(NP.plates) do if p.unit then UpdateHealth(p) end end
+end
+for _, e in ipairs({ "UPDATE_SHAPESHIFT_FORM", "PLAYER_SPECIALIZATION_CHANGED", "PLAYER_ROLES_ASSIGNED",
+                     "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }) do
+    pcall(ns.On, e, TankChanged)
+end
+if PLAYER_CLASS == "PALADIN" then
+    pcall(ns.On, "UNIT_AURA", function(unit) if unit == "player" then TankChanged() end end)
+end
 ns.On("PLAYER_TARGET_CHANGED", function()
     for _, p in pairs(NP.plates) do UpdateTarget(p) end
 end)

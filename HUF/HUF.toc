@@ -42,6 +42,7 @@ MinimapConfig.lua
 PlayerAurasConfig.lua
 ChatConfig.lua
 BagsConfig.lua
+DataBarBlocks.lua
 DataBars.lua
 DataBarsConfig.lua
 Recorder.lua

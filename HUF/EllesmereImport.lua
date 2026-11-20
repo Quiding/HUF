@@ -97,6 +97,13 @@ local POWER_CONTENT = {
     perpp = "[mp%]", curpp = "[mp]", curmaxpp = "[mp] / [mp:max]", both = "[mp] | [mp%]", smart = "[mp]",
 }
 
+-- Ellesmere's raid frame debuff spots (on the health bar)
+local RF_DEBUFF_POS = {
+    topleft = "INSIDE_TOPLEFT", top = "INSIDE_TOP", topright = "INSIDE_TOPRIGHT",
+    left = "INSIDE_LEFT", center = "INSIDE_CENTER", right = "INSIDE_RIGHT",
+    bottomleft = "INSIDE_BOTTOMLEFT", bottom = "INSIDE_BOTTOM", bottomright = "INSIDE_BOTTOMRIGHT",
+}
+
 local AURA_POS = {
     topleft = "ABOVE_LEFT", topright = "ABOVE_RIGHT",
     bottomleft = "BELOW_LEFT", bottomright = "BELOW_RIGHT",
@@ -549,9 +556,26 @@ local function ConvertNameplates(s, n, notes)
     n.auraGap = math.floor(Num(G("debuffSpacing"), 2) + 0.5)
     n.auraTimer = true
     n.auraTimerSize = math.floor(Num(s.auraDurationTextSize, 11) + 0.5)
-    if s.threatColorHealth ~= false then
-        notes[#notes + 1] = "Nameplates: Ellesmere's threat, caster and mini-boss colours are not in HUF."
+    -- threat colours on the bar (Ellesmere's default on WoW Forever: always)
+    local tmode = s.threatColorMode or "always"
+    if s.threatColorHealth == false or tmode == "never" then n.threatBar = "OFF"
+    elseif tmode == "instances" then n.threatBar = "INSTANCES"
+    else n.threatBar = "ALWAYS" end
+    local function TC(key, r, g, b) return Color(s[key], { r = r, g = g, b = b }) end
+    n.threatDpsSafeOn = s.dpsNoAggroEnabled == true
+    n.threatDpsSafe = TC("dpsNoAggro", 0.35, 0.75, 0.35)
+    n.threatDpsNear = TC("dpsNearAggro", 0.81, 0.72, 0.19)
+    n.threatDpsAggro = TC("dpsHasAggro", 1.00, 0.50, 0.00)
+    n.threatTankHoldOn = s.tankHasAggroEnabled == true or s.classicTankAggro == true
+    n.threatTankHold = TC("tankHasAggro", 0.05, 0.82, 0.62)
+    n.threatTankLosing = TC("tankLosingAggro", 0.81, 0.72, 0.19)
+    n.threatTankLost = TC("tankNoAggro", 1.00, 0.22, 0.17)
+    n.threatOffTankOn = s.offTankAggroEnabled ~= false
+    n.threatOffTank = TC("offTankAggro", 0.188, 0.761, 0.812)
+    if s.threatColorBorder == true or s.threatColorName == true then
+        notes[#notes + 1] = "Nameplates: HUF shows threat colours on the bar only (Ellesmere: also on the border or name)."
     end
+    notes[#notes + 1] = "Nameplates: Ellesmere's caster and mini-boss colours are not in HUF."
 end
 
 ---------------------------------------------------------------------------
@@ -567,6 +591,7 @@ local function ConvertDamageMeter(addon, m, notes)
     local w = type(list[1]) == "table" and list[1] or {}
     m.enabled = true
     m.hideBlizzard = true
+    m.nameHover = G("showHoverTooltip", true) ~= false
 
     -- a window's place: unlock format { point, relPoint, x, y } or the older
     -- { x, y } (its top left from the screen's bottom left: taken as its
@@ -776,6 +801,87 @@ local function ConvertGroup(rf, g, notes)
             G("powerTextCustomColor"), G("powerTextOffsetX"), G("powerTextOffsetY"))
     end
     g.texts.health, g.texts.power = th, tp
+    -- debuffs: on the health bar, where Ellesmere puts them, filtered as its
+    -- Debuff Manager filters them
+    local d = g.debuffs
+    if d then
+        local pos = tostring(G("debuffPosition", "bottomright"))
+        local grow = G("debuffGrowDirection", "LEFT")
+        d.position = RF_DEBUFF_POS[pos] or "INSIDE_BOTTOMRIGHT"
+        d.grow = "AUTO"
+        if grow == "CENTER" then
+            d.position = (pos:find("top") and "INSIDE_TOP") or (pos:find("bottom") and "INSIDE_BOTTOM") or "INSIDE_CENTER"
+        elseif grow == "LEFT" or grow == "RIGHT" then
+            local p = ns.Frame.AURA_POS[d.position]
+            if p and p[4] ~= grow then d.grow = grow end
+        else
+            notes[#notes + 1] = "Group: debuffs grow sideways in HUF (Ellesmere: up or down)."
+        end
+        d.offset = 0
+        d.x = math.floor(Num(G("debuffOffsetX"), 0) + 0.5)
+        d.y = math.floor(Num(G("debuffOffsetY"), 0) + 0.5)
+        -- HUF's frame includes the power bar: lift bottom rows onto the health bar
+        if power and d.position:find("BOTTOM") then d.y = d.y + g.power.size + (g.power.gap or 0) end
+        d.size = math.max(8, math.floor(Num(G("debuffSize"), 18) + 0.5))
+        d.gap = math.max(0, math.floor(Num(G("debuffSpacing"), 1) + 0.5))
+        local cap = math.max(1, math.floor(Num(G("debuffCap"), 3) + 0.5))
+        local per = math.max(1, math.floor(Num(G("debuffPerRow"), 5) + 0.5))
+        d.perRow = math.min(per, cap)
+        d.rows = math.min(6, math.ceil(cap / d.perRow))
+        d.borderSize = math.max(0, math.floor(Num(G("debuffBorderSize"), 1) + 0.5))
+        d.dispelBorder = true
+        d.countSize = math.max(6, math.floor(Num(G("debuffStacksTextSize"), 8) + 0.5))
+        d.timer = G("debuffShowSwipe", true) ~= false
+        d.timerText = G("debuffShowDurText", false) == true
+        d.timerSize = math.floor(Num(G("debuffDurTextSize"), 0) + 0.5)
+        d.hideSated = G("hideLustDebuff", true) ~= false
+        d.mine = false
+        d.enabled = true
+        -- filters: the Debuff Manager, or the older preset before it
+        local dm = rf.dmDebuff
+        local filter, cc = "ALL", true
+        if type(dm) == "table" then
+            local neg = type(dm.neg) == "table" and dm.neg or {}
+            if dm.all ~= false then
+                cc = not neg.cc
+                local hid = {}
+                for _, k in ipairs({ "boss", "role", "priority", "raid", "raidcombat", "dispel", "nonplayer" }) do
+                    if neg[k] then hid[#hid + 1] = k end
+                end
+                if #hid > 0 then
+                    notes[#notes + 1] = "Group: HUF shows all debuffs; Ellesmere hid these kinds: " .. table.concat(hid, ", ") .. "."
+                end
+            else
+                cc = dm.cc == true
+                if dm.dispel then filter = (dm.dispelMode == "typed") and "TEAM" or "DISPELLABLE"
+                elseif dm.raid or dm.raidcombat then filter = "RAID"
+                elseif cc then filter, cc = "CC", false
+                else filter = nil end
+                local other = {}
+                for _, k in ipairs({ "boss", "role", "priority", "nonplayer" }) do
+                    if dm[k] then other[#other + 1] = k end
+                end
+                if filter == nil and #other > 0 then filter = "RAID" end
+                if #other > 0 then
+                    notes[#notes + 1] = ("Group: Ellesmere's debuff kinds %s are not in HUF; it shows the %s debuffs."):format(
+                        table.concat(other, ", "), filter == "RAID" and "important" or "picked")
+                end
+                if filter == "TEAM" then
+                    notes[#notes + 1] = "Group: Ellesmere's \"any dispel type\" debuffs become HUF's \"Ones my group can dispel\"."
+                end
+            end
+            if type(dm.tiles) == "table" and next(dm.tiles) then
+                notes[#notes + 1] = "Group: Ellesmere's extra debuff spots (Debuff Manager tiles) are not in HUF."
+            end
+        else
+            local preset = G("debuffFilter", "all")
+            if preset == "raid" then filter = "RAID"
+            elseif preset == "dispellable" then filter = "DISPELLABLE"
+            elseif preset == "none" then filter = nil end
+        end
+        if filter then d.filter, d.ccFirst = filter, cc and true or false
+        else d.enabled = false end
+    end
     -- buffs: Ellesmere shows them only as its buff indicators (none set by
     -- default); debuffs stay
     local ind = G("bmIndicators")
@@ -1022,6 +1128,121 @@ local function ConvertDataBar(addon, d, notes)
     return true
 end
 
+
+-- Ellesmere's other data bars (not the Minimap Companion): one HUF bar each,
+-- with the blocks HUF has. Returns the bars; the block types left out go in
+-- the notes.
+local DB_VIS = { always = "ALWAYS", in_combat = "COMBAT", out_of_combat = "NOCOMBAT", mouseover = "HOVER", never = "NEVER" }
+local function BlockColors(blk, c)
+    if blk.useClassColor then c.textColor = "CLASS"
+    elseif blk.useAccentColor then c.textColor = "ACCENT"
+    elseif blk.useDynamicColor then c.textColor = "DYNAMIC"
+    elseif type(blk.color) == "table" then c.textColor, c.textCustom = "CUSTOM", Color(blk.color, c.textCustom)
+    else c.textColor = "WHITE" end
+    if blk.useIconClassColor then c.iconColor = "CLASS"
+    elseif blk.useIconAccentColor then c.iconColor = "ACCENT"
+    elseif not blk.useIconDefaultColor and type(blk.iconColor) == "table" then
+        c.iconColor, c.iconCustom = "CUSTOM", Color(blk.iconColor, c.iconCustom)
+    else c.iconColor = "MONO" end
+end
+-- adds the block's HUF block(s) to out; returns its type when HUF has none
+local function ConvertBlock(blk, bar, out)
+    local BL = ns.DataBlocks
+    local st = type(blk.settings) == "table" and blk.settings or {}
+    local function Add(key)
+        local c = BL.New(key)
+        c.scale = math.floor(Num(blk.scale, 100) + 0.5)
+        local al = blk.align
+        c.align = (al == "LEFT" or al == "RIGHT") and al or "CENTER"
+        local base = Num(blk.contentGap, 10)
+        c.padL = math.floor(Num(blk.contentGapL, base) + 0.5)
+        c.padR = math.floor(Num(blk.contentGapR, base) + 0.5)
+        c.fill = bar.fillBlockId ~= nil and blk.id == bar.fillBlockId
+        BlockColors(blk, c)
+        if st.showIcon ~= nil then c.showIcon = st.showIcon and true or false end
+        out[#out + 1] = c
+        return c
+    end
+    local t = blk.type
+    if t == "fps" or t == "durability" then
+        Add(t)
+    elseif t == "ms" then
+        local c = Add("ms")
+        local m = st.latencyMode
+        c.settings.latency = (m == "world" and "WORLD") or ((m == "both" or m == "higher") and "HIGHER") or "HOME"
+    elseif t == "clock" then
+        local c = Add("clock")
+        c.settings.twentyFour = st.twentyFour ~= false
+        c.settings.localTime = st.localTime ~= false
+    elseif t == "gold" then
+        local c = Add("gold")
+        c.settings.showSmall = st.showSmall and true or false
+        c.settings.coinIcons = st.coinIcons and true or false
+        c.settings.coinColor = blk.useCoinColor and true or false
+        c.settings.abbreviate = st.abbreviate and true or false
+        c.showIcon = false
+    elseif t == "audio" then
+        local c = Add("audio")
+        local ch = st.channel or "master"
+        c.settings.channel = BL.CHANNELS[ch] and ch or "master"
+    elseif t == "combat" then
+        local c = Add("combat")
+        c.settings.onlyInCombat = st.onlyInCombat and true or false
+        if c.textColor == "WHITE" then c.textColor = "DYNAMIC" end
+    elseif t == "micromenu" then
+        if st.social then Add("friends") end
+        if st.guild then Add("guild") end
+        if not (st.social or st.guild) then return t end
+    else
+        return t
+    end
+end
+local function ConvertBars(addon, notes)
+    local bars, skipped, seen = {}, {}, {}
+    for _, b in ipairs(type(addon.bars) == "table" and addon.bars or {}) do
+        if type(b) == "table" and b.name ~= "Minimap Companion" then
+            if b.orientation == "V" then
+                notes[#notes + 1] = ("Data bar \"%s\": upright bars are not in HUF yet; left out."):format(tostring(b.name))
+            else
+                local c = ns.CopyTable(ns.DataBars.BAR_DEFAULTS)
+                c.name = tostring(b.name or ("Bar " .. (#bars + 1)))
+                c.enabled = true
+                c.visibility = DB_VIS[b.visibility] or "ALWAYS"
+                local sp = type(b.savedPos) == "table" and b.savedPos or {}
+                c.point, c.relPoint = sp.point or "CENTER", sp.relPoint or sp.point or "CENTER"
+                c.x, c.y = math.floor(Num(sp.x, 0) + 0.5), math.floor(Num(sp.y, 0) + 0.5)
+                if b.lengthMode == "full" then c.width = math.floor(UIParent:GetWidth() + 0.5)
+                else c.width = math.floor(Num(b.length, 400) + 0.5) end
+                c.height = math.max(10, math.floor(Num(b.thickness, 22) + 0.5))
+                local th = type(b.theme) == "table" and b.theme or {}
+                if th.style == "modern" then
+                    c.look = "FLAT"
+                    local mc = type(th.modernColor) == "table" and th.modernColor
+                    if mc then c.bgColor, c.bgAlpha = Color(mc, c.bgColor), Num(mc.a, 0.95) end
+                else
+                    c.look = "SOFT"
+                    c.softAlpha = Num(th.euiAlpha, 0.5)
+                end
+                c.borderSize = b.hideBorder and 0 or 1
+                c.sizing = (b.sizingMode == "even") and "EVEN" or "AUTO"
+                c.fontSize = math.max(6, math.floor(12 * Num(b.fontScale, 100) / 100 + 0.5))
+                c.blocks = {}
+                for _, blk in ipairs(type(b.blocks) == "table" and b.blocks or {}) do
+                    if type(blk) == "table" then
+                        local left = ConvertBlock(blk, b, c.blocks)
+                        if left and not seen[left] then seen[left] = true skipped[#skipped + 1] = left end
+                    end
+                end
+                bars[#bars + 1] = c
+            end
+        end
+    end
+    if #skipped > 0 then
+        notes[#notes + 1] = "Data bars: blocks not in HUF yet, left out: " .. table.concat(skipped, ", ") .. "."
+    end
+    return bars
+end
+
 ---------------------------------------------------------------------------
 -- Public
 ---------------------------------------------------------------------------
@@ -1070,6 +1291,17 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         if res then
             what[#what + 1] = "minimap data bar"
             parts[#parts + 1] = { title = "Minimap data bar", tbl = out.dataBars.minimap, on = true, why = "off in Ellesmere" }
+        end
+        local okF, bars = pcall(ConvertBars, dbA, notes)
+        if not okF then return false, "Could not convert the data bars: " .. tostring(bars) end
+        if #bars > 0 then
+            out.dataBars.bars = bars
+            what[#what + 1] = "data bars"
+            for i, b in ipairs(bars) do
+                local last = i == #bars
+                parts[#parts + 1] = { title = "Data bar: " .. b.name, tbl = b, on = true, why = "off in Ellesmere",
+                    folder = last and DB_FOLDER or nil, module = last and "EllesmereUI Data Bars" or nil }
+            end
         end
     end
     local rf = prof and prof.addons and prof.addons[RF_FOLDER]

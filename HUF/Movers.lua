@@ -208,6 +208,7 @@ function Movers.SetUnlocked(on)
     end
     if ns.Minimap then ns.Minimap.SetUnlocked(ns.unlocked) end
     if ns.PlayerAuras then ns.PlayerAuras.SetUnlocked(ns.unlocked) end
+    if ns.DataBars and ns.DataBars.SetUnlocked then ns.DataBars.SetUnlocked(ns.unlocked) end
     if ns.RefreshConfig then ns.RefreshConfig() end
 end
 

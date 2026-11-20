@@ -636,6 +636,8 @@ function UI.Confirm(text, acceptText, onAccept, cancelText, onCancel)
         f.text:SetJustifyH("LEFT")
         f.accept = UI.Button(f, 150, "", function()
             local fn = f.onAccept
+            -- a reload is allowed only when asked first thing in the click
+            if fn == ReloadUI then ReloadUI() fn = nil end
             f.onAccept, f.onCancel = nil, nil
             f:Hide()
             if fn then fn() end

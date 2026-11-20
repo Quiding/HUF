@@ -49,6 +49,220 @@ end
 local function Filter(kind, mine) return mine and (kind .. "|PLAYER") or kind end
 A.Filter = Filter
 
+-- What a row shows: the game's own aura filters, so they also work while
+-- the auras are hidden from addons. A row has up to three groups that fill
+-- one after another: "lead" (crowd control first), "main" and "extra" (a
+-- second filter, made not to repeat the first).
+--   cfg.filter: debuffs ALL | RAID | DISPELLABLE | CC
+--               buffs   ALL | RAID | DEFENSIVE | CANCELABLE
+--   cfg.ccFirst (debuffs): crowd control leads the row
+--   cfg.hideSated (debuffs): no Sated / Exhaustion and the like
+A.SLOTS = { "lead", "main", "extra" }
+local function SortKey(t) if t:sub(1, 1) == "!" then return t:sub(2) .. "!" end return t end
+-- one spelling per filter (the game reads each spelling once per unit)
+local function Make(base, mine, ...)
+    local rest = {}
+    for i = 1, select("#", ...) do
+        local t = select(i, ...)
+        if t then rest[#rest + 1] = t end
+    end
+    if mine then rest[#rest + 1] = "PLAYER" end
+    table.sort(rest, function(a, b) return SortKey(a) < SortKey(b) end)
+    if #rest == 0 then return base end
+    return base .. "|" .. table.concat(rest, "|")
+end
+function A.Groups(cfg)
+    local base, mine, f = cfg.kind, cfg.mine and true or false, cfg.filter or "ALL"
+    local g = {}
+    if base == "HARMFUL" then
+        local lead = cfg.ccFirst and not mine and f ~= "CC"
+        local nc = lead and "!CROWD_CONTROL" or nil
+        if lead then g.lead = Make(base, false, "CROWD_CONTROL") end
+        if f == "RAID" then
+            g.main = Make(base, mine, "RAID", nc)
+            g.extra = Make(base, mine, "RAID_IN_COMBAT", "!RAID", nc)
+        elseif f == "DISPELLABLE" then
+            g.main = Make(base, mine, "RAID_PLAYER_DISPELLABLE", nc)
+        elseif f == "CC" then
+            g.main = Make(base, mine, "CROWD_CONTROL")
+        else
+            g.main = Make(base, mine, nc)
+        end
+    else
+        if f == "RAID" then
+            g.main = Make(base, mine, "RAID")
+        elseif f == "DEFENSIVE" then
+            g.main = Make(base, mine, "BIG_DEFENSIVE")
+            g.extra = Make(base, mine, "EXTERNAL_DEFENSIVE", "!BIG_DEFENSIVE")
+        elseif f == "CANCELABLE" then
+            g.main = Make(base, mine, "CANCELABLE")
+        else
+            g.main = Make(base, mine)
+        end
+    end
+    return g
+end
+
+-- Sated, Exhaustion, Temporal Displacement, Insanity, Fatigued and kin
+local SATED = { [57723] = true, [57724] = true, [80354] = true, [95809] = true,
+                [160455] = true, [264689] = true, [390435] = true }
+local SATED_CAND = { excludeSpellIDs = SATED }
+
+---------------------------------------------------------------------------
+-- "Ones my group can dispel" (filter TEAM): the debuff types anyone in the
+-- group can remove - with MMT that is your whole team, not just the
+-- character you play. Read from each member's class, and for the types
+-- only healers remove (magic), from the role they have. The game then shows
+-- only debuffs of those types (its own type filter: works in combat too).
+---------------------------------------------------------------------------
+local CLASS_DISPELS = {
+    PRIEST  = { all = { "Disease" }, healer = { "Magic" } },
+    PALADIN = { all = { "Poison", "Disease" }, healer = { "Magic" } },
+    SHAMAN  = { all = { "Curse" }, healer = { "Magic" } },
+    DRUID   = { all = { "Curse", "Poison" }, healer = { "Magic" } },
+    MONK    = { all = { "Poison", "Disease" }, healer = { "Magic" } },
+    EVOKER  = { all = { "Poison" }, healer = { "Magic" } },
+    MAGE    = { all = { "Curse" } },
+}
+A.CLASS_DISPELS = CLASS_DISPELS
+local TYPE_ORDER = { "Magic", "Curse", "Disease", "Poison", "Bleed" }
+local teamTypes, teamKey = {}, ""
+local teamCand, teamCandSated
+
+local function Plain(v) if v == nil or ns.IsSecret(v) then return nil end return v end
+-- the role of a member's spec, as far as the game knows it (others: once
+-- inspected). Their group role is no help: a group made by hand, like an
+-- MMT team, often has everyone as damage, healers too.
+local function SpecRole(unit)
+    if unit == "player" then
+        if not (GetSpecialization and GetSpecializationRole) then return nil end
+        local okS, spec = pcall(GetSpecialization)
+        spec = okS and Plain(spec) or nil
+        if not spec then return nil end
+        local okR, r = pcall(GetSpecializationRole, spec)
+        return okR and Plain(r) or nil
+    end
+    if not (GetInspectSpecialization and GetSpecializationRoleByID) then return nil end
+    local okS, id = pcall(GetInspectSpecialization, unit)
+    id = okS and Plain(id) or nil
+    if not id or id == 0 then return nil end
+    local okR, r = pcall(GetSpecializationRoleByID, id)
+    return okR and Plain(r) or nil
+end
+local unknownSpec = {}      -- members whose spec isn't known yet
+local function UnitHeals(unit)
+    local role = SpecRole(unit)
+    if role then return role == "HEALER" end
+    local ok, r = pcall(UnitGroupRolesAssigned, unit)
+    if ok and Plain(r) == "HEALER" then return true end
+    -- spec not known yet: they might heal, so count it, and ask the game
+    if unit ~= "player" then unknownSpec[#unknownSpec + 1] = unit end
+    return true
+end
+
+-- inspect one member whose spec isn't known (the game answers with
+-- INSPECT_READY, which reads the group again); out of combat only, never
+-- while you have the inspect window open, a few tries per member
+local inspectTries, inspectBusy = {}, false
+local function InspectNext()
+    if inspectBusy or #unknownSpec == 0 or not NotifyInspect then return end
+    if InCombatLockdown() or (InspectFrame and InspectFrame:IsShown()) then return end
+    for _, unit in ipairs(unknownSpec) do
+        local okG, guid = pcall(UnitGUID, unit)
+        guid = okG and Plain(guid) or nil
+        local okC, can = pcall(CanInspect, unit)
+        if guid and okC and Plain(can) and (inspectTries[guid] or 0) < 5 then
+            inspectTries[guid] = (inspectTries[guid] or 0) + 1
+            inspectBusy = true
+            pcall(NotifyInspect, unit)
+            C_Timer.After(3, function() inspectBusy = false end)
+            return
+        end
+    end
+end
+
+local function GroupUnits()
+    local list = { "player" }
+    local raid = IsInRaid and IsInRaid()
+    local n = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+    if raid then
+        for i = 1, n do list[#list + 1] = "raid" .. i end
+    else
+        for i = 1, math.max(0, n - 1) do list[#list + 1] = "party" .. i end
+    end
+    return list
+end
+
+-- works out the types again; true when they changed
+local function ReadTeam()
+    local set = {}
+    wipe(unknownSpec)
+    for _, unit in ipairs(GroupUnits()) do
+        local okE, exists = pcall(UnitExists, unit)
+        if okE and Plain(exists) then
+            local okC, _, class = pcall(UnitClass, unit)
+            class = okC and Plain(class) or nil
+            local d = class and CLASS_DISPELS[class]
+            if d then
+                for _, t in ipairs(d.all or {}) do set[t] = true end
+                if d.healer and UnitHeals(unit) then
+                    for _, t in ipairs(d.healer) do set[t] = true end
+                end
+            end
+        end
+    end
+    local key = {}
+    for _, t in ipairs(TYPE_ORDER) do if set[t] then key[#key + 1] = t end end
+    key = table.concat(key, ",")
+    if key == teamKey and teamCand then return false end
+    teamKey, teamTypes = key, set
+    teamCand = { includeDispelTypes = set }
+    teamCandSated = { includeDispelTypes = set, excludeSpellIDs = SATED }
+    return true
+end
+function A.TeamTypes()
+    if not teamCand then ReadTeam() end
+    return teamKey
+end
+
+-- the candidate filter of a group slot ("lead": crowd control keeps every type)
+local function Cand(cfg, key)
+    if cfg.kind ~= "HARMFUL" then return nil end
+    if cfg.filter == "TEAM" and key ~= "lead" then
+        if not teamCand then ReadTeam() end
+        return cfg.hideSated and teamCandSated or teamCand
+    end
+    if cfg.hideSated then return SATED_CAND end
+    return nil
+end
+-- the group can dispel nothing: the TEAM row shows nothing
+local function TeamEmpty(cfg)
+    if cfg.kind ~= "HARMFUL" or cfg.filter ~= "TEAM" then return false end
+    if not teamCand then ReadTeam() end
+    return teamKey == ""
+end
+
+-- a debuff's border in its type's colour (magic blue, curse purple, ...)
+local function WantDispel(cfg) return cfg.kind == "HARMFUL" and cfg.dispelBorder and true or false end
+local function BorderSize(cfg) return math.max(0, cfg.borderSize or 1) end
+local DISPEL_COLORS = {
+    Magic = { 0.2, 0.6, 1 }, Curse = { 0.6, 0, 1 }, Disease = { 0.6, 0.4, 0 },
+    Poison = { 0, 0.6, 0 }, Bleed = { 0.8, 0, 0 },
+}
+local dispelStyle
+local function DispelOpts()
+    if dispelStyle == nil then
+        local E = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
+        local s = E and E.PreserveAsset
+        if s == nil then
+            local L = (Enum and Enum.CustomAuraButtonBorderStyle) or _G.AuraButtonBorderStyle
+            s = L and L.Color
+        end
+        dispelStyle = s ~= nil and { style = s, showWhenHarmful = true, showWhenHelpful = false } or false
+    end
+    return dispelStyle or nil
+end
+
 local function Flow(token)
     local FD = AnchorUtil and AnchorUtil.FlowDirection
     if not FD then return nil end
@@ -120,9 +334,15 @@ local function Dress(b, cfg, top)
     local bg = b:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     bg:SetColorTexture(0, 0, 0, 1)
+    -- the debuff type's colour over the black edge (the game shows and tints it)
+    local ring = b:CreateTexture(nil, "BORDER")
+    ring:SetAllPoints()
+    ring:SetColorTexture(1, 1, 1, 1)
+    ring:Hide()
     local icon = b:CreateTexture(nil, "ARTWORK")
-    icon:SetPoint("TOPLEFT", 1, -1)
-    icon:SetPoint("BOTTOMRIGHT", -1, 1)
+    local bs = BorderSize(cfg)
+    icon:SetPoint("TOPLEFT", bs, -bs)
+    icon:SetPoint("BOTTOMRIGHT", -bs, bs)
     icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
     local cd = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
     cd:SetAllPoints(icon)
@@ -138,7 +358,37 @@ local function Dress(b, cfg, top)
     ns.ApplyFont(count, "GLOBAL", cfg.countSize or 9, "OUTLINE")   -- a font before any text
     count:SetPoint("BOTTOMRIGHT", 1, 0)
     count:SetJustifyH("RIGHT")
-    return { icon = icon, cd = cd, count = count, timerText = cfg.timerText, timerSize = TimerSize(cfg) }
+    return { icon = icon, cd = cd, count = count, ring = ring, border = bs,
+             timerText = cfg.timerText, timerSize = TimerSize(cfg) }
+end
+
+local function Inset(d, bs)
+    d.icon:ClearAllPoints()
+    d.icon:SetPoint("TOPLEFT", bs, -bs)
+    d.icon:SetPoint("BOTTOMRIGHT", -bs, bs)
+end
+
+-- registers (or drops) the ring with the game's button; false: denied now
+local function SetDispel(b, d, on)
+    if d.dispelWant == on then return true end
+    local add = b.AddDispelTypeTexture or b.SetAuraBorder
+    local clear = b.ClearDispelTypeTextures or b.ClearAuraBorder
+    if d.dispelReg then
+        if not (clear and pcall(clear, b)) then return false end
+        d.dispelReg = nil
+        d.ring:Hide()
+    end
+    local opts = DispelOpts()
+    if on and add and opts then
+        if not pcall(add, b, d.ring, opts) then
+            if clear then pcall(clear, b) end
+            d.ring:Hide()
+            return false
+        end
+        d.dispelReg = true
+    end
+    d.dispelWant = on
+    return true
 end
 
 ---------------------------------------------------------------------------
@@ -161,6 +411,7 @@ function Row:InitButton(b)
     b:SetDurationCooldown(d.cd)
     b:SetApplicationCount(d.count, {})
     d.size, d.countSize = cfg.size, cfg.countSize
+    if not SetDispel(b, d, WantDispel(cfg)) then self.pendingResize = true end
     self.bdata[b] = d
     self.buttons[#self.buttons + 1] = b
 end
@@ -184,13 +435,23 @@ function Row:BuildEngine()
         local ok, err = pcall(self.InitButton, self, b)
         if not ok then self:Fail("icon setup", err) end
     end
-    for _, mine in ipairs({ false, true }) do
-        c:AddAuraGroup(mine and "mine" or "all", Filter(cfg.kind, mine), {
+    -- debuffs: lead (crowd control), main, extra; buffs: main, extra. The
+    -- slots stay; their filters change with the settings.
+    local g = A.Groups(cfg)
+    self.slots = cfg.kind == "HARMFUL" and { "lead", "main", "extra" } or { "main", "extra" }
+    self.filters, self.cands = {}, {}
+    for _, key in ipairs(self.slots) do
+        local filter = g[key] or (key == "lead" and Make(cfg.kind, false, "CROWD_CONTROL")) or g.main
+        local cand = Cand(cfg, key)
+        c:AddAuraGroup(key, filter, {
             maxFrameCount = cap,
+            candidateFilters = cand,
             initializeFrame = init,
             layout = GroupLayout(cfg),
         })
+        self.filters[key], self.cands[key] = filter, cand
     end
+    if self.level then pcall(c.SetFrameLevel, c, self.level) end
     ns.Log("auras", "%s: game container ready (%s)", self.label, cfg.kind)
 end
 
@@ -226,6 +487,11 @@ function Row:Resize()
             if pcall(StyleTimer, d.cd, cfg) then d.timerText, d.timerSize = cfg.timerText, TimerSize(cfg)
             else self.pendingResize = true end
         end
+        if d.border ~= BorderSize(cfg) then
+            if pcall(Inset, d, BorderSize(cfg)) then d.border = BorderSize(cfg)
+            else self.pendingResize = true end
+        end
+        if not SetDispel(b, d, WantDispel(cfg)) then self.pendingResize = true end
     end
 end
 
@@ -239,9 +505,26 @@ function Row:ApplyEngine()
     -- engine counts the space after the last icon)
     Call(c, "SetFlowLayoutMaximumLineSize", "SetAuraLayoutRowWidth", cfg.perRow * (cfg.size + cfg.gap) + 0.4)
     local cap = cfg.perRow * cfg.rows
-    for key, on in pairs({ all = not cfg.mine, mine = cfg.mine and true or false }) do
+    local g, empty = A.Groups(cfg), TeamEmpty(cfg)
+    for _, key in ipairs(self.slots) do
+        local cand = Cand(cfg, key)
         pcall(c.SetAuraGroupLayout, c, key, GroupLayout(cfg))
-        SetCap(c, key, on and cap or 0)
+        local filter, show = g[key], g[key] ~= nil
+        if empty and key ~= "lead" then show = false end
+        if filter and filter ~= self.filters[key] then
+            local ok, err = Call(c, "SetAuraGroupFilterString", nil, key, filter)
+            if ok then self.filters[key] = filter
+            else
+                self:Fail("filter " .. filter .. " (after /reload)", err)
+                if key ~= "main" then show = false end
+            end
+        end
+        if self.cands[key] ~= cand then
+            local ok = pcall(c.SetAuraGroupCandidateFilters, c, key, cand)
+            if not ok and cand == nil then ok = pcall(c.SetAuraGroupCandidateFilters, c, key, {}) end
+            if ok then self.cands[key] = cand end
+        end
+        SetCap(c, key, show and cap or 0)
     end
     self:Resize()
     c:Show()
@@ -277,6 +560,10 @@ function Row:Icon(i)
     end
     local cfg = self.cfg
     b:SetSize(cfg.size, cfg.size)
+    if b.d.border ~= BorderSize(cfg) then
+        Inset(b.d, BorderSize(cfg))
+        b.d.border = BorderSize(cfg)
+    end
     ns.ApplyFont(b.d.count, "GLOBAL", cfg.countSize or 9, "OUTLINE")
     b.d.cd:SetDrawSwipe(cfg.timer ~= false)
     StyleTimer(b.d.cd, cfg)
@@ -300,6 +587,23 @@ function Row:LayoutHolder()
     h:ClearAllPoints()
     h:SetPoint(cfg.point[1], cfg.point[2], cfg.point[3], cfg.point[4], cfg.point[5])
     h:SetSize(math.max(1, cfg.perRow * (cfg.size + cfg.gap)), math.max(1, cfg.rows * (cfg.size + cfg.gap)))
+    if cfg.level then self:SetLevel(cfg.level) end
+end
+
+-- the holder as big as the n icons it shows: a centred row stays centred
+function Row:FitHolder(n)
+    local cfg = self.cfg
+    if n < 1 then return end
+    local cols = math.min(n, cfg.perRow)
+    local lines = math.ceil(n / cfg.perRow)
+    self.holder:SetSize(cols * cfg.size + (cols - 1) * cfg.gap, lines * cfg.size + (lines - 1) * cfg.gap)
+end
+
+-- above the frame's bars and texts: icons inside the frame stay visible
+function Row:SetLevel(level)
+    self.level = level
+    self.holder:SetFrameLevel(level)
+    if self.c then pcall(self.c.SetFrameLevel, self.c, level) end
 end
 
 function Row:Scan()
@@ -308,16 +612,41 @@ function Row:Scan()
     local unit = self.unit
     if cfg and cfg.enabled and unit and not self.c and C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
         and ns.Bool(UnitExists(unit)) then
-        local filter = Filter(cfg.kind, cfg.mine)
+        local g = A.Groups(cfg)
         local max = cfg.perRow * cfg.rows
-        for i = 1, 40 do
+        local seen = {}
+        local sated = cfg.kind == "HARMFUL" and cfg.hideSated
+        local team = cfg.kind == "HARMFUL" and cfg.filter == "TEAM"
+        if team and not teamCand then ReadTeam() end
+        local ring = WantDispel(cfg)
+        for _, key in ipairs(A.SLOTS) do
+          local filter = g[key]
+          for i = 1, filter and 40 or 0 do
             if n >= max then break end
             local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, filter)
             if not ok then self:Fail("reading " .. unit .. " " .. filter, a) break end
             if type(a) ~= "table" then break end
+            local id, sid = a.auraInstanceID, a.spellId
+            if ns.IsSecret(id) then id = nil end
+            local skip = (id and seen[id]) or (sated and not ns.IsSecret(sid) and SATED[sid])
+            if not skip and team and key ~= "lead" then
+                local dn = a.dispelName
+                if ns.IsSecret(dn) then dn = nil end
+                skip = not (dn and teamTypes[dn])
+            end
+            if not skip then
+            if id then seen[id] = true end
             n = n + 1
             local b = self:Icon(n)
             self:Place(b, n)
+            local dn = ring and a.dispelName
+            local col = dn and not ns.IsSecret(dn) and DISPEL_COLORS[dn]
+            if col then
+                b.d.ring:SetColorTexture(col[1], col[2], col[3], 1)
+                b.d.ring:Show()
+            else
+                b.d.ring:Hide()
+            end
             pcall(b.d.icon.SetTexture, b.d.icon, a.icon)
             local cnt = a.applications
             if ns.IsSecret(cnt) or type(cnt) ~= "number" or cnt < 2 then b.d.count:SetText("")
@@ -331,8 +660,11 @@ function Row:Scan()
                 b.d.cd:Hide()
             end
             b:Show()
+            end
+          end
         end
     end
+    self:FitHolder(n)
     for i = n + 1, #self.icons do self.icons[i]:Hide() end
 end
 
@@ -357,6 +689,7 @@ function Row:Configure(cfg)
         end
     end
     if self.c then
+        if self.level then pcall(self.c.SetFrameLevel, self.c, self.level) end
         for _, b in ipairs(self.icons) do b:Hide() end
         self.ev:UnregisterAllEvents()
         local ok, err = pcall(self.ApplyEngine, self)
@@ -406,6 +739,7 @@ end
 
 -- unlock mode: sample icons, nothing read from the game
 local SAMPLE = { 136118, 135812, 136207, 132090, 136197, 135848, 132316, 136139 }
+local SAMPLE_TYPES = { "Magic", "Curse", "None", "Poison", "Disease" }
 function Row:Preview(cfg, n)
     self.cfg = cfg
     self.preview = true
@@ -419,8 +753,16 @@ function Row:Preview(cfg, n)
         b.d.icon:SetTexture(SAMPLE[(i - 1) % #SAMPLE + 1])
         b.d.count:SetText(i == 2 and "3" or "")
         b.d.cd:Hide()
+        local col = WantDispel(cfg) and DISPEL_COLORS[SAMPLE_TYPES[(i - 1) % #SAMPLE_TYPES + 1]]
+        if col then
+            b.d.ring:SetColorTexture(col[1], col[2], col[3], 1)
+            b.d.ring:Show()
+        else
+            b.d.ring:Hide()
+        end
         b:Show()
     end
+    self:FitHolder(n)
     for i = n + 1, #self.icons do self.icons[i]:Hide() end
 end
 
@@ -445,6 +787,36 @@ local function RetryResize()
     end
 end
 ns.On("PLAYER_REGEN_ENABLED", RetryResize)
+
+-- the group changed: rows on "Ones my group can dispel" take the new types
+local retrying = false
+local function TeamChanged()
+    local changed = ReadTeam()
+    InspectNext()
+    -- members out of range: try again in a while
+    if #unknownSpec > 0 and not retrying then
+        retrying = true
+        C_Timer.After(10, function() retrying = false TeamChanged() end)
+    end
+    if not changed then return end
+    ns.Log("auras", "group can dispel: %s", teamKey ~= "" and teamKey or "nothing")
+    for _, r in ipairs(rows) do
+        local cfg = r.cfg
+        if cfg and cfg.enabled and cfg.filter == "TEAM" and cfg.kind == "HARMFUL" and not r.preview then
+            if r.c then
+                local ok, err = pcall(r.ApplyEngine, r)
+                if not ok then r:Fail("group dispels", err) end
+            else
+                r:Scan()
+            end
+        end
+    end
+end
+for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_SPECIALIZATION_CHANGED",
+                     "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }) do
+    pcall(ns.On, e, TeamChanged)
+end
+pcall(ns.On, "INSPECT_READY", function() inspectBusy = false TeamChanged() end)
 ns.On("ZONE_CHANGED_NEW_AREA", RetryResize)
 
 ---------------------------------------------------------------------------
