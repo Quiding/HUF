@@ -504,6 +504,9 @@ local function BuildDefaults()
             font = "GLOBAL", countSize = 12,
             tooltipCounts = true, openWithBank = true,
             sortButton = true,
+            -- the reagent bag: own slot colour, optionally beside the window
+            reagentTint = true, reagentColor = C(0.06, 0.20, 0.12),
+            reagentSeparate = false, reagentSide = "LEFT", reagentCols = 4,
         },
         -- chat window: look, short channel names, links, history, buttons
         chat = {

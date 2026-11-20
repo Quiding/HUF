@@ -59,6 +59,13 @@ local function BankIDs()
     return out
 end
 
+-- the keyring (classic bag id -2), if the client has one
+local function KeyringID()
+    local BI = Enum and Enum.BagIndex
+    return (BI and BI.Keyring) or KEYRING_CONTAINER
+end
+Bags.KeyringID = KeyringID
+
 local function NumSlots(bag)
     if not C_Container then return 0 end
     local ok, n = pcall(C_Container.GetContainerNumSlots, bag)
@@ -87,11 +94,22 @@ local function Me()
     return st[k]
 end
 
+-- the reagent bag (Forever's own bag slot) or any bag that only takes some items
+-- (a bag family other than 0)
+local function IsReagentBag(bag)
+    local BI = Enum and Enum.BagIndex
+    if BI and BI.ReagentBag and bag == BI.ReagentBag then return true end
+    if bag == 0 or not (C_Container and C_Container.GetContainerNumFreeSlots) then return false end
+    local ok, _, family = pcall(C_Container.GetContainerNumFreeSlots, bag)
+    return ok and type(family) == "number" and family ~= 0 or false
+end
+Bags.IsReagentBag = IsReagentBag
+
 local function ReadContainers(ids)
     local out = {}
     for _, bag in ipairs(ids) do
         local n = NumSlots(bag)
-        local b = { bag = bag, size = n, items = {} }
+        local b = { bag = bag, size = n, items = {}, reagent = IsReagentBag(bag) or nil }
         for slot = 1, n do
             local info = ItemInfo(bag, slot)
             if info and info.hyperlink and not IsSecret(info.hyperlink) then
@@ -109,6 +127,8 @@ function Bags.SnapshotBags()
     me.class = class
     me.money = GetMoney and GetMoney() or 0
     me.bags = ReadContainers(BagIDs())
+    local kr = KeyringID()
+    if kr and NumSlots(kr) > 0 then me.keys = ReadContainers({ kr }) end
     me.time = time()
 end
 
@@ -235,13 +255,19 @@ local function Matches(link)
     return name and name:lower():find(q, 1, true) ~= nil
 end
 
-local function SkinSlot(b, s)
+local function SkinSlot(b, s, reagent)
     if not b.hufBg then
         b.hufBg = b:CreateTexture(nil, "BACKGROUND", nil, -7)
         b.hufBg:SetAllPoints()
         b.hufEdge = ns.UI.Border(b, 0.15, 0.15, 0.17, 1)
     end
-    b.hufBg:SetColorTexture(0.02, 0.02, 0.03, 0.85)
+    b.hufReagent = reagent and s.reagentTint or nil
+    if b.hufReagent then
+        local c = s.reagentColor
+        b.hufBg:SetColorTexture(c.r, c.g, c.b, 0.9)
+    else
+        b.hufBg:SetColorTexture(0.02, 0.02, 0.03, 0.85)
+    end
     b:SetSize(s.size, s.size)
     local icon = T(b.icon) or T(b.Icon)
     if icon then
@@ -309,17 +335,19 @@ function Bags.WarmPool()
     if not frame or InCombatLockdown() then return end
     local need = 0
     for _, bag in ipairs(BagIDs()) do need = need + NumSlots(bag) end
+    local kr = KeyringID()
+    if kr then need = math.max(need, NumSlots(kr)) end
     for _ = #live + 1, need + 4 do NewLive() end
 end
 
-local function Place(b, i, s, cols)
+local function Place(b, i, s, cols, grid)
     local col = (i - 1) % cols
     local row = math.floor((i - 1) / cols)
     local x = s.padding + col * (s.size + s.spacing)
     local y = -(row * (s.size + s.spacing))
     local target = b.hufParent or b
     target:ClearAllPoints()
-    target:SetPoint("TOPLEFT", frame.grid, "TOPLEFT", x, y)
+    target:SetPoint("TOPLEFT", grid or frame.grid, "TOPLEFT", x, y)
     target:SetSize(s.size, s.size)
 end
 
@@ -400,6 +428,7 @@ Bags.MoneyTooltip = MoneyTooltip
 
 -- the game's own sort (server side, the one Blizzard's bag button uses)
 local function SortFn()
+    if Bags.view == "KEYS" then return nil end
     local CC = C_Container
     if Bags.view == "BANK" then
         if not (bankOpen and (Bags.char == nil or Bags.char == ns.CharKey())) then return nil end
@@ -427,56 +456,75 @@ function Bags.Refresh()
     for _, b in ipairs(live) do b.hufParent:Hide() end
     for _, b in ipairs(shows) do b:Hide() end
     local mine = Bags.char == nil or Bags.char == ns.CharKey()
-    local n, free, total = 0, 0, 0
-    if mine and Bags.view == "BAGS" then
-        -- live: the game's buttons
-        for _, bag in ipairs(BagIDs()) do
+    local sep = s.reagentSeparate
+    -- every slot to show: { bag, slot, it (snapshot) / live, reagent }
+    local main, rea = {}, {}
+    local cnt = { main = { 0, 0 }, rea = { 0, 0 } }     -- used, all
+    local function Add(e, used)
+        local c = (e.reagent and sep) and cnt.rea or cnt.main
+        c[2] = c[2] + 1
+        if used then c[1] = c[1] + 1 end
+        if used or s.showEmpty then
+            local l = (e.reagent and sep) and rea or main
+            l[#l + 1] = e
+        end
+    end
+    local keys = Bags.view == "KEYS"
+    local isLive = mine and (Bags.view == "BAGS" or (keys and KeyringID() ~= nil and NumSlots(KeyringID()) > 0))
+    if isLive then
+        for _, bag in ipairs(keys and { KeyringID() } or BagIDs()) do
+            local r = IsReagentBag(bag)
             for slot = 1, NumSlots(bag) do
-                total = total + 1
-                local info = ItemInfo(bag, slot)
-                if not info then free = free + 1 end
-                if info or s.showEmpty then
-                    n = n + 1
-                    local b = live[n] or NewLive()
-                    if not b then frame.short = true break end
-                    SkinSlot(b, s)
-                    Place(b, n, s, cols)
-                    UpdateLive(b, bag, slot, s)
-                end
+                Add({ bag = bag, slot = slot, reagent = r }, ItemInfo(bag, slot) ~= nil)
             end
         end
         frame.money:SetText(Money(GetMoney and GetMoney() or 0))
+        frame.empty:Hide()
     else
         local d = Store()[Bags.char or ns.CharKey()] or {}
         local list
-        if Bags.view == "BANK" then list = d.bank else list = d.bags end
+        if Bags.view == "BANK" then list = d.bank elseif keys then list = d.keys else list = d.bags end
+        local RB = Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag
         if not HasSlots(list) then
-            list = nil
-            frame.empty:SetText(Bags.view == "BANK" and "No bank data yet: visit a banker with this character." or "Nothing saved for this character yet.")
+            frame.empty:SetText(Bags.view == "BANK" and "No bank data yet: visit a banker with this character."
+                or keys and "No keyring saved for this character yet." or "Nothing saved for this character yet.")
             frame.empty:Show()
         else
             frame.empty:Hide()
             for _, bag in ipairs(list) do
+                local r = bag.reagent or (Bags.view == "BAGS" and RB ~= nil and bag.bag == RB) or false
                 for slot = 1, bag.size or 0 do
-                    total = total + 1
                     local it = bag.items and bag.items[slot]
-                    if not it then free = free + 1 end
-                    if it or s.showEmpty then
-                        n = n + 1
-                        local b = shows[n] or NewShow()
-                        SkinSlot(b, s)
-                        Place(b, n, s, cols)
-                        UpdateShow(b, it, s)
-                    end
+                    Add({ it = it, reagent = r }, it ~= nil)
                 end
             end
         end
         frame.money:SetText(Money(d.money))
     end
-    if mine and Bags.view == "BAGS" then frame.empty:Hide() end
-    frame.free:SetText(("%d / %d"):format(total - free, total))
+    -- draw
+    local n = 0
+    local function Draw(list, grid, c)
+        for i, e in ipairs(list) do
+            if isLive then
+                n = n + 1
+                local b = live[n] or NewLive()
+                if not b then frame.short = true return end
+                SkinSlot(b, s, e.reagent)
+                Place(b, i, s, c, grid)
+                UpdateLive(b, e.bag, e.slot, s)
+            else
+                n = n + 1
+                local b = shows[n] or NewShow()
+                SkinSlot(b, s, e.reagent)
+                Place(b, i, s, c, grid)
+                UpdateShow(b, e.it, s)
+            end
+        end
+    end
+    Draw(main, frame.grid, cols)
+    frame.free:SetText(("%d / %d"):format(cnt.main[1], cnt.main[2]))
     -- size
-    local rows = math.max(1, math.ceil(n / cols))
+    local rows = math.max(1, math.ceil(#main / cols))
     local w = s.padding * 2 + cols * s.size + (cols - 1) * s.spacing
     local gridH = rows * s.size + (rows - 1) * s.spacing
     local searchH = frame.searchBox:IsShown() and SEARCH_H or 0
@@ -484,6 +532,27 @@ function Bags.Refresh()
     frame.grid:SetPoint("TOPLEFT", 0, -(HEADER_H + searchH))
     frame.grid:SetSize(w, gridH)
     frame:SetSize(math.max(w, 260), HEADER_H + searchH + gridH + s.padding + FOOTER_H)
+    -- the reagent bag beside the window
+    local rp = frame.reagent
+    if sep and cnt.rea[2] > 0 then
+        local rc = math.max(1, s.reagentCols)
+        Draw(rea, rp.grid, rc)
+        local rrows = math.max(1, math.ceil(#rea / rc))
+        local rw = s.padding * 2 + rc * s.size + (rc - 1) * s.spacing
+        local rh = rrows * s.size + (rrows - 1) * s.spacing
+        rp.grid:SetSize(rw, rh)
+        rp:SetSize(math.max(rw, 90), HEADER_H + rh + s.padding + FOOTER_H)
+        rp:ClearAllPoints()
+        if s.reagentSide == "RIGHT" then
+            rp:SetPoint("TOPLEFT", frame, "TOPRIGHT", 4, 0)
+        else
+            rp:SetPoint("TOPRIGHT", frame, "TOPLEFT", -4, 0)
+        end
+        rp.free:SetText(("%d / %d"):format(cnt.rea[1], cnt.rea[2]))
+        rp:Show()
+    else
+        rp:Hide()
+    end
     Bags.UpdateHeader()
 end
 
@@ -491,7 +560,7 @@ end
 function Bags.UpdateHeader()
     local key = Bags.char or ns.CharKey()
     frame.charText:SetText(CharLabel(key))
-    frame.viewText:SetText(Bags.view == "BANK" and "Bank" or "Bags")
+    frame.viewText:SetText(Bags.view == "BANK" and "Bank" or Bags.view == "KEYS" and "Keyring" or "Bags")
     if frame.sortButton then
         frame.sortButton:SetShown(S().sortButton ~= false)
         local can = SortFn() ~= nil
@@ -506,6 +575,10 @@ local function Look()
     frame.bg:SetColorTexture(s.bgColor.r, s.bgColor.g, s.bgColor.b, s.bgAlpha)
     local c = s.borderAccent and { r = A[1], g = A[2], b = A[3] } or s.borderColor
     frame.edge:SetColor(c.r, c.g, c.b, s.borderSize > 0 and 1 or 0)
+    if frame.reagent then
+        frame.reagent.bg:SetColorTexture(s.bgColor.r, s.bgColor.g, s.bgColor.b, s.bgAlpha)
+        frame.reagent.edge:SetColor(c.r, c.g, c.b, s.borderSize > 0 and 1 or 0)
+    end
     frame:ClearAllPoints()
     frame:SetPoint(s.point[1], UIParent, s.point[2], s.point[3], s.point[4])
 end
@@ -584,8 +657,12 @@ local function Build()
     end)
     frame.charDD:SetPoint("LEFT", head, "LEFT", 6, 0)
     frame.charText = frame.charDD.text
-    frame.viewDD = Dropdown(head, 64, function() return Bags.view end, function()
-        return { { value = "BAGS", text = "Bags" }, { value = "BANK", text = "Bank" } }
+    frame.viewDD = Dropdown(head, 72, function() return Bags.view end, function()
+        local l = { { value = "BAGS", text = "Bags" }, { value = "BANK", text = "Bank" } }
+        local kr = KeyringID()
+        local d = Store()[Bags.char or ns.CharKey()]
+        if kr and (NumSlots(kr) > 0 or (d and d.keys)) then l[#l + 1] = { value = "KEYS", text = "Keyring" } end
+        return l
     end, function(v) Bags.view = v Bags.Refresh() end)
     frame.viewDD:SetPoint("LEFT", frame.charDD, "RIGHT", 4, 0)
     frame.viewText = frame.viewDD.text
@@ -649,7 +726,7 @@ local function Build()
     so:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(Bags.view == "BANK" and "Sort the bank" or "Sort the bags")
-        if not SortFn() then GameTooltip:AddLine(Bags.view == "BANK" and "Only while you're at the bank." or "Only your own bags.", 0.7, 0.7, 0.7) end
+        if not SortFn() then GameTooltip:AddLine(Bags.view == "BANK" and "Only while you're at the bank." or Bags.view == "KEYS" and "Not the keyring." or "Only your own bags.", 0.7, 0.7, 0.7) end
         GameTooltip:Show()
     end)
     so:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -672,6 +749,22 @@ local function Build()
     frame.moneyHover = mh
     frame.free = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.free:SetPoint("BOTTOMLEFT", 8, 5)
+
+    -- the reagent bag on its own, beside the window (option)
+    local rp = CreateFrame("Frame", nil, frame)
+    rp:EnableMouse(true)
+    rp:Hide()
+    rp.bg = rp:CreateTexture(nil, "BACKGROUND", nil, -8)
+    rp.bg:SetAllPoints()
+    rp.edge = ns.UI.Border(rp, A[1], A[2], A[3], 1)
+    rp.title = rp:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    rp.title:SetPoint("TOPLEFT", 8, -7)
+    rp.title:SetText("Reagents")
+    rp.grid = CreateFrame("Frame", nil, rp)
+    rp.grid:SetPoint("TOPLEFT", 0, -HEADER_H)
+    rp.free = rp:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    rp.free:SetPoint("BOTTOMLEFT", 8, 5)
+    frame.reagent = rp
     Look()
 end
 
@@ -758,9 +851,13 @@ function Bags.Report(add)
     local n = 0
     for _ in pairs(Store()) do n = n + 1 end
     local me = Store()[ns.CharKey()] or {}
-    add(("bags: enabled=%s oneBag=%s pool=%d characters=%d bank seen=%s view=%s bags=%s bank=%s"):format(
+    local kr = KeyringID()
+    local rb = {}
+    for _, b in ipairs(BagIDs()) do if IsReagentBag(b) then rb[#rb + 1] = b end end
+    add(("bags: enabled=%s oneBag=%s pool=%d characters=%d bank seen=%s view=%s bags=%s bank=%s keyring=%s (%d slots) reagent bags=%s separate=%s"):format(
         tostring(s.enabled), tostring(s.oneBag), #live, n, tostring(me.bank ~= nil), Bags.view,
-        table.concat(BagIDs(), ","), table.concat(BankIDs(), ",")))
+        table.concat(BagIDs(), ","), table.concat(BankIDs(), ","), tostring(kr), kr and NumSlots(kr) or 0,
+        table.concat(rb, ","), tostring(s.reagentSeparate)))
 end
 
 ---------------------------------------------------------------------------
