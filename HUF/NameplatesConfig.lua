@@ -133,6 +133,8 @@ local function NamePage(f)
     R:Header("Extras")
     local gl, sl = Opt("showLevel")
     R:Check("Show the level", gl, sl, "Level and classification before the name (\"55E Northshire Guard\"), in difficulty colour.")
+    local ga, sa = Opt("levelAlways")
+    R:Check("Also when the game hides it", ga, sa, "The game hides some mobs' levels from addons (often all but your target). On: the level read earlier for that mob, else the hidden one as it is, without colour.")
     local gh, sh = Opt("showHealth")
     R:Check("Health on the bar", gh, sh)
     R:Cycle("Health text", {

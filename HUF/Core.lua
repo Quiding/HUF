@@ -642,6 +642,7 @@ local function BuildDefaults()
             friendlyLevel = "SAME",     -- SAME | SHOW | HIDE
             friendlyNameColor = "SAME", -- SAME | REACTION (class for players) | WHITE
             showLevel = true,           -- "55E" before the name, in difficulty colour
+            levelAlways = false,        -- also when the game hides the level (earlier value, else uncoloured)
             showHealth = false,         -- health % at the right end of the bar
             healthTag = "[hp%]",        -- [hp%] | [hp%:nosign] | [hp]
             healthSize = 0,             -- 0: the name's size - 2

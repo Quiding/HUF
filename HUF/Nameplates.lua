@@ -327,6 +327,7 @@ local function UpdateHealth(p)
     else h:SetStatusBarColor(c.r, c.g, c.b) end
 end
 
+local LEVEL_CLASS = { elite = "E", rareelite = "RE", rare = "R", worldboss = "B" }
 local function UpdateName(p)
     local s = S()
     local unit = p.unit
@@ -340,8 +341,22 @@ local function UpdateName(p)
         -- level + classification ("55E") in difficulty colour, then the name
         ns.SetTemplateText(p.name, holder, "[levelclass:color]")
         local okL, lvl = pcall(p.name.GetText, p.name)
+        local sep = s.levelSep or " "
         if okL and lvl ~= nil and not IsSecret(lvl) and lvl ~= "" then
-            pcall(p.name.SetFormattedText, p.name, "%s%s%s", lvl, s.levelSep or " ", name)
+            p.levelText = lvl       -- kept while this unit is on the plate
+            pcall(p.name.SetFormattedText, p.name, "%s%s%s", lvl, sep, name)
+        elseif s.levelAlways and p.levelText then
+            -- the game hides the level now: the one read earlier, in colour
+            pcall(p.name.SetFormattedText, p.name, "%s%s%s", p.levelText, sep, name)
+        elseif s.levelAlways then
+            -- hidden since the plate came: the game's value as it is (it
+            -- can't be coloured or checked), the classification after it
+            local ok, level = pcall(UnitLevel, unit)
+            local okC, cl = pcall(UnitClassification, unit)
+            cl = (okC and not IsSecret(cl) and LEVEL_CLASS[cl]) or ""
+            if not (ok and level ~= nil and pcall(p.name.SetFormattedText, p.name, "%s%s%s%s", level, cl, sep, name)) then
+                pcall(p.name.SetText, p.name, name)
+            end
         else
             pcall(p.name.SetText, p.name, name)
         end
@@ -656,6 +671,7 @@ local function Attach(unit)
     NP.plates[unit] = p
     p.unit = unit
     p.hunit = unit              -- for the text templates
+    p.levelText = nil
     p.nameplate = nameplate
     p:SetParent(nameplate)
     p:SetFrameLevel(nameplate:GetFrameLevel() + 2)
@@ -682,7 +698,7 @@ local function Detach(unit)
     p:SetParent(nil)
     if NP.QuestieRelease then NP.QuestieRelease(p.nameplate) end
     if p.nameplate and p.nameplate.UnitFrame then owned[p.nameplate.UnitFrame] = nil end
-    p.unit, p.hunit, p.nameplate = nil, nil, nil
+    p.unit, p.hunit, p.nameplate, p.levelText = nil, nil, nil, nil
     pool[#pool + 1] = p
 end
 
