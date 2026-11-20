@@ -506,7 +506,7 @@ local function BuildDefaults()
             sortButton = true,
             -- the reagent bag: own slot colour, optionally beside the window
             reagentTint = true, reagentColor = C(0.06, 0.20, 0.12),
-            reagentSeparate = false, reagentSide = "LEFT", reagentCols = 4,
+            reagentSeparate = true, reagentSide = "LEFT", reagentCols = 4,
         },
         -- chat window: look, short channel names, links, history, buttons
         chat = {
@@ -1088,6 +1088,13 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 17
+    end
+    -- 0.5.4: the reagent bag beside the bags by default
+    if HUFDB.dataVersion < 18 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            if type(prof.bags) == "table" and prof.bags.reagentSeparate == false then prof.bags.reagentSeparate = true end
+        end
+        HUFDB.dataVersion = 18
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}
