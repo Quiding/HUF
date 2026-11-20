@@ -273,9 +273,14 @@ local function Layout(p)
             t:SetAllPoints()
             p.bounds[np] = sb
         end
-        sb:ClearAllPoints()
-        sb:SetPoint("CENTER", np, "CENTER", 0, s.yOffset)
+        -- from the bar's bottom up to the top of the name and the icon row,
+        -- so a plate's icons don't sit on the plate above
         local sh = s.height + ((showName and not inside) and (s.fontSize + s.nameGap) or 0)
+        if s.showDebuffs or s.showBuffs then
+            sh = sh + bs + s.auraGap + s.auraSize * (s.auraRows or 1)
+        end
+        sb:ClearAllPoints()
+        sb:SetPoint("BOTTOM", np, "CENTER", 0, s.yOffset - s.height / 2)
         sb:SetSize(s.width, math.max(1, sh * (s.stackSpacing or 100) / 100))
         sb:Show()
         pcall(np.SetStackingBoundsFrame, np, sb)
