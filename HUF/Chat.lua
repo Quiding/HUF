@@ -653,6 +653,27 @@ function Chat.ApplyClassColors(on)
     for i = 1, 20 do pcall(fn, "CHANNEL" .. i, on) end
 end
 
+-- the game's empty button column beside each window and its Social (quick join)
+-- button: ALPHA and mouse only, never SetParent / Hide (EllesmereUI's rule: the dock
+-- code moves the column and reads the window's fields, a changed parent taints it).
+-- The column's own fades still change its alpha, so its art is emptied too.
+local function HideStock(cf)
+    local name = cf.GetName and cf:GetName()
+    local col = name and _G[name .. "ButtonFrame"]
+    if col and not col.hufEmptied then
+        col.hufEmptied = true
+        col:SetAlpha(0)
+        col:EnableMouse(false)
+        for _, r in ipairs({ col:GetRegions() }) do
+            if r.IsObjectType and r:IsObjectType("Texture") then r:SetTexture("") end
+        end
+    end
+end
+local function HideSocial()
+    local q = _G.QuickJoinToastButton
+    if q then q:SetAlpha(0) q:EnableMouse(false) end
+end
+
 ---------------------------------------------------------------------------
 -- Apply
 ---------------------------------------------------------------------------
@@ -664,9 +685,11 @@ function Chat.Apply(full)
         if s.enabled then
             ApplyLook(cf)
             if full then ApplyBackground(cf) end
+            if s.hideStock then pcall(HideStock, cf) end
         end
         pcall(PlaceInput, cf)
     end
+    if s.enabled and s.hideStock then pcall(HideSocial) end
     LayoutBar()
 end
 

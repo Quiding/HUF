@@ -521,7 +521,7 @@ local function BuildDefaults()
             history = true, historyLines = 2000,
             buttons = { copy = true, guild = true, social = false, channels = true, chatmenu = true },
             buttonSide = "RIGHT", buttonX = 8, buttonY = 0,
-            fade = true, fadeAlpha = 0.4, fadeDelay = 5,     -- the buttons fade while the mouse is elsewhere
+            fade = true, fadeAlpha = 0.4, fadeDelay = 5, hideStock = true,     -- the buttons fade while the mouse is elsewhere
             inputPos = "BELOW", inputOffset = 0,              -- the input line: BELOW | ABOVE the chat
         },
         -- buff and debuff bars (HUF's instead of Blizzard's at the top right)
