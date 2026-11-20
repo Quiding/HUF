@@ -397,7 +397,7 @@ local function BuildDefaults()
     pet.buffs.enabled = false
     pet.healPred.enabled = false
     -- hunter pet happiness on the right side of the health bar
-    pet.happiness = { enabled = true, mode = "ICON", size = 14, x = -2, y = 0 }
+    pet.happiness = { enabled = true, mode = "ICON", size = 20, x = -2, y = 0 }
     u.pet = pet
 
     -- Group (party): 200 x 25, health 18 + power 7, class colours; missing
@@ -1095,6 +1095,14 @@ ns.On("ADDON_LOADED", function(name)
             if type(prof.bags) == "table" and prof.bags.reagentSeparate == false then prof.bags.reagentSeparate = true end
         end
         HUFDB.dataVersion = 18
+    end
+    -- 0.5.5: bigger pet happiness icon
+    if HUFDB.dataVersion < 19 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local h = prof.units and prof.units.pet and prof.units.pet.happiness
+            if type(h) == "table" and h.size == 14 then h.size = 20 end
+        end
+        HUFDB.dataVersion = 19
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

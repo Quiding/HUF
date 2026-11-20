@@ -766,8 +766,11 @@ local function Build()
     so:SetSize(18, 18)
     so:SetPoint("RIGHT", sb, "LEFT", -4, 0)
     so.icon = so:CreateTexture(nil, "ARTWORK")
-    so.icon:SetAllPoints()
-    if not (so.icon.SetAtlas and pcall(so.icon.SetAtlas, so.icon, "bags-button-autosort-up")) then
+    so.icon:SetPoint("CENTER")
+    if so.icon.SetAtlas and pcall(so.icon.SetAtlas, so.icon, "bags-button-autosort-up") then
+        so.icon:SetSize(28, 28)          -- the atlas has a wide empty edge: as big as the search icon
+    else
+        so.icon:SetSize(18, 18)
         so.icon:SetTexture("Interface\\Icons\\INV_Pet_Broom")
         so.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     end
