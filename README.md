@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.9.
+Version 0.5.10.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -25,7 +25,9 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   and pet frames can show the same cast bar (off by default).
 - **Nameplates**: name only / name + bar / bar only (friendly units separately), level, elite /
   rare star, quest progress ("2/10") left of the bar, threat (your % in threat colours and / or a
-  glow when the mob is about to switch to you), cast bar ("Interrupted!" for a moment when
+  glow when the mob is about to switch to you, or threat colours on the bar for tanks and
+  damage / healers), the level even when the game hides it (in the game's difficulty colour),
+  cast bar ("Interrupted!" for a moment when
   someone interrupts the cast), your debuffs and buffs with time
   left as numbers. Name above or inside the bar, own NPC colours, darker out of combat. Questie's
   quest icon is moved next to HUF's quest progress.
@@ -39,7 +41,7 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   HUF then recognises you, unique classes and members it learned by class + specialisation, else
   shows the class name until the fight ends; never a hidden real name. Click a row for its
   breakdown (spells, amounts, share; hover a spell for details) inside the window (or in a panel
-  beside it). Up to 5 windows, each with its own list,
+  beside it); hover a name for its top spells (optional). Up to 5 windows, each with its own list,
   fight and place (e.g. damage and threat side by side; + opens one, x closes it). Optionally dimmed
   out of combat (full under the mouse) and threat windows hidden out of combat. `/huf meter` toggles it.
 - **Minimap**: square or round, any size and scale, moved in unlock mode. A border (accent colour
@@ -54,7 +56,9 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   Blizzard after /reload.
 - **Data bars**: the minimap data bar, a strip as wide as the map under (or over) it with friends
   and guild members online (click: friends list / guild window); icon colour, size and place
-  configurable (Frames > Minimap > Data bar).
+  configurable (Frames > Minimap > Data bar). Free data bars anywhere (Frames > Data bars), each
+  with its own place, size, look and blocks: FPS, latency, clock, gold, audio, durability,
+  combat, friends, guild.
 - **Chat**: font, size, outline, window background and opacity; short channel names at the start of
   a line ([1], [2], [S], [Y], [P], [PL], [G], [GO], [R], [RL], [RW], [W], [I], each editable);
   names in class colours; web addresses as links (click: copy box); tooltips over item / spell /
@@ -80,8 +84,11 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   Drawn by the game's own aura containers (like EllesmereUI's), so right-click cancels a buff also
   in combat. Moved in unlock mode.
 - **Buffs and debuffs** on every frame, drawn by the game's own aura containers (so they also work
-  where addons may not read auras: party, nameplates, combat). Optionally hides Blizzard's buff
-  and debuff icons.
+  where addons may not read auras: party, nameplates, combat), on their own Debuffs and Buffs
+  tabs: filters (all, important, ones I can dispel, ones my group can dispel, crowd control;
+  defensives, cancelable), crowd control first, hide Sated / Exhaustion, 9 places inside the frame
+  or above / below, debuff edges in their type colour. Optionally hides Blizzard's buff and debuff
+  icons.
 - Blizzard's player, target, target of target, pet and party frames are hidden while HUF's are on,
   and Blizzard's raid / party manager on the left edge (General: can be shown again).
 
@@ -120,7 +127,8 @@ setting, plus the character's click-cast bindings, the game's chat settings and 
 damage number settings (not the kept chat lines).
 With EllesmereUI installed: **Import from EllesmereUI** (its current settings or a `!EUI_` string)
 brings over the look of its player, target, target of target, pet and group frames, nameplates
-(including their stacking), the minimap and its data bar.
+(including their stacking and threat colours), party debuffs, the minimap, its data bars and the
+damage meter's hover setting.
 
 ## For addon authors
 `_G.HUF`: `HUF.API_VERSION` (1), `HUF.RegisterNameProvider(id, fn)` (`fn(unit, first, last)`
