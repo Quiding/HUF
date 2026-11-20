@@ -51,7 +51,12 @@ local function BankIDs()
         local first = (NUM_BAG_SLOTS or 4) + 1
         for b = first, first + (NUM_BANKBAGSLOTS or 7) - 1 do l[#l + 1] = b end
     end
-    return l
+    -- never one of the bags (a client whose bank ids overlap the bag ids)
+    local bags = {}
+    for _, b in ipairs(BagIDs()) do bags[b] = true end
+    local out = {}
+    for _, b in ipairs(l) do if not bags[b] then out[#out + 1] = b end end
+    return out
 end
 
 local function NumSlots(bag)
@@ -107,9 +112,18 @@ function Bags.SnapshotBags()
     me.time = time()
 end
 
+-- holds anything: at least one slot
+local function HasSlots(list)
+    if type(list) ~= "table" then return false end
+    for _, b in ipairs(list) do if (b.size or 0) > 0 then return true end end
+    return false
+end
+
 function Bags.SnapshotBank()
+    local list = ReadContainers(BankIDs())
+    if not HasSlots(list) then return end
     local me = Me()
-    me.bank = ReadContainers(BankIDs())
+    me.bank = list
     me.bankTime = time()
 end
 
@@ -343,10 +357,67 @@ local function UpdateShow(b, it, s)
     b:Show()
 end
 
+-- money with the coin icons ("12,345 [g] 6 [s] 7 [c]"); parts that are 0 left out
+local COIN = "|TInterface\\MoneyFrame\\UI-%sIcon:0:0:2:0|t"
 local function Money(copper)
-    copper = tonumber(copper) or 0
-    if GetCoinTextureString then return GetCoinTextureString(copper) end
-    return ("%dg %ds %dc"):format(math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100)
+    copper = math.floor(tonumber(copper) or 0)
+    local g, sv, c = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
+    local parts = {}
+    if g > 0 then parts[#parts + 1] = (BreakUpLargeNumbers and BreakUpLargeNumbers(g) or tostring(g)) .. COIN:format("Gold") end
+    if sv > 0 then parts[#parts + 1] = sv .. COIN:format("Silver") end
+    if c > 0 or #parts == 0 then parts[#parts + 1] = c .. COIN:format("Copper") end
+    return table.concat(parts, " ")
+end
+Bags.Money = Money
+
+-- tooltip over the money: every character's gold
+local function MoneyTooltip(owner)
+    local list, total = {}, 0
+    local me = ns.CharKey()
+    for key, d in pairs(Store()) do
+        local m = key == me and (GetMoney and GetMoney()) or d.money
+        m = tonumber(m)
+        if m then list[#list + 1] = { key = key, class = d.class, money = m, me = key == me } end
+    end
+    table.sort(list, function(a, b)
+        if a.me ~= b.me then return a.me end
+        return a.money > b.money
+    end)
+    GameTooltip:SetOwner(owner, "ANCHOR_TOPRIGHT")
+    GameTooltip:SetText("Gold")
+    for _, e in ipairs(list) do
+        local c = e.class and ns.ClassColor(e.class) or { r = 1, g = 1, b = 1 }
+        GameTooltip:AddDoubleLine(CharLabel(e.key), Money(e.money), c.r, c.g, c.b, 1, 1, 1)
+        total = total + e.money
+    end
+    if #list > 1 then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddDoubleLine("Total", Money(total), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+    GameTooltip:Show()
+end
+Bags.MoneyTooltip = MoneyTooltip
+
+-- the game's own sort (server side, the one Blizzard's bag button uses)
+local function SortFn()
+    local CC = C_Container
+    if Bags.view == "BANK" then
+        if not (bankOpen and (Bags.char == nil or Bags.char == ns.CharKey())) then return nil end
+        if CC and CC.SortBank and Enum and Enum.BankType and Enum.BankType.Character then
+            return function() CC.SortBank(Enum.BankType.Character) end
+        end
+        return (CC and CC.SortBankBags) or SortBankBags
+    end
+    if Bags.char ~= nil and Bags.char ~= ns.CharKey() then return nil end
+    return (CC and CC.SortBags) or SortBags
+end
+function Bags.Sort()
+    local fn = SortFn()
+    if not fn then return end
+    if InCombatLockdown() then ns.Print("Bags can't be sorted in combat.") return end
+    if PlaySound and SOUNDKIT and SOUNDKIT.UI_BAG_SORTING_01 then pcall(PlaySound, SOUNDKIT.UI_BAG_SORTING_01) end
+    local ok, err = pcall(fn)
+    if not ok then ns.Log("bags", "sort failed: %s", tostring(err)) end
 end
 
 function Bags.Refresh()
@@ -377,9 +448,11 @@ function Bags.Refresh()
         frame.money:SetText(Money(GetMoney and GetMoney() or 0))
     else
         local d = Store()[Bags.char or ns.CharKey()] or {}
-        local list = Bags.view == "BANK" and d.bank or d.bags
-        if not list then
-            frame.empty:SetText(Bags.view == "BANK" and "Bank not seen yet: visit a banker with this character." or "Nothing saved for this character yet.")
+        local list
+        if Bags.view == "BANK" then list = d.bank else list = d.bags end
+        if not HasSlots(list) then
+            list = nil
+            frame.empty:SetText(Bags.view == "BANK" and "No bank data yet: visit a banker with this character." or "Nothing saved for this character yet.")
             frame.empty:Show()
         else
             frame.empty:Hide()
@@ -410,7 +483,7 @@ function Bags.Refresh()
     frame.grid:ClearAllPoints()
     frame.grid:SetPoint("TOPLEFT", 0, -(HEADER_H + searchH))
     frame.grid:SetSize(w, gridH)
-    frame:SetSize(math.max(w, 220), HEADER_H + searchH + gridH + s.padding + FOOTER_H)
+    frame:SetSize(math.max(w, 260), HEADER_H + searchH + gridH + s.padding + FOOTER_H)
     Bags.UpdateHeader()
 end
 
@@ -419,6 +492,12 @@ function Bags.UpdateHeader()
     local key = Bags.char or ns.CharKey()
     frame.charText:SetText(CharLabel(key))
     frame.viewText:SetText(Bags.view == "BANK" and "Bank" or "Bags")
+    if frame.sortButton then
+        frame.sortButton:SetShown(S().sortButton ~= false)
+        local can = SortFn() ~= nil
+        frame.sortButton.icon:SetDesaturated(not can)
+        frame.sortButton:SetAlpha(can and 1 or 0.4)
+    end
 end
 
 local function Look()
@@ -556,6 +635,26 @@ local function Build()
     end)
     sb:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- sort: the game's own sort
+    local so = CreateFrame("Button", nil, head)
+    so:SetSize(18, 18)
+    so:SetPoint("RIGHT", sb, "LEFT", -4, 0)
+    so.icon = so:CreateTexture(nil, "ARTWORK")
+    so.icon:SetAllPoints()
+    if not (so.icon.SetAtlas and pcall(so.icon.SetAtlas, so.icon, "bags-button-autosort-up")) then
+        so.icon:SetTexture("Interface\\Icons\\INV_Pet_Broom")
+        so.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    end
+    so:SetScript("OnClick", function() Bags.Sort() end)
+    so:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(Bags.view == "BANK" and "Sort the bank" or "Sort the bags")
+        if not SortFn() then GameTooltip:AddLine(Bags.view == "BANK" and "Only while you're at the bank." or "Only your own bags.", 0.7, 0.7, 0.7) end
+        GameTooltip:Show()
+    end)
+    so:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    frame.sortButton = so
+
     frame.grid = CreateFrame("Frame", nil, frame)
     frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.empty:SetPoint("TOP", frame.grid, "TOP", 0, -10)
@@ -564,6 +663,13 @@ local function Build()
     -- footer: money and used / all slots
     frame.money = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.money:SetPoint("BOTTOMRIGHT", -8, 5)
+    local mh = CreateFrame("Frame", nil, frame)
+    mh:SetPoint("TOPLEFT", frame.money, "TOPLEFT", -2, 2)
+    mh:SetPoint("BOTTOMRIGHT", frame.money, "BOTTOMRIGHT", 2, -2)
+    mh:EnableMouse(true)
+    mh:SetScript("OnEnter", function(self) MoneyTooltip(self) end)
+    mh:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    frame.moneyHover = mh
     frame.free = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.free:SetPoint("BOTTOMLEFT", 8, 5)
     Look()
@@ -678,6 +784,7 @@ end)
 ns.On("BANKFRAME_CLOSED", function()
     if bankOpen and HUFDB and ns.db then Bags.SnapshotBank() end
     bankOpen = false
+    if frame and frame:IsShown() then Bags.UpdateHeader() end
 end)
 ns.On("PLAYERBANKSLOTS_CHANGED", function() SnapSoon() end)
 ns.On("PLAYER_REGEN_ENABLED", function()

@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.0.
+Version 0.5.1.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -66,7 +66,9 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
 - **Bags**: all bags in one HUF window (the game's own item buttons, so using / moving / selling
   works as usual, also in combat); a dropdown to your bank (as it was at your last bank visit) and
   one to your other characters' bags and banks (saved when you play them); a search bar that dims
-  everything else; tooltips show "Name: 8 | 12" (bags | bank) for every character; slots per row,
+  everything else; a sort button (the game's own fast sort; the bank while you're at it); money
+  with coin icons, hover it for every character's gold and the total; tooltips show
+  "Name: 8 | 12" (bags | bank) for every character; slots per row,
   slot size, spacing, background, border, quality borders, scale. Turns on the game's combined bags
   option. Saved bags are account data, never in a profile export.
 - **Combo points** (rogues, druids in cat form): a row of points above the target frame and under

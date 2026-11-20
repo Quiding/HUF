@@ -503,6 +503,7 @@ local function BuildDefaults()
             qualityBorders = true, showEmpty = true,
             font = "GLOBAL", countSize = 12,
             tooltipCounts = true, openWithBank = true,
+            sortButton = true,
         },
         -- chat window: look, short channel names, links, history, buttons
         chat = {

@@ -27,6 +27,14 @@ ns.RegisterPage("bags", "Bags", "frames", function(page)
     L:Check("Item counts in tooltips", gt, st, "\"Name: 8 | 12\" (bags | bank) for this character and every other one HUF saw.")
     local gb, sb = Opt("openWithBank")
     L:Check("Open with the bank", gb, sb)
+    local gs, ss = Opt("sortButton")
+    L:Check("Sort button", gs, function(v) ss(v) if ns.Bags and ns.Bags.frame then ns.Bags.UpdateHeader() end end,
+        "The game's own sort (as Blizzard's bag button): the server sorts, so it's done in a moment. The bank sorts while you're at it.")
+    local CC = C_Container
+    if CC and CC.GetSortBagsRightToLeft and CC.SetSortBagsRightToLeft then
+        L:Check("Sort towards the last bag", function() return CC.GetSortBagsRightToLeft() and true or false end,
+            function(v) pcall(CC.SetSortBagsRightToLeft, v) end, "The game's own option: sorted items end up in the last bag instead of the backpack.")
+    end
     L:Button("Open the bags", function() if ns.Bags then ns.Bags.Show() end end)
     L:Button("Forget the other characters", function()
         UI.Confirm("Forget the bags and banks HUF saved for every other character?", "Forget", function()
