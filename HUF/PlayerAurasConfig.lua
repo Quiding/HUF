@@ -13,9 +13,16 @@ local OUTLINES = {
     { value = "GLOBAL", text = "General outline" }, { value = "NONE", text = "None" },
     { value = "OUTLINE", text = "Thin" }, { value = "THICKOUTLINE", text = "Thick" },
 }
+-- icons first, then where new rows / columns go
 local GROW = {
-    { value = "RIGHT", text = "Left to right" }, { value = "LEFT", text = "Right to left" },
-    { value = "DOWN", text = "Top to bottom" }, { value = "UP", text = "Bottom to top" },
+    { value = "LEFT_DOWN", text = "Right > left, new rows below" },
+    { value = "LEFT_UP", text = "Right > left, new rows above" },
+    { value = "RIGHT_DOWN", text = "Left > right, new rows below" },
+    { value = "RIGHT_UP", text = "Left > right, new rows above" },
+    { value = "DOWN_RIGHT", text = "Top > bottom, new columns right" },
+    { value = "DOWN_LEFT", text = "Top > bottom, new columns left" },
+    { value = "UP_RIGHT", text = "Bottom > top, new columns right" },
+    { value = "UP_LEFT", text = "Bottom > top, new columns left" },
 }
 
 local function SubFrame(page)

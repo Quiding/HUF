@@ -31,29 +31,46 @@ local DEBUFF_COLORS = {
 ---------------------------------------------------------------------------
 -- Layout: growth direction -> where icon n goes
 ---------------------------------------------------------------------------
+-- grow: "<icons>_<new lines>", e.g. LEFT_DOWN = icons right to left, new rows
+-- below; DOWN_RIGHT = icons top to bottom, new columns to the right. Older
+-- single values (LEFT / RIGHT / DOWN / UP) still read.
+local OLD_GROW = { LEFT = "LEFT_DOWN", RIGHT = "RIGHT_DOWN", DOWN = "DOWN_RIGHT", UP = "UP_RIGHT" }
+local function Grow(s)
+    local g = OLD_GROW[s.grow] or s.grow or "LEFT_DOWN"
+    local a, b = g:match("^(%u+)_(%u+)$")
+    if not a then return "LEFT", "DOWN" end
+    return a, b
+end
+PA.Grow = Grow
+
+-- first icon's corner, the horizontal and vertical growth, whether icons run in columns
+local function Flow(s)
+    local a, b = Grow(s)
+    local vertical = (a == "UP" or a == "DOWN")
+    local h = vertical and b or a
+    local v = vertical and a or b
+    local corner = (v == "DOWN" and "TOP" or "BOTTOM") .. (h == "LEFT" and "RIGHT" or "LEFT")
+    return corner, h, v, vertical
+end
+PA.Flow = Flow
+
 local function Geometry(s)
     local step = s.size + s.padding
     local lineStep = s.size + s.padding + ((s.timer and s.timerPos == "BELOW") and (s.timerSize + 2) or 0)
-    local g = s.grow
+    local corner, h, v, vertical = Flow(s)
     local perLine, lines
-    if g == "LEFT" or g == "RIGHT" then perLine, lines = s.columns, s.rows
-    else perLine, lines = s.rows, s.columns end
-    local t = { perLine = math.max(1, perLine), lines = math.max(1, lines) }
-    if g == "LEFT" then
-        t.point, t.x, t.y, t.wx, t.wy = "TOPRIGHT", -step, 0, 0, -lineStep
-    elseif g == "RIGHT" then
-        t.point, t.x, t.y, t.wx, t.wy = "TOPLEFT", step, 0, 0, -lineStep
-    elseif g == "DOWN" then
-        t.point, t.x, t.y, t.wx, t.wy = "TOPLEFT", 0, -lineStep, step, 0
-    else -- UP
-        t.point, t.x, t.y, t.wx, t.wy = "BOTTOMLEFT", 0, lineStep, step, 0
-    end
-    if g == "LEFT" or g == "RIGHT" then
-        t.w = t.perLine * step - s.padding
-        t.h = t.lines * lineStep - s.padding
-    else
+    if vertical then perLine, lines = s.rows, s.columns else perLine, lines = s.columns, s.rows end
+    local t = { perLine = math.max(1, perLine), lines = math.max(1, lines), point = corner }
+    local hs = (h == "RIGHT") and step or -step
+    local vs = (v == "UP") and lineStep or -lineStep
+    if vertical then
+        t.x, t.y, t.wx, t.wy = 0, vs, hs, 0
         t.w = t.lines * step - s.padding
         t.h = t.perLine * lineStep - s.padding
+    else
+        t.x, t.y, t.wx, t.wy = hs, 0, 0, vs
+        t.w = t.perLine * step - s.padding
+        t.h = t.lines * lineStep - s.padding
     end
     return t
 end
@@ -511,16 +528,26 @@ end
 local function ApplyEngineBar(kind, c)
     local s = S(kind)
     local g = Geometry(s)
-    local vertical = s.grow == "UP" or s.grow == "DOWN"
+    local anchor, gh, gv, vertical = Flow(s)
+    -- the container sizes itself to its icons: it hangs by the corner the icons
+    -- start from, at that corner of a fixed box where the bar's place is (as
+    -- EllesmereUI anchors its containers by their flow corner)
+    local holder = c.hufHolder
+    if not holder then
+        holder = CreateFrame("Frame", nil, UIParent)
+        holder:SetFrameStrata("LOW")
+        c.hufHolder = holder
+        c:SetParent(holder)        -- takes the bar's scale from the box
+        c:SetFrameStrata("LOW")
+    end
+    holder:ClearAllPoints()
+    holder:SetPoint(s.point[1], UIParent, s.point[2], s.point[3], s.point[4])
+    holder:SetSize(g.w, g.h)
+    holder:SetScale(s.scale)
     c:ClearAllPoints()
-    c:SetPoint(s.point[1], UIParent, s.point[2], s.point[3], s.point[4])
+    c:SetPoint(anchor, holder, anchor, 0, 0)
     c:SetSize(g.w, g.h)
-    c:SetScale(s.scale)
-    local anchor, gh, gv
-    if s.grow == "LEFT" then anchor, gh, gv = "TOPRIGHT", "LEFT", "DOWN"
-    elseif s.grow == "RIGHT" then anchor, gh, gv = "TOPLEFT", "RIGHT", "DOWN"
-    elseif s.grow == "DOWN" then anchor, gh, gv = "TOPLEFT", "RIGHT", "DOWN"
-    else anchor, gh, gv = "BOTTOMLEFT", "RIGHT", "UP" end
+    c:SetScale(1)
     Call(c, "SetFlowLayoutAnchorPoint", "SetAuraLayoutAnchorPoint", anchor)
     Call(c, "SetFlowLayoutGrowthDirection", "SetAuraLayoutGrowthDirection", FlowDir(gh), FlowDir(gv))
     local axes = AnchorUtil and AnchorUtil.FlowLayoutAxis
