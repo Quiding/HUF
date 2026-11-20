@@ -328,6 +328,35 @@ local function UpdateHealth(p)
 end
 
 local LEVEL_CLASS = { elite = "E", rareelite = "RE", rare = "R", worldboss = "B" }
+
+-- the difficulty colour of a mob whose level is hidden: the game ranks it
+-- itself (trivial .. impossible) without telling the level. "" when it
+-- won't say either.
+local DIFF_COLOR_NAMES = {
+    Trivial = "TRIVIAL_DIFFICULTY_COLOR", Easy = "EASY_DIFFICULTY_COLOR", Fair = "FAIR_DIFFICULTY_COLOR",
+    Difficult = "DIFFICULT_DIFFICULTY_COLOR", Impossible = "IMPOSSIBLE_DIFFICULTY_COLOR",
+}
+local DIFF_FALLBACK = { [0] = { 0.5, 0.5, 0.5 }, { 0.25, 0.75, 0.25 }, { 1, 0.82, 0 }, { 1, 0.5, 0.25 }, { 1, 0.1, 0.1 } }
+local function HiddenLevelColor(unit)
+    local api = C_PlayerInfo and C_PlayerInfo.GetContentDifficultyCreatureForPlayer
+    if not api then return "" end
+    local ok, diff = pcall(api, unit)
+    if not ok or diff == nil or IsSecret(diff) then return "" end
+    local c
+    if GetDifficultyColor then
+        local okC, col = pcall(GetDifficultyColor, diff)
+        if okC and type(col) == "table" and type(col.r) == "number" then c = { col.r, col.g, col.b } end
+    end
+    if not c and Enum and Enum.RelativeContentDifficulty then
+        for name, v in pairs(Enum.RelativeContentDifficulty) do
+            local g = v == diff and _G[DIFF_COLOR_NAMES[name] or ""]
+            if type(g) == "table" and type(g.r) == "number" then c = { g.r, g.g, g.b } end
+        end
+    end
+    c = c or DIFF_FALLBACK[diff]
+    if not c then return "" end
+    return ("|cff%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5))
+end
 local function UpdateName(p)
     local s = S()
     local unit = p.unit
@@ -350,11 +379,14 @@ local function UpdateName(p)
             pcall(p.name.SetFormattedText, p.name, "%s%s%s", p.levelText, sep, name)
         elseif s.levelAlways then
             -- hidden since the plate came: the game's value as it is (it
-            -- can't be coloured or checked), the classification after it
+            -- can't be checked), in the colour the game ranks the mob, the
+            -- classification after it
             local ok, level = pcall(UnitLevel, unit)
             local okC, cl = pcall(UnitClassification, unit)
             cl = (okC and not IsSecret(cl) and LEVEL_CLASS[cl]) or ""
-            if not (ok and level ~= nil and pcall(p.name.SetFormattedText, p.name, "%s%s%s%s", level, cl, sep, name)) then
+            local hex = HiddenLevelColor(unit)
+            local fmt = hex ~= "" and "%s%s%s|r%s%s" or "%s%s%s%s%s"
+            if not (ok and level ~= nil and pcall(p.name.SetFormattedText, p.name, fmt, hex, level, cl, sep, name)) then
                 pcall(p.name.SetText, p.name, name)
             end
         else
