@@ -130,19 +130,32 @@ local teamTypes, teamKey = {}, ""
 local teamCand, teamCandSated
 
 local function Plain(v) if v == nil or ns.IsSecret(v) then return nil end return v end
+-- the role a member has; without one (a group made by hand, like an MMT
+-- team) the role of their spec, as far as the game knows it
+local function SpecRole(unit)
+    if unit == "player" then
+        if not (GetSpecialization and GetSpecializationRole) then return nil end
+        local okS, spec = pcall(GetSpecialization)
+        spec = okS and Plain(spec) or nil
+        if not spec then return nil end
+        local okR, r = pcall(GetSpecializationRole, spec)
+        return okR and Plain(r) or nil
+    end
+    if not (GetInspectSpecialization and GetSpecializationRoleByID) then return nil end
+    local okS, id = pcall(GetInspectSpecialization, unit)
+    id = okS and Plain(id) or nil
+    if not id or id == 0 then return nil end
+    local okR, r = pcall(GetSpecializationRoleByID, id)
+    return okR and Plain(r) or nil
+end
 local function UnitHeals(unit)
     local ok, role = pcall(UnitGroupRolesAssigned, unit)
     role = ok and Plain(role) or nil
+    if role == nil or role == "NONE" then role = SpecRole(unit) end
     if role == "HEALER" then return true end
-    if (role == nil or role == "NONE") and unit == "player" and GetSpecialization and GetSpecializationRole then
-        local okS, spec = pcall(GetSpecialization)
-        spec = okS and Plain(spec) or nil
-        if spec then
-            local okR, r = pcall(GetSpecializationRole, spec)
-            return okR and Plain(r) == "HEALER"
-        end
-    end
-    return false
+    if role == "TANK" or role == "DAMAGER" then return false end
+    -- spec not known yet (not inspected): they might heal, so count it
+    return true
 end
 
 local function GroupUnits()
@@ -768,7 +781,7 @@ local function TeamChanged()
     end
 end
 for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_SPECIALIZATION_CHANGED",
-                     "PLAYER_ENTERING_WORLD" }) do
+                     "PLAYER_ENTERING_WORLD", "INSPECT_READY" }) do
     pcall(ns.On, e, TeamChanged)
 end
 ns.On("ZONE_CHANGED_NEW_AREA", RetryResize)
