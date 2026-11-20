@@ -187,8 +187,9 @@ local function ButtonsPage(f, page)
     L:Note("In unlock mode (/huf unlock) the tracking button and this button can be dragged anywhere.")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
-    R:Header("Each addon button")
-    R:Cycle("Every addon button", ns.Minimap.MODES, Opt(M, "buttonMode"))
+    R:Header("Addon buttons on the map")
+    R:Cycle("Show them", ns.Minimap.MODES, Opt(M, "buttonMode"))
+    R:Note("Only with the addon bar off: when the addon buttons show on the map (always, on mouseover, never). Below, each addon can have its own choice, or be pinned beside the addon bar button.")
     -- one row per addon button found on the map (filled when the page shows)
     local list = CreateFrame("Frame", nil, f)
     list:SetPoint("TOPLEFT", f, "TOPLEFT", COL2_X, R.y - 4)
@@ -197,8 +198,8 @@ local function ButtonsPage(f, page)
     list.empty = UI.Label(list, "No addon buttons found on the minimap.")
     list.empty:SetPoint("TOPLEFT")
     list.empty:SetTextColor(0.6, 0.6, 0.6)
-    local CHOICES = { { value = "DEFAULT", text = "Like every button" },
-        { value = "PIN", text = "Pinned by the bag" } }
+    local CHOICES = { { value = "DEFAULT", text = "Like \"Show them\"" },
+        { value = "PIN", text = "Pinned beside the addon bar button" } }
     for _, m in ipairs(ns.Minimap.MODES) do CHOICES[#CHOICES + 1] = m end
     list.Refresh = function()
         local l = ns.Minimap.Buttons()
