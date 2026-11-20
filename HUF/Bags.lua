@@ -54,6 +54,9 @@ local function BankIDs()
     -- never one of the bags (a client whose bank ids overlap the bag ids)
     local bags = {}
     for _, b in ipairs(BagIDs()) do bags[b] = true end
+    -- nor the keyring (-1 on Forever, the classic bank id)
+    local kr = (BI and BI.Keyring) or KEYRING_CONTAINER
+    if kr then bags[kr] = true end
     local out = {}
     for _, b in ipairs(l) do if not bags[b] then out[#out + 1] = b end end
     return out
@@ -155,9 +158,11 @@ local function SnapSoon()
     C_Timer.After(0.5, function()
         pendingSnap = nil
         if not (HUFDB and ns.db) then return end
+        if Bags.frame and Bags.frame:IsShown() then Bags.RefreshSoon() end
+        -- reading every slot waits until a sort is over
+        if (Bags.sortUntil or 0) > GetTime() then SnapSoon() return end
         Bags.SnapshotBags()
         if bankOpen then Bags.SnapshotBank() end
-        if Bags.frame and Bags.frame:IsShown() then Bags.Refresh() end
     end)
 end
 
@@ -257,9 +262,13 @@ end
 
 local function SkinSlot(b, s, reagent)
     if not b.hufBg then
-        b.hufBg = b:CreateTexture(nil, "BACKGROUND", nil, -7)
+        -- BORDER -8: over the item button's own slot art (BACKGROUND), under its icon (BORDER)
+        b.hufBg = b:CreateTexture(nil, "BORDER", nil, -8)
         b.hufBg:SetAllPoints()
         b.hufEdge = ns.UI.Border(b, 0.15, 0.15, 0.17, 1)
+    end
+    for _, k in ipairs({ "ItemSlotBackground", "SlotBackground", "EmptyBackground" }) do
+        if T(b[k]) then b[k]:SetAlpha(0) end
     end
     b.hufReagent = reagent and s.reagentTint or nil
     if b.hufReagent then
@@ -293,6 +302,11 @@ local function QualityEdge(b, quality, s)
     if s.qualityBorders and quality and not IsSecret(quality) and quality >= 2 then
         local c = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
         if c then b.hufEdge:SetColor(c.r, c.g, c.b, 1) return end
+    end
+    if b.hufReagent then
+        local c = s.reagentColor
+        b.hufEdge:SetColor(math.min(1, c.r * 2 + 0.1), math.min(1, c.g * 2 + 0.1), math.min(1, c.b * 2 + 0.1), 1)
+        return
     end
     b.hufEdge:SetColor(0.15, 0.15, 0.17, 1)
 end
@@ -445,12 +459,46 @@ function Bags.Sort()
     if not fn then return end
     if InCombatLockdown() then ns.Print("Bags can't be sorted in combat.") return end
     if PlaySound and SOUNDKIT and SOUNDKIT.UI_BAG_SORTING_01 then pcall(PlaySound, SOUNDKIT.UI_BAG_SORTING_01) end
+    Bags.sortUntil = GetTime() + 3
     local ok, err = pcall(fn)
     if not ok then ns.Log("bags", "sort failed: %s", tostring(err)) end
 end
 
+-- one redraw for a burst of events (a sort sends hundreds)
+local refreshPending
+function Bags.RefreshSoon()
+    if refreshPending then return end
+    refreshPending = true
+    C_Timer.After(0.1, function()
+        refreshPending = nil
+        Bags.Refresh()
+    end)
+end
+
+local bySlot = {}             -- "bag:slot" -> shown live button
+-- an item got (un)locked: only that slot
+function Bags.UpdateLock(bag, slot)
+    local b = bag and slot and bySlot[bag .. ":" .. slot]
+    if not b then return end
+    local info = ItemInfo(bag, slot)
+    SetItemButtonDesaturated(b, info and info.isLocked or false)
+end
+-- cooldowns of the shown live buttons
+function Bags.UpdateCooldowns()
+    if not (frame and frame:IsShown() and C_Container.GetContainerItemCooldown) then return end
+    for key, b in pairs(bySlot) do
+        local cd = T(b.Cooldown)
+        local bag, slot = key:match("^(%-?%d+):(%d+)$")
+        if cd and CooldownFrame_Set then
+            local ok, start, dur, enable = pcall(C_Container.GetContainerItemCooldown, tonumber(bag), tonumber(slot))
+            if ok then pcall(CooldownFrame_Set, cd, start, dur, enable) end
+        end
+    end
+end
+
 function Bags.Refresh()
     if not frame or not frame:IsShown() then return end
+    wipe(bySlot)
     local s = S()
     local cols = math.max(1, s.cols)
     for _, b in ipairs(live) do b.hufParent:Hide() end
@@ -512,6 +560,7 @@ function Bags.Refresh()
                 SkinSlot(b, s, e.reagent)
                 Place(b, i, s, c, grid)
                 UpdateLive(b, e.bag, e.slot, s)
+                bySlot[e.bag .. ":" .. e.slot] = b
             else
                 n = n + 1
                 local b = shows[n] or NewShow()
@@ -789,13 +838,25 @@ end
 ---------------------------------------------------------------------------
 local hidden = CreateFrame("Frame")
 hidden:Hide()
+local killing
 local function KillBlizzard()
+    killing = true
     local KEYRING = Enum and Enum.BagIndex and Enum.BagIndex.Keyring
     for i = 1, 13 do
         local f = _G["ContainerFrame" .. i]
-        if f and not (KEYRING and f:IsShown() and f.MatchesBagID and f:MatchesBagID(KEYRING)) then f:SetParent(hidden) end
+        if f and not (KEYRING and f:IsShown() and f.MatchesBagID and f:MatchesBagID(KEYRING)) then
+            f:SetParent(hidden)
+            -- hidden for real: a frame that is only under a hidden parent still counts as shown
+            -- and redraws on every bag event (a sort sends hundreds: the client froze)
+            if f:IsShown() then f:Hide() end
+        end
     end
-    if ContainerFrameCombinedBags then ContainerFrameCombinedBags:SetParent(hidden) end
+    local cb = ContainerFrameCombinedBags
+    if cb then
+        cb:SetParent(hidden)
+        if cb:IsShown() then cb:Hide() end
+    end
+    killing = nil
 end
 
 local lastToggle = 0
@@ -811,8 +872,8 @@ local function Takeover()
     hooksecurefunc("ToggleBackpack", function() Toggle() KillBlizzard() end)
     hooksecurefunc("OpenAllBags", function() Bags.Show() KillBlizzard() end)
     if OpenBackpack then hooksecurefunc("OpenBackpack", function() Bags.Show() KillBlizzard() end) end
-    hooksecurefunc("CloseAllBags", function() Bags.Hide() end)
-    if CloseBackpack then hooksecurefunc("CloseBackpack", function() Bags.Hide() end) end
+    hooksecurefunc("CloseAllBags", function() if not killing then Bags.Hide() end end)
+    if CloseBackpack then hooksecurefunc("CloseBackpack", function() if not killing then Bags.Hide() end end) end
     hooksecurefunc("ToggleBag", function(id)
         local KEYRING = Enum and Enum.BagIndex and Enum.BagIndex.Keyring
         if KEYRING and id == KEYRING then return end
@@ -869,9 +930,16 @@ ns.OnLogin(function()
 end)
 ns.OnRefresh(function() if HUFDB and ns.db then Bags.Apply() end end)
 ns.On("BAG_UPDATE_DELAYED", function() SnapSoon() end)
-ns.On("ITEM_LOCK_CHANGED", function() if frame and frame:IsShown() then Bags.Refresh() end end)
-ns.On("BAG_UPDATE_COOLDOWN", function() if frame and frame:IsShown() then Bags.Refresh() end end)
-ns.On("PLAYER_MONEY", function() if HUFDB and ns.db then Me().money = GetMoney() if frame and frame:IsShown() then Bags.Refresh() end end end)
+ns.On("ITEM_LOCK_CHANGED", function(bag, slot)
+    if not (frame and frame:IsShown()) then return end
+    if bag and slot then Bags.UpdateLock(bag, slot) else Bags.RefreshSoon() end
+end)
+ns.On("BAG_UPDATE_COOLDOWN", function() Bags.UpdateCooldowns() end)
+ns.On("PLAYER_MONEY", function()
+    if not (HUFDB and ns.db) then return end
+    Me().money = GetMoney()
+    if frame and frame:IsShown() then frame.money:SetText(Bags.Money(GetMoney())) end
+end)
 ns.On("BANKFRAME_OPENED", function()
     bankOpen = true
     if not (HUFDB and ns.db) then return end
