@@ -556,9 +556,26 @@ local function ConvertNameplates(s, n, notes)
     n.auraGap = math.floor(Num(G("debuffSpacing"), 2) + 0.5)
     n.auraTimer = true
     n.auraTimerSize = math.floor(Num(s.auraDurationTextSize, 11) + 0.5)
-    if s.threatColorHealth ~= false then
-        notes[#notes + 1] = "Nameplates: Ellesmere's threat, caster and mini-boss colours are not in HUF."
+    -- threat colours on the bar (Ellesmere's default on WoW Forever: always)
+    local tmode = s.threatColorMode or "always"
+    if s.threatColorHealth == false or tmode == "never" then n.threatBar = "OFF"
+    elseif tmode == "instances" then n.threatBar = "INSTANCES"
+    else n.threatBar = "ALWAYS" end
+    local function TC(key, r, g, b) return Color(s[key], { r = r, g = g, b = b }) end
+    n.threatDpsSafeOn = s.dpsNoAggroEnabled == true
+    n.threatDpsSafe = TC("dpsNoAggro", 0.35, 0.75, 0.35)
+    n.threatDpsNear = TC("dpsNearAggro", 0.81, 0.72, 0.19)
+    n.threatDpsAggro = TC("dpsHasAggro", 1.00, 0.50, 0.00)
+    n.threatTankHoldOn = s.tankHasAggroEnabled == true or s.classicTankAggro == true
+    n.threatTankHold = TC("tankHasAggro", 0.05, 0.82, 0.62)
+    n.threatTankLosing = TC("tankLosingAggro", 0.81, 0.72, 0.19)
+    n.threatTankLost = TC("tankNoAggro", 1.00, 0.22, 0.17)
+    n.threatOffTankOn = s.offTankAggroEnabled ~= false
+    n.threatOffTank = TC("offTankAggro", 0.188, 0.761, 0.812)
+    if s.threatColorBorder == true or s.threatColorName == true then
+        notes[#notes + 1] = "Nameplates: HUF shows threat colours on the bar only (Ellesmere: also on the border or name)."
     end
+    notes[#notes + 1] = "Nameplates: Ellesmere's caster and mini-boss colours are not in HUF."
 end
 
 ---------------------------------------------------------------------------

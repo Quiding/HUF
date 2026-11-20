@@ -667,6 +667,13 @@ local function BuildDefaults()
             threatMode = "GLOW", threatSize = 10, threatPos = "RIGHT", threatColors = true,
             threatGlowSize = 5, threatGlowColor = C(1.00, 0.60, 0.00),
             threatGlowAggro = false, threatAggroColor = C(1.00, 0.15, 0.15),
+            -- threat colours on the bar: OFF | ALWAYS | INSTANCES (dungeons, raids, scenarios)
+            threatBar = "OFF",
+            threatDpsSafeOn = true, threatDpsSafe = C(0.35, 0.75, 0.35),
+            threatDpsNear = C(0.95, 0.75, 0.20), threatDpsAggro = C(1.00, 0.30, 0.15),
+            threatTankHoldOn = true, threatTankHold = C(0.10, 0.70, 0.55),
+            threatTankLosing = C(0.95, 0.75, 0.20), threatTankLost = C(1.00, 0.20, 0.15),
+            threatOffTankOn = true, threatOffTank = C(0.20, 0.60, 0.85),
             -- combo points (rogue, cat druid) under your target's plate
             comboShow = true, comboHeight = 4, comboGap = 2, comboSpace = 2,
             comboColor = C(1.00, 0.82, 0.10), comboHideEmpty = true,
