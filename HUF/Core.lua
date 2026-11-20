@@ -492,6 +492,7 @@ local function BuildDefaults()
             titleIcons = false,         -- the type's name at the left, meter type and fight as icon buttons at the right
             titleIconSize = 18,         -- those icons (may stand out of a lower title bar)
             titleIconsMuted = true,     -- those icons grey and dimmed, accent colour under the mouse
+            nameHover = false,          -- hovering a name: its top spells beside the window (a click still opens the breakdown)
             breakdownInline = true,     -- a clicked name's breakdown and the meter list in its window (< back); off: the breakdown beside it
             icons = "NONE",             -- NONE | CLASS: class icon before each bar
             rowBorder = 0,              -- a border around each bar (0: none)

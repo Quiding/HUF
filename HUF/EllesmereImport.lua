@@ -591,6 +591,7 @@ local function ConvertDamageMeter(addon, m, notes)
     local w = type(list[1]) == "table" and list[1] or {}
     m.enabled = true
     m.hideBlizzard = true
+    m.nameHover = G("showHoverTooltip", true) ~= false
 
     -- a window's place: unlock format { point, relPoint, x, y } or the older
     -- { x, y } (its top left from the screen's bottom left: taken as its

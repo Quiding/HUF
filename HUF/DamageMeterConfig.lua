@@ -66,6 +66,8 @@ local function MeterPage(f)
     R:Check("Line around the window", gw, sw)
     local gk, sk = Opt("breakdownInline")
     R:Check("Breakdown and meter list inside the window", gk, sk, "Clicking a name shows its spells in the same window; right-clicking the names shows the list of meters to pick one. < or a right-click goes back to the names. Off: the breakdown in a panel beside the window. On by default.")
+    local gn, sn = Opt("nameHover")
+    R:Check("Hover a name: its top spells", gn, sn, "A box beside the window with the player's spells while the mouse is on the name. A click still opens the whole breakdown.")
     R:Note("Click a row for its breakdown. Names follow Names & MMT; in instance combat the game hides the meter's names: HUF then shows a name it recognised, else the class, never a hidden real name.")
 end
 
