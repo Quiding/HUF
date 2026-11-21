@@ -311,12 +311,18 @@ local function AuraRow(on, position)
     return { enabled = on, mine = false, size = 20, gap = 2, perRow = 6, rows = 4,
              position = position, offset = 2, x = 0, y = 0, countSize = 9, timer = true,
              timerText = false, timerSize = 0,       -- time left as numbers; size 0: from the icon size
-             filter = "ALL",         -- debuffs ALL | RAID | DISPELLABLE | TEAM (my group can) | CC; buffs ALL | RAID | DEFENSIVE | CANCELABLE
+             filter = "ALL",         -- debuffs ALL | RAID | DISPELLABLE | TEAM (my group can) | CC; buffs ALL | RAID | DEFENSIVE | CANCELABLE | PURGE | TEAM_PURGE | IMPORTANT_PURGE
              ccFirst = false,        -- debuffs: crowd control first
              hideSated = false,      -- debuffs: no Sated / Exhaustion
              grow = "AUTO",          -- AUTO (from the position) | LEFT | RIGHT
              borderSize = 1,         -- the black edge around each icon
-             dispelBorder = false }  -- debuffs: the edge in the debuff type's colour
+             dispelBorder = false,   -- debuffs: the edge in the debuff type's colour
+             mark = "OFF",           -- buffs: OFF | EDGE | GLOW (golden) for their type
+             purgeSize = 100,        -- buffs, purge filters: removable ones' size, percent
+             glowSize = 140,         -- the golden glow's size, percent of the icon
+             dispelEdge = "OFF",      -- debuffs: an edge round the frame in the debuff type's colour:
+                                     -- OFF | MINE (ones I can dispel) | TEAM (ones my group can)
+             dispelEdgeSize = 2 }
 end
 
 local function UnitDefaults(point)
@@ -424,6 +430,7 @@ local function BuildDefaults()
     g.debuffs = AuraRow(true, "ABOVE_RIGHT")
     for _, r in ipairs({ g.buffs, g.debuffs }) do r.size, r.perRow, r.rows, r.offset = 16, 5, 1, 1 end
     g.buffs.position, g.buffs.offset = "BELOW_LEFT", 8     -- my HoTs under the frame
+    g.debuffs.dispelEdge = "TEAM"      -- edge round the frame for a debuff the group can dispel
     g.castBar.enabled = true
     g.group = {
         showPlayer = true,          -- me in the group frames
@@ -690,8 +697,13 @@ local function BuildDefaults()
             -- auras (small icons above the name)
             showBuffs = false, showDebuffs = true,
             debuffsMine = true,         -- only the debuffs you cast
+            buffFilter = "ALL",         -- ALL | PURGE (dispellable / stealable) | IMPORTANT_PURGE (important or dispellable)
+            buffMark = "OFF",           -- buffs: OFF / EDGE / GLOW (golden) for their type
+            buffPurgeSize = 100, buffGlowSize = 140,   -- removable buffs' size, glow size (percent)
+            buffRow = "SAME",           -- buffs: SAME row as the debuffs (half each when both are full) | ABOVE
             auraSize = 15, auraMax = 5, auraRows = 1, auraGap = 1,
             auraTimer = true, auraTimerSize = 0,    -- time left on the icons; size 0: from the icon size
+            auraTooltips = true,        -- debuffs / buffs: the game's tooltip on hover
         },
     }
 end

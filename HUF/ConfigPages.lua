@@ -728,6 +728,14 @@ local BUFF_FILTERS = {
     { value = "RAID", text = "Important (Blizzard's raid frames)" },
     { value = "DEFENSIVE", text = "Only defensives and externals" },
     { value = "CANCELABLE", text = "Only ones that can be cancelled" },
+    { value = "PURGE", text = "Only ones that can be dispelled or stolen" },
+    { value = "TEAM_PURGE", text = "Ones my group can purge or steal" },
+    { value = "IMPORTANT_PURGE", text = "Important ones and dispellable ones" },
+}
+local BUFF_MARKS = {
+    { value = "OFF", text = "No" },
+    { value = "EDGE", text = "Edge in the type's colour" },
+    { value = "GLOW", text = "Golden glow, like a spell that lights up" },
 }
 local function AuraPage(f, key, which)
     local T = function() return U(key)[which] end
@@ -740,12 +748,22 @@ local function AuraPage(f, key, which)
     L:Cycle("Filter", debuffs and DEBUFF_FILTERS or BUFF_FILTERS, Opt(T, "filter"))
     if debuffs then
         L:Note("\"Ones my group can dispel\": every debuff someone in your group (with MMT: your team) can remove, from their class and healer role.")
+    else
+        L:Note("For enemies. \"Ones my group can purge or steal\": a shaman from 12 (Purge), a priest from 18 (Dispel Magic), a warlock with a Felhunter, a hunter from 60 (enrages), a mage from 70 (Spellsteal); you by your spellbook.")
     end
     if debuffs then
         local gc, sc = Opt(T, "ccFirst")
         L:Check("Crowd control first", gc, sc, "Stuns, fears and the like lead the row.")
         local gs, ss = Opt(T, "hideSated")
         L:Check("Hide Sated and Exhaustion", gs, ss, "The debuffs Bloodlust and Heroism leave behind.")
+        L:Header("Edge round the frame")
+        L:Cycle("When the unit has a debuff", {
+            { value = "OFF", text = "No edge" },
+            { value = "MINE", text = "That I can dispel" },
+            { value = "TEAM", text = "That my group can dispel" },
+        }, Opt(T, "dispelEdge"))
+        L:Slider("Edge size", 1, 6, 1, Opt(T, "dispelEdgeSize"))
+        L:Note("In the debuff type's colour: magic blue, curse purple, disease brown, poison green. The game colours it, so it works in every fight.")
     end
     L:Header("Look")
     L:Slider("Icon size", 8, 40, 1, Opt(T, "size"))
@@ -753,6 +771,11 @@ local function AuraPage(f, key, which)
     if debuffs then
         local gd, sd = Opt(T, "dispelBorder")
         L:Check("Edge in the debuff type's colour", gd, sd, "Magic blue, curse purple, disease brown, poison green, bleed red. Needs an edge of 1 or more.")
+    else
+        L:Cycle("Mark buffs by type", BUFF_MARKS, Opt(T, "mark"))
+        L:Slider("Glow size (% of the icon)", 100, 250, 5, Opt(T, "glowSize"))
+        L:Slider("Removable buffs' size (%)", 100, 200, 5, Opt(T, "purgeSize"))
+        L:Note("With the three purge filters: the buffs that can be removed get the mark (the golden glow on every one) and this size.")
     end
     L:Slider("Stack number size", 6, 16, 1, Opt(T, "countSize"))
     local gt, st = Opt(T, "timer")

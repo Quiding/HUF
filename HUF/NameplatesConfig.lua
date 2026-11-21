@@ -284,6 +284,24 @@ local function AuraPage(f)
     local gm, sm = Opt("debuffsMine")
     L:Check("Only my debuffs", gm, sm)
     L:Check("Show buffs", Opt("showBuffs"))
+    L:Cycle("Which buffs", {
+        { value = "ALL", text = "All" },
+        { value = "PURGE", text = "Only ones that can be dispelled or stolen" },
+        { value = "TEAM_PURGE", text = "Ones my group can purge or steal" },
+        { value = "IMPORTANT_PURGE", text = "Important ones and dispellable ones" },
+    }, Opt("buffFilter"))
+    L:Cycle("Mark buffs by type", {
+        { value = "OFF", text = "No" },
+        { value = "EDGE", text = "Edge in the type's colour" },
+        { value = "GLOW", text = "Golden glow, like a spell that lights up" },
+    }, Opt("buffMark"))
+    L:Slider("Glow size (% of the icon)", 100, 250, 5, Opt("buffGlowSize"))
+    L:Slider("Removable buffs' size (%)", 100, 200, 5, Opt("buffPurgeSize"))
+    L:Cycle("Buffs go", {
+        { value = "SAME", text = "On the debuffs' row" },
+        { value = "ABOVE", text = "Always a row above the debuffs" },
+    }, Opt("buffRow"))
+    L:Note("My group: a shaman from 12 (Purge), a priest from 18 (Dispel Magic), a warlock with a Felhunter, a hunter from 60 (enrages), a mage from 70 (Spellsteal); you by your spellbook. Magic blue, enrage red: a buff you can purge stands out. Dispellable: by anyone, whatever your class (purges, enrages, spell steal). The game checks it itself, so it works in every fight.")
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Size")
     R:Slider("Icon size", 6, 30, 1, Opt("auraSize"))
@@ -292,6 +310,8 @@ local function AuraPage(f)
     R:Slider("Space", 0, 6, 1, Opt("auraGap"))
     local gt, st = Opt("auraTimer")
     R:Check("Time left as numbers", gt, st)
+    local gh, sh = Opt("auraTooltips")
+    R:Check("Tooltip on hover", gh, sh, "Hover a debuff or buff icon to see what it is. Clicks still go through to the plate.")
     R:Slider("Time size (0: automatic)", 0, 20, 1, Opt("auraTimerSize"))
     R:Note("Debuffs start at the left, buffs at the right. Shown by the game's own aura display, so they also work where addons may not read auras.")
 end
