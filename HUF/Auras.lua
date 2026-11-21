@@ -102,8 +102,9 @@ function A.Groups(cfg)
             g.extra = Make(base, mine, "EXTERNAL_DEFENSIVE", "!BIG_DEFENSIVE")
         elseif f == "CANCELABLE" then
             g.main = Make(base, mine, "CANCELABLE")
-        elseif f == "PURGE" then
-            -- enemies: the ones you (or anyone) can dispel or steal
+        elseif f == "PURGE" or f == "TEAM_PURGE" then
+            -- enemies: the ones you (or anyone) can dispel or steal;
+            -- TEAM_PURGE: of the types your group can remove (see below)
             g.main = Make(base, mine, DISPELLABLE)
         elseif f == "IMPORTANT_PURGE" then
             g.main = Make(base, mine, DISPELLABLE)
@@ -137,9 +138,24 @@ local CLASS_DISPELS = {
     MAGE    = { all = { "Curse" } },
 }
 A.CLASS_DISPELS = CLASS_DISPELS
-local TYPE_ORDER = { "Magic", "Curse", "Disease", "Poison", "Bleed" }
+local TYPE_ORDER = { "Magic", "Curse", "Disease", "Poison", "Bleed", "Enrage" }
 local teamTypes, teamKey = {}, ""
 local teamCand, teamCandSated
+
+-- "Ones my group can purge or steal" (enemy buffs, filter TEAM_PURGE): who
+-- has a spell that takes a buff off an enemy, from class and level (the
+-- level the spell is learnt at); for your own character from your
+-- spellbook. Warlocks count with a Felhunter out.
+local PURGES = {
+    SHAMAN  = { { id = 370, level = 12, types = { "Magic" } } },          -- Purge
+    PRIEST  = { { id = 527, level = 18, types = { "Magic" } } },          -- Dispel Magic
+    WARLOCK = { { id = 19505, level = 30, types = { "Magic" }, pet = true } }, -- Devour Magic
+    HUNTER  = { { id = 19801, level = 60, types = { "Enrage" } } },       -- Tranquilizing Shot
+    MAGE    = { { id = 30449, level = 70, types = { "Magic" } } },        -- Spellsteal
+}
+A.PURGES = PURGES
+local purgeTypes, purgeKey = {}, ""
+local purgeCand
 
 local function Plain(v) if v == nil or ns.IsSecret(v) then return nil end return v end
 -- the role of a member's spec, as far as the game knows it (others: once
@@ -193,6 +209,43 @@ local function InspectNext()
     end
 end
 
+local function Known(id, pet)
+    if pet then
+        if not IsSpellKnown then return nil end
+        local ok, k = pcall(IsSpellKnown, id, true)
+        return ok and Plain(k) or nil
+    end
+    local fn = IsPlayerSpell or IsSpellKnown
+    if not fn then return nil end
+    local ok, k = pcall(fn, id)
+    return ok and Plain(k) or nil
+end
+local function PetOf(unit)
+    if unit == "player" then return "pet" end
+    local kind, n = unit:match("^(%a+)(%d+)$")
+    return kind and (kind .. "pet" .. n) or nil
+end
+-- a Felhunter out (English name; a pet whose family can't be read counts)
+local function HasFelhunter(unit)
+    local pu = PetOf(unit)
+    local okE, ex = pcall(UnitExists, pu or "none")
+    if not (pu and okE and Plain(ex)) then return false end
+    local okF, fam = pcall(UnitCreatureFamily, pu)
+    fam = okF and Plain(fam) or nil
+    return fam == nil or fam == "Felhunter"
+end
+local function CanPurge(unit, class, p)
+    if unit == "player" then
+        local k = Known(p.id, p.pet)
+        if k ~= nil then return k end
+    end
+    local okL, lv = pcall(UnitLevel, unit)
+    lv = okL and Plain(lv) or nil
+    if lv and lv > 0 and lv < p.level then return false end
+    if p.pet then return HasFelhunter(unit) end
+    return true
+end
+
 local function GroupUnits()
     local list = { "player" }
     local raid = IsInRaid and IsInRaid()
@@ -207,7 +260,7 @@ end
 
 -- works out the types again; true when they changed
 local function ReadTeam()
-    local set = {}
+    local set, pset = {}, {}
     wipe(unknownSpec)
     for _, unit in ipairs(GroupUnits()) do
         local okE, exists = pcall(UnitExists, unit)
@@ -221,15 +274,25 @@ local function ReadTeam()
                     for _, t in ipairs(d.healer) do set[t] = true end
                 end
             end
+            for _, p in ipairs(class and PURGES[class] or {}) do
+                if CanPurge(unit, class, p) then
+                    for _, t in ipairs(p.types) do pset[t] = true end
+                end
+            end
         end
     end
     local key = {}
     for _, t in ipairs(TYPE_ORDER) do if set[t] then key[#key + 1] = t end end
     key = table.concat(key, ",")
-    if key == teamKey and teamCand then return false end
+    local pkey = {}
+    for _, t in ipairs(TYPE_ORDER) do if pset[t] then pkey[#pkey + 1] = t end end
+    pkey = table.concat(pkey, ",")
+    if key == teamKey and pkey == purgeKey and teamCand then return false end
     teamKey, teamTypes = key, set
     teamCand = { includeDispelTypes = set }
     teamCandSated = { includeDispelTypes = set, excludeSpellIDs = SATED }
+    purgeKey, purgeTypes = pkey, pset
+    purgeCand = { includeDispelTypes = pset }
     return true
 end
 function A.TeamTypes()
@@ -239,7 +302,11 @@ end
 
 -- the candidate filter of a group slot ("lead": crowd control keeps every type)
 local function Cand(cfg, key)
-    if cfg.kind ~= "HARMFUL" then return nil end
+    if cfg.kind ~= "HARMFUL" then
+        if cfg.filter ~= "TEAM_PURGE" then return nil end
+        if not teamCand then ReadTeam() end
+        return purgeCand
+    end
     if cfg.filter == "TEAM" and key ~= "lead" then
         if not teamCand then ReadTeam() end
         return cfg.hideSated and teamCandSated or teamCand
@@ -249,6 +316,10 @@ local function Cand(cfg, key)
 end
 -- the group can dispel nothing: the TEAM row shows nothing
 local function TeamEmpty(cfg)
+    if cfg.kind == "HELPFUL" and cfg.filter == "TEAM_PURGE" then
+        if not teamCand then ReadTeam() end
+        return purgeKey == ""
+    end
     if cfg.kind ~= "HARMFUL" or cfg.filter ~= "TEAM" then return false end
     if not teamCand then ReadTeam() end
     return teamKey == ""
@@ -264,7 +335,7 @@ end
 local function BorderSize(cfg) return math.max(0, cfg.borderSize or 1) end
 local DISPEL_COLORS = {
     Magic = { 0.2, 0.6, 1 }, Curse = { 0.6, 0, 1 }, Disease = { 0.6, 0.4, 0 },
-    Poison = { 0, 0.6, 0 }, Bleed = { 0.8, 0, 0 },
+    Poison = { 0, 0.6, 0 }, Bleed = { 0.8, 0, 0 }, Enrage = { 1, 0.3, 0.1 },
 }
 local dispelStyle
 local function DispelOpts()
@@ -680,8 +751,11 @@ function Row:Scan()
         local max = cfg.perRow * cfg.rows
         local seen = {}
         local sated = cfg.kind == "HARMFUL" and cfg.hideSated
-        local team = cfg.kind == "HARMFUL" and cfg.filter == "TEAM"
+        local team = (cfg.kind == "HARMFUL" and cfg.filter == "TEAM")
+                     or (cfg.kind == "HELPFUL" and cfg.filter == "TEAM_PURGE")
         if team and not teamCand then ReadTeam() end
+        local types = cfg.kind == "HARMFUL" and teamTypes or purgeTypes
+        if team and TeamEmpty(cfg) then max = 0 end
         local ring = WantDispel(cfg)
         for _, key in ipairs(A.SLOTS) do
           local filter = g[key]
@@ -696,7 +770,7 @@ function Row:Scan()
             if not skip and team and key ~= "lead" then
                 local dn = a.dispelName
                 if ns.IsSecret(dn) then dn = nil end
-                skip = not (dn and teamTypes[dn])
+                skip = not (dn and types[dn])
             end
             if not skip then
             if id then seen[id] = true end
@@ -853,10 +927,13 @@ local function TeamChanged()
         C_Timer.After(10, function() retrying = false TeamChanged() end)
     end
     if not changed then return end
-    ns.Log("auras", "group can dispel: %s", teamKey ~= "" and teamKey or "nothing")
+    ns.Log("auras", "group can dispel: %s; purge: %s", teamKey ~= "" and teamKey or "nothing",
+           purgeKey ~= "" and purgeKey or "nothing")
     for _, r in ipairs(rows) do
         local cfg = r.cfg
-        if cfg and cfg.enabled and cfg.filter == "TEAM" and cfg.kind == "HARMFUL" and not r.preview then
+        local uses = cfg and ((cfg.filter == "TEAM" and cfg.kind == "HARMFUL")
+                              or (cfg.filter == "TEAM_PURGE" and cfg.kind == "HELPFUL"))
+        if uses and cfg.enabled and not r.preview then
             if r.c then
                 local ok, err = pcall(r.ApplyEngine, r)
                 if not ok then r:Fail("group dispels", err) end
@@ -871,6 +948,13 @@ for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_SPE
     pcall(ns.On, e, TeamChanged)
 end
 pcall(ns.On, "INSPECT_READY", function() inspectBusy = false TeamChanged() end)
+-- purges: levels, spells and pets change who can
+for _, e in ipairs({ "PLAYER_LEVEL_UP", "SPELLS_CHANGED" }) do pcall(ns.On, e, TeamChanged) end
+local function GroupUnitEvent(unit)
+    if type(unit) == "string" and not ns.IsSecret(unit)
+       and (unit == "player" or unit:find("^party%d") or unit:find("^raid%d")) then TeamChanged() end
+end
+for _, e in ipairs({ "UNIT_LEVEL", "UNIT_PET" }) do pcall(ns.On, e, GroupUnitEvent) end
 ns.On("ZONE_CHANGED_NEW_AREA", RetryResize)
 
 ---------------------------------------------------------------------------
