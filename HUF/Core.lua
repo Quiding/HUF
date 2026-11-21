@@ -504,7 +504,7 @@ local function BuildDefaults()
         windows = { enabled = true, shift = false, positions = {} },
         -- HUF's classic quest log instead of the map + quest window (QuestLog.lua)
         questLog = {
-            enabled = false, tracker = true, levels = true,
+            enabled = false, tracker = true, levels = true, layout = "DUAL",   -- DUAL: list left, text right; CLASSIC: one column
             point = { "CENTER", "CENTER", 0, 40 }, scale = 1,
             font = "CLASSIC", fontSize = 13, outline = "GLOBAL",   -- CLASSIC = the game's quest fonts
             categories = { list = {}, quests = {} },               -- own quest categories (HUF.QuestLog API)

@@ -36,6 +36,8 @@ ns.RegisterPage("questlog", "Quest log", "frames", function(page)
 
     local R = UI.Column(page, COL2_X, 0, COL_W)
     R:Header("Look")
+    R:Cycle("Layout", { { value = "DUAL", text = "Two sides (list left, quest right)" }, { value = "CLASSIC", text = "One column (the original window)" } },
+        function() return Q().layout end, function(v) Q().layout = v if ns.QuestLog then ns.QuestLog.Rebuild() end end)
     R:Cycle("Font", Fonts, Opt("font"))
     R:Slider("Text size", 9, 20, 1, Opt("fontSize"))
     R:Cycle("Outline", OUTLINES, Opt("outline"))

@@ -329,7 +329,7 @@ end
 local rows = {}
 local function NewRow(i)
     local r = CreateFrame("Button", nil, frame.listChild)
-    r:SetSize(DETAIL_W - 4, ROW_H)
+    r:SetSize(frame.listW, ROW_H)
     r.expand = r:CreateTexture(nil, "ARTWORK")
     r.expand:SetSize(16, 16)
     r.expand:SetPoint("LEFT", 0, 0)
@@ -494,7 +494,7 @@ local function DrawDetails()
     frame.share:SetEnabled(push and true or false)
     frame.track:SetEnabled(hasQuest and true or false)
     frame.track:SetChecked(hasQuest and IsTracked(id) or false)
-    local width = DETAIL_W - 8
+    local width = frame.detailW - 8
     local y, n = 0, 0
     local function Line(text, kind, color, gap)
         if not text or text == "" then return end
@@ -603,10 +603,9 @@ end
 QL.Look = Look
 
 -- a scroll frame with the game's scroll bar when the template is there, else the mouse wheel only
-local function Scroll(name, x, y, w, h)
-    local ok, sf = pcall(CreateFrame, "ScrollFrame", name, frame, "UIPanelScrollFrameTemplate")
-    if not ok or not sf then sf = CreateFrame("ScrollFrame", name, frame) end
-    sf:SetPoint("TOPLEFT", x, y)
+local function Scroll(name, parent, w, h)
+    local ok, sf = pcall(CreateFrame, "ScrollFrame", name, parent, "UIPanelScrollFrameTemplate")
+    if not ok or not sf then sf = CreateFrame("ScrollFrame", name, parent) end
     sf:SetSize(w, h)
     local child = CreateFrame("Frame", nil, sf)
     child:SetSize(w, 10)
@@ -625,43 +624,48 @@ local function PanelButton(text, w, onClick)
     local ok, b = pcall(CreateFrame, "Button", nil, frame, "UIPanelButtonTemplate")
     if not ok or not b then
         b = ns.UI.Button(frame, w, text, onClick)
-        b:SetHeight(21)
+        b:SetHeight(22)
         return b
     end
-    b:SetSize(w, 21)
+    b:SetSize(w, 22)
     b:SetText(text)
     b:SetScript("OnClick", onClick)
     return b
 end
 
-local function Build()
-    if frame then return end
-    frame = CreateFrame("Frame", "HUF_QuestLog", UIParent)
-    QL.frame = frame
-    frame:SetSize(FRAME_W, FRAME_H)
+local function Parchment(parent)
+    local t = parent:CreateTexture(nil, "ARTWORK")
+    if not (t.SetAtlas and pcall(t.SetAtlas, t, "QuestDetailsBackgrounds")) then
+        t:SetTexture("Interface\\QuestFrame\\QuestBG")
+        t:SetTexCoord(0, 0.586, 0.02, 0.655)
+    end
+    return t
+end
+
+-- a sunken box (the game's inset frame, else a flat one)
+local function Inset(parent)
+    local ok, f = pcall(CreateFrame, "Frame", nil, parent, "InsetFrameTemplate")
+    if not ok or not f then
+        f = CreateFrame("Frame", nil, parent)
+        ns.UI.Fill(f, 0.03, 0.03, 0.03, 0.9)
+        ns.UI.Border(f, 0.3, 0.3, 0.3, 1)
+    end
+    return f
+end
+
+-- everything both layouts share: drag, title text, count, All, Track, map, buttons
+local function Common()
     frame:SetFrameStrata("MEDIUM")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
     frame:SetMovable(true)
     frame:EnableMouse(true)
-    frame:SetHitRectInsets(0, 30, 0, 70)        -- the art's see-through edges
     frame:Hide()
-    if UISpecialFrames then table.insert(UISpecialFrames, "HUF_QuestLog") end
-
-    -- the classic art: book icon under the four frame pieces
-    local book = frame:CreateTexture(nil, "BACKGROUND")
-    book:SetTexture("Interface\\QuestFrame\\UI-QuestLog-BookIcon")
-    book:SetSize(64, 64)
-    book:SetPoint("TOPLEFT", 7, -6)
-    for _, p in ipairs({ { "TopLeft", 256, "TOPLEFT" }, { "TopRight", 128, "TOPRIGHT" },
-        { "BotLeft", 256, "BOTTOMLEFT" }, { "BotRight", 128, "BOTTOMRIGHT" } }) do
-        local t = frame:CreateTexture(nil, "BORDER")
-        t:SetTexture("Interface\\QuestFrame\\UI-QuestLog-" .. p[1])
-        t:SetSize(p[2], 256)
-        t:SetPoint(p[3], 0, 0)
+    if UISpecialFrames then
+        local known = false
+        for _, n in ipairs(UISpecialFrames) do if n == "HUF_QuestLog" then known = true end end
+        if not known then table.insert(UISpecialFrames, "HUF_QuestLog") end
     end
-
-    -- drag anywhere on the frame's own parts
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function() frame.from = { frame:GetLeft(), frame:GetTop() } frame:StartMoving() end)
     frame:SetScript("OnDragStop", function()
@@ -676,21 +680,10 @@ local function Build()
         Look()
     end)
 
-    frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    frame.title:SetPoint("TOP", 0, -17)
-    frame.title:SetText(_G.QUEST_LOG or "Quest Log")
-    local okC, close = pcall(CreateFrame, "Button", nil, frame, "UIPanelCloseButton")
-    if okC and close then
-        close:SetPoint("TOPRIGHT", -29, -8)
-        close:SetScript("OnClick", function() frame:Hide() end)
-    end
     frame.count = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.count:SetPoint("TOPRIGHT", -54, -46)
 
-    -- expand / collapse all
     local all = CreateFrame("Button", nil, frame)
     all:SetSize(54, 16)
-    all:SetPoint("TOPLEFT", 74, -44)
     frame.allIcon = all:CreateTexture(nil, "ARTWORK")
     frame.allIcon:SetSize(16, 16)
     frame.allIcon:SetPoint("LEFT")
@@ -700,20 +693,20 @@ local function Build()
     all:SetScript("OnClick", function()
         local open = false
         for _, e in ipairs(entries) do if e.header and not e.collapsed then open = true break end end
-        for _, s in ipairs(sections) do collapsed[s.title] = open or nil end
+        for _, sec in ipairs(sections) do collapsed[sec.title] = open or nil end
         QL.Refresh()
     end)
+    frame.allBtn = all
 
-    -- track checkbox and the map button, left of the count
     local okT, track = pcall(CreateFrame, "CheckButton", nil, frame, "UICheckButtonTemplate")
     if not okT or not track then track = CreateFrame("CheckButton", nil, frame) end
     track:SetSize(22, 22)
-    track:SetPoint("TOPRIGHT", -130, -41)
     local trackText = track:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     trackText:SetPoint("LEFT", track, "RIGHT", 0, 1)
     trackText:SetText(_G.TRACK_QUEST_ABBREV or "Track")
     track:SetScript("OnClick", function() if selected then QL.ToggleTrack(selected) QL.Refresh() end end)
     frame.track = track
+
     local map = CreateFrame("Button", nil, frame)
     map:SetSize(24, 24)
     map:SetPoint("RIGHT", track, "LEFT", -6, 0)
@@ -728,23 +721,7 @@ local function Build()
     map:SetScript("OnLeave", function() GameTooltip:Hide() end)
     frame.mapBtn = map
 
-    -- parchment under the quest's text: Forever's copy of the art is dark there
-    -- (the game's own parchment, as Kerzo's quest log uses it)
-    local parch = frame:CreateTexture(nil, "ARTWORK")
-    parch:SetPoint("TOPLEFT", LIST_X - 2, DETAIL_Y + 2)
-    parch:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", LIST_X + DETAIL_W, DETAIL_Y - DETAIL_H - 1)
-    if not (parch.SetAtlas and pcall(parch.SetAtlas, parch, "QuestDetailsBackgrounds")) then
-        parch:SetTexture("Interface\\QuestFrame\\QuestBG")
-        parch:SetTexCoord(0, 0.586, 0.02, 0.655)
-    end
-    frame.parchment = parch
-
-    -- the list and the quest's text
-    frame.list, frame.listChild = Scroll("HUF_QuestLogList", LIST_X, LIST_Y, DETAIL_W - 4, ROWS * ROW_H)
-    frame.detail, frame.detailChild = Scroll("HUF_QuestLogDetail", LIST_X, DETAIL_Y, DETAIL_W, DETAIL_H)
-
-    -- buttons at the bottom
-    frame.abandon = PanelButton(_G.ABANDON_QUEST_ABBREV and (_G.ABANDON_QUEST_ABBREV) or "Abandon", 117, function()
+    frame.abandon = PanelButton(_G.ABANDON_QUEST_ABBREV or "Abandon", 117, function()
         local id = selected
         if not id then return end
         ns.UI.Confirm(("Abandon \"%s\"?"):format(TitleOf(id) or "this quest"), "Abandon", function()
@@ -753,15 +730,12 @@ local function Build()
             if CQ.AbandonQuest then Safe(CQ.AbandonQuest) elseif AbandonQuest then Safe(AbandonQuest) end
         end)
     end)
-    frame.abandon:SetPoint("BOTTOMLEFT", 18, 54)
     frame.share = PanelButton(_G.SHARE_QUEST_ABBREV or "Share", 117, function()
         if not selected then return end
         Select(selected)
         if QuestLogPushQuest then Safe(QuestLogPushQuest) end
     end)
-    frame.share:SetPoint("LEFT", frame.abandon, "RIGHT", 0, 0)
-    local exit = PanelButton(_G.EXIT or "Exit", 77, function() frame:Hide() end)
-    exit:SetPoint("BOTTOMRIGHT", -34, 54)
+    frame.exit = PanelButton(_G.EXIT or "Exit", 77, function() frame:Hide() end)
 
     frame:SetScript("OnShow", function()
         if PlaySound and SOUNDKIT and SOUNDKIT.IG_QUEST_LOG_OPEN then pcall(PlaySound, SOUNDKIT.IG_QUEST_LOG_OPEN) end
@@ -770,7 +744,143 @@ local function Build()
     frame:SetScript("OnHide", function()
         if PlaySound and SOUNDKIT and SOUNDKIT.IG_QUEST_LOG_CLOSE then pcall(PlaySound, SOUNDKIT.IG_QUEST_LOG_CLOSE) end
     end)
+end
+
+-- one column: the original game's window and art (384 x 512)
+local function BuildClassic()
+    frame = CreateFrame("Frame", "HUF_QuestLog", UIParent)
+    frame:SetSize(FRAME_W, FRAME_H)
+    frame:SetHitRectInsets(0, 30, 0, 70)        -- the art's see-through edges
+    Common()
+    local book = frame:CreateTexture(nil, "BACKGROUND")
+    book:SetTexture("Interface\\QuestFrame\\UI-QuestLog-BookIcon")
+    book:SetSize(64, 64)
+    book:SetPoint("TOPLEFT", 7, -6)
+    for _, p in ipairs({ { "TopLeft", 256, "TOPLEFT" }, { "TopRight", 128, "TOPRIGHT" },
+        { "BotLeft", 256, "BOTTOMLEFT" }, { "BotRight", 128, "BOTTOMRIGHT" } }) do
+        local t = frame:CreateTexture(nil, "BORDER")
+        t:SetTexture("Interface\\QuestFrame\\UI-QuestLog-" .. p[1])
+        t:SetSize(p[2], 256)
+        t:SetPoint(p[3], 0, 0)
+    end
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", 0, -17)
+    title:SetText(_G.QUEST_LOG or "Quest Log")
+    local okC, close = pcall(CreateFrame, "Button", nil, frame, "UIPanelCloseButton")
+    if okC and close then
+        close:SetPoint("TOPRIGHT", -29, -8)
+        close:SetScript("OnClick", function() frame:Hide() end)
+    end
+    frame.count:SetPoint("TOPRIGHT", -54, -46)
+    frame.allBtn:SetPoint("TOPLEFT", 74, -44)
+    frame.track:SetPoint("TOPRIGHT", -130, -41)
+    -- parchment under the quest's text: Forever's copy of the art is dark there
+    local parch = Parchment(frame)
+    parch:SetPoint("TOPLEFT", LIST_X - 2, DETAIL_Y + 2)
+    parch:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", LIST_X + DETAIL_W, DETAIL_Y - DETAIL_H - 1)
+    frame.listW, frame.detailW, frame.rows = DETAIL_W - 4, DETAIL_W, ROWS
+    frame.list, frame.listChild = Scroll("HUF_QuestLogList", frame, frame.listW, ROWS * ROW_H)
+    frame.list:SetPoint("TOPLEFT", LIST_X, LIST_Y)
+    frame.detail, frame.detailChild = Scroll("HUF_QuestLogDetail", frame, DETAIL_W, DETAIL_H)
+    frame.detail:SetPoint("TOPLEFT", LIST_X, DETAIL_Y)
+    frame.abandon:SetSize(117, 21)
+    frame.abandon:SetPoint("BOTTOMLEFT", 18, 54)
+    frame.share:SetSize(117, 21)
+    frame.share:SetPoint("LEFT", frame.abandon, "RIGHT", 0, 0)
+    frame.exit:SetSize(77, 21)
+    frame.exit:SetPoint("BOTTOMRIGHT", -34, 54)
+end
+
+-- two sides: the game's window frame, the quest list left, the quest's text right
+local DUAL_W, DUAL_H, TOP_Y, BOTTOM_Y = 695, 496, -60, 26
+local function BuildDual()
+    local ok, f = pcall(CreateFrame, "Frame", "HUF_QuestLog", UIParent, "ButtonFrameTemplate")
+    frame = (ok and f) or CreateFrame("Frame", "HUF_QuestLog", UIParent)
+    frame:SetSize(DUAL_W, DUAL_H)
+    Common()
+    if ok and f then
+        local function T(x) return type(x) == "table" and x or nil end
+        if T(frame.Inset) then frame.Inset:Hide() end
+        local tc = T(frame.TitleContainer)
+        if tc and T(tc.TitleText) then tc.TitleText:SetText(_G.QUEST_LOG or "Quest Log")
+        elseif frame.SetTitle then pcall(frame.SetTitle, frame, _G.QUEST_LOG or "Quest Log") end
+        if T(frame.CloseButton) then frame.CloseButton:SetScript("OnClick", function() frame:Hide() end) end
+        local pc = T(frame.PortraitContainer)
+        if pc and T(pc.portrait) then pc.portrait:SetAlpha(0) end
+    else
+        ns.UI.Fill(frame, 0.05, 0.05, 0.06, 0.96)
+        ns.UI.Border(frame, 0.35, 0.35, 0.35, 1)
+        local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("TOP", 0, -6)
+        title:SetText(_G.QUEST_LOG or "Quest Log")
+        local x = CreateFrame("Button", nil, frame)
+        x:SetSize(18, 18)
+        x:SetPoint("TOPRIGHT", -4, -3)
+        local xt = x:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        xt:SetPoint("CENTER")
+        xt:SetText("x")
+        x:SetScript("OnClick", function() frame:Hide() end)
+    end
+    -- the book as the window's portrait
+    local book = frame:CreateTexture(nil, "OVERLAY", nil, 6)
+    book:SetTexture("Interface\\QuestFrame\\UI-QuestLog-BookIcon")
+    book:SetSize(64, 64)
+    book:SetPoint("TOPLEFT", -6, 7)
+
+    frame.allBtn:SetPoint("TOPLEFT", 62, -36)
+    frame.count:SetPoint("LEFT", frame.allBtn, "RIGHT", 8, 0)
+    frame.track:SetPoint("TOPRIGHT", -70, -31)
+
+    local mid = math.floor(DUAL_W / 2)
+    local left = Inset(frame)
+    left:SetPoint("TOPLEFT", 6, TOP_Y)
+    left:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", mid - 1, BOTTOM_Y)
+    -- near-black under the list, over the inset's own grey (its edge stays on top)
+    local dark = left:CreateTexture(nil, "BACKGROUND", nil, 7)
+    dark:SetColorTexture(0.02, 0.02, 0.02, 0.92)
+    dark:SetPoint("TOPLEFT", 2, -2)
+    dark:SetPoint("BOTTOMRIGHT", -2, 2)
+    local right = Inset(frame)
+    right:SetPoint("TOPLEFT", frame, "TOPLEFT", mid + 1, TOP_Y)
+    right:SetPoint("BOTTOMRIGHT", -6, BOTTOM_Y)
+    local parch = Parchment(right)
+    parch:SetPoint("TOPLEFT", 2, -2)
+    parch:SetPoint("BOTTOMRIGHT", -2, 2)
+
+    local innerH = DUAL_H + TOP_Y - BOTTOM_Y
+    frame.listW = (mid - 1 - 6) - 34
+    frame.detailW = (DUAL_W - 6 - mid - 1) - 40
+    frame.rows = math.floor((innerH - 12) / ROW_H)
+    frame.list, frame.listChild = Scroll("HUF_QuestLogList", left, frame.listW, innerH - 12)
+    frame.list:SetPoint("TOPLEFT", 6, -6)
+    frame.detail, frame.detailChild = Scroll("HUF_QuestLogDetail", right, frame.detailW, innerH - 16)
+    frame.detail:SetPoint("TOPLEFT", 10, -8)
+
+    frame.abandon:SetSize(120, 22)
+    frame.abandon:SetPoint("BOTTOMLEFT", 4, 3)
+    frame.share:SetSize(120, 22)
+    frame.share:SetPoint("LEFT", frame.abandon, "RIGHT", 4, 0)
+    frame.exit:SetSize(100, 22)
+    frame.exit:SetPoint("BOTTOMRIGHT", -4, 3)
+end
+
+local function Build()
+    if frame then return end
+    if S().layout == "CLASSIC" then BuildClassic() else BuildDual() end
+    frame.layout = S().layout
+    QL.frame = frame
     Look()
+end
+
+-- the layout changed: a new window in the other layout
+function QL.Rebuild()
+    if not frame then return end
+    local shown = frame:IsShown()
+    frame:Hide()
+    frame = nil
+    wipe(rows) wipe(texts) wipe(items)
+    Build()
+    if shown then frame:Show() end
 end
 
 ---------------------------------------------------------------------------
@@ -812,7 +922,7 @@ function QL.Show(id)
             if e.questID == selected then
                 local top = frame.list:GetVerticalScroll() or 0
                 local y = (i - 1) * ROW_H
-                if y < top or y > top + (ROWS - 1) * ROW_H then frame.list:SetVerticalScroll(math.max(0, y - ROW_H)) end
+                if y < top or y > top + (frame.rows - 1) * ROW_H then frame.list:SetVerticalScroll(math.max(0, y - ROW_H)) end
                 break
             end
         end
