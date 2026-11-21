@@ -446,16 +446,18 @@ local function Item(i)
         b.icon = b:CreateTexture(nil, "ARTWORK")
         b.icon:SetSize(39, 39)
         b.icon:SetPoint("TOPLEFT", 0, 0)
-        b.nameFrame = b:CreateTexture(nil, "BACKGROUND")
-        b.nameFrame:SetTexture("Interface\\QuestFrame\\UI-QuestItemNameFrame")
-        b.nameFrame:SetSize(128, 64)
-        b.nameFrame:SetPoint("LEFT", b.icon, "RIGHT", -10, 0)
-        b.nameFrame:SetVertexColor(0.22, 0.19, 0.16)    -- dark box: quality colours stay readable on the parchment
+        -- a dark box for the name: quality colours stay readable on the parchment
+        b.nameFrame = CreateFrame("Frame", nil, b)
+        b.nameFrame:SetPoint("TOPLEFT", b.icon, "TOPRIGHT", 1, -1)
+        b.nameFrame:SetSize(104, 37)
+        b.nameFrame:SetFrameLevel(b:GetFrameLevel())
+        ns.UI.Fill(b.nameFrame, 0.07, 0.05, 0.03, 0.92)
+        ns.UI.Border(b.nameFrame, 0.42, 0.33, 0.20, 1)
         b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
         b.count:SetPoint("BOTTOMRIGHT", b.icon, "BOTTOMRIGHT", -2, 2)
-        b.name = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        b.name:SetPoint("LEFT", b.icon, "RIGHT", 8, 0)
-        b.name:SetWidth(90)
+        b.name = b.nameFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        b.name:SetPoint("LEFT", b.icon, "RIGHT", 6, 0)
+        b.name:SetWidth(94)
         b.name:SetJustifyH("LEFT")
         b.name:SetHeight(36)
         b:SetScript("OnEnter", function(self)
@@ -539,6 +541,30 @@ local function DrawDetails()
     local xp = Safe(GetQuestLogRewardXP, id) or 0
     if numR + numC > 0 or money > 0 or xp > 0 then
         Line(_G.REWARDS or "Rewards", "title", INK, 6)
+        -- XP and money first, on one line (XP left, money right)
+        if xp > 0 or money > 0 then
+            local half = math.floor(width / 2)
+            local h = 0
+            local function Part(text, x)
+                n = n + 1
+                local t = Text(n)
+                Font(t)
+                t:SetWidth(half - 4)
+                t:ClearAllPoints()
+                t:SetPoint("TOPLEFT", 4 + x, -y)
+                t:SetTextColor(INK[1], INK[2], INK[3])
+                t:SetText(text)
+                t:Show()
+                h = math.max(h, t:GetStringHeight() or 12)
+            end
+            local x = 0
+            if xp > 0 then
+                Part("|cff7a3fc4XP:|r " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp), 0)
+                x = half
+            end
+            if money > 0 then Part((_G.MONEY and (_G.MONEY .. ": ") or "Money: ") .. Money(money), x) end
+            y = y + h + 8
+        end
         local k = 0
         local function Items(kind, count, info)
             local col = 0
@@ -571,8 +597,6 @@ local function DrawDetails()
             Line(numC > 0 and (_G.REWARD_ITEMS or "You will also receive:") or (_G.REWARD_ITEMS_ONLY or "You will receive:"), nil, INK, 4)
             Items("reward", numR, function(i) return Safe(GetQuestLogRewardInfo, i, id) end)
         end
-        if money > 0 then Line(Money(money), nil, INK, 4) end
-        if xp > 0 then Line(("Experience: %s"):format(BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp), nil, INK, 4) end
     end
     frame.detailChild:SetHeight(math.max(y + 10, 10))
     frame.detail:SetVerticalScroll(0)
