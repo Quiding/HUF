@@ -237,6 +237,12 @@ end
 ---------------------------------------------------------------------------
 -- Fonts: the game's quest fonts (classic) or a HUF font
 ---------------------------------------------------------------------------
+-- text size: quest text = fontSize (13 = the game's QuestFont), title + 5
+-- (QuestTitleFont 18), list - 1 (GameFontNormal 12), small - 2
+local function Size(kind)
+    local base = S().fontSize or 13
+    return base + ((kind == "title" and 5) or (kind == "list" and -1) or (kind == "small" and -2) or 0)
+end
 local function Font(fs, kind)
     local s = S()
     if s.font == "CLASSIC" then
@@ -244,12 +250,18 @@ local function Font(fs, kind)
             or (kind == "list" and _G.GameFontNormal)
             or (kind == "small" and _G.GameFontHighlightSmall)
             or _G.QuestFont or _G.GameFontHighlight
-        if obj then fs:SetFontObject(obj) end
+        if obj then
+            fs:SetFontObject(obj)
+            -- the game's font at the chosen size
+            local path, _, flags = fs:GetFont()
+            if path then fs:SetFont(path, Size(kind), flags or "") end
+        end
     else
-        local size = s.fontSize + (kind == "title" and 4 or (kind == "small" and -1 or 0))
-        ns.ApplyFont(fs, s.font, size, s.outline)
+        ns.ApplyFont(fs, s.font, Size(kind), s.outline)
     end
 end
+-- list rows grow with the text
+local function RowH() return math.max(ROW_H, Size("list") + 4) end
 
 local function LevelColor(level)
     local c = ns.LevelColor and ns.LevelColor(level)
@@ -329,7 +341,7 @@ end
 local rows = {}
 local function NewRow(i)
     local r = CreateFrame("Button", nil, frame.listChild)
-    r:SetSize(frame.listW, ROW_H)
+    r:SetSize(frame.listW, RowH())
     r.expand = r:CreateTexture(nil, "ARTWORK")
     r.expand:SetSize(16, 16)
     r.expand:SetPoint("LEFT", 0, 0)
@@ -382,7 +394,8 @@ local function DrawList()
             r.entry = e
             if e then
                 r:ClearAllPoints()
-                r:SetPoint("TOPLEFT", frame.listChild, "TOPLEFT", 0, -(i - 1) * ROW_H)
+                r:SetHeight(RowH())
+                r:SetPoint("TOPLEFT", frame.listChild, "TOPLEFT", 0, -(i - 1) * RowH())
                 Font(r.text, "list")
                 Font(r.tag, "list")
                 if e.header then
@@ -415,7 +428,7 @@ local function DrawList()
             end
         end
     end
-    frame.listChild:SetHeight(math.max(1, #entries * ROW_H))
+    frame.listChild:SetHeight(math.max(1, #entries * RowH()))
     frame.count:SetText(("%d/%d"):format(QL.count or 0, MaxQuests()))
     local all = true
     for _, e in ipairs(entries) do if e.header and not e.collapsed then all = false break end end
@@ -660,7 +673,7 @@ local function Scroll(name, parent, w, h)
     if not (ok and sf.ScrollBar) then
         sf:SetScript("OnMouseWheel", function(self, d)
             local max = math.max(0, (child:GetHeight() or 0) - (self:GetHeight() or 0))
-            self:SetVerticalScroll(math.max(0, math.min(max, self:GetVerticalScroll() - d * 2 * ROW_H)))
+            self:SetVerticalScroll(math.max(0, math.min(max, self:GetVerticalScroll() - d * 2 * RowH())))
         end)
     end
     return sf, child
@@ -967,8 +980,10 @@ function QL.Show(id)
         for i, e in ipairs(entries) do
             if e.questID == selected then
                 local top = frame.list:GetVerticalScroll() or 0
-                local y = (i - 1) * ROW_H
-                if y < top or y > top + (frame.rows - 1) * ROW_H then frame.list:SetVerticalScroll(math.max(0, y - ROW_H)) end
+                local rh = RowH()
+                local visible = math.max(1, math.floor((frame.list:GetHeight() or rh) / rh))
+                local y = (i - 1) * rh
+                if y < top or y > top + (visible - 1) * rh then frame.list:SetVerticalScroll(math.max(0, y - rh)) end
                 break
             end
         end

@@ -41,7 +41,7 @@ ns.RegisterPage("questlog", "Quest log", "frames", function(page)
     R:Cycle("Font", Fonts, Opt("font"))
     R:Slider("Text size", 9, 20, 1, Opt("fontSize"))
     R:Cycle("Outline", OUTLINES, Opt("outline"))
-    R:Note("Size and outline are for the HUF fonts; the game's quest fonts keep their own.")
+    R:Note("Text size works for both; the outline only for the HUF fonts. The title grows with it.")
     R:Slider("Scale", 0.5, 2, 0.05, function() return Q().scale end, function(v) Q().scale = v ns.QuestLog.Look() end, "%.2f")
     R:Button("Back to the middle", function()
         Q().point = { "CENTER", "CENTER", 0, 40 }
