@@ -660,6 +660,7 @@ local function Look()
     frame:SetScale(s.scale)
 end
 QL.Look = Look
+QL.Frame = function() return frame end
 
 -- a scroll frame with the game's scroll bar when the template is there, else the mouse wheel only
 local function Scroll(name, parent, w, h)
@@ -726,9 +727,9 @@ local function Common()
         if not known then table.insert(UISpecialFrames, "HUF_QuestLog") end
     end
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", function() frame.from = { frame:GetLeft(), frame:GetTop() } frame:StartMoving() end)
+    frame:SetScript("OnDragStart", function() frame.from = { frame:GetLeft(), frame:GetTop() } ns.Snap.StartDrag(frame) end)
     frame:SetScript("OnDragStop", function()
-        frame:StopMovingOrSizing()
+        ns.Snap.StopDrag(frame)
         if frame.SetUserPlaced then frame:SetUserPlaced(false) end
         local from = frame.from
         frame.from = nil

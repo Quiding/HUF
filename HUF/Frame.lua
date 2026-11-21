@@ -644,7 +644,11 @@ local function AuraCfg(f, which)
         borderSize = a.borderSize,
         dispelBorder = which == "debuffs" and a.dispelBorder
                        or ((a.mark == "EDGE" or a.mark == "GLOW") and a.mark or false),
-        purge = which ~= "debuffs" and (a.filter == "PURGE" or a.filter == "TEAM_PURGE" or a.filter == "IMPORTANT_PURGE"),
+        -- debuffs: the dispel filters show only removable ones (the glow); buffs: the purge filters
+        glowAll = which == "debuffs" and a.glow and true or nil,
+        purge = (which == "debuffs" and (a.filter == "DISPELLABLE" or a.filter == "TEAM" or a.filter == "AUTO_TEAM"))
+                or which ~= "debuffs" and (a.filter == "PURGE" or a.filter == "TEAM_PURGE" or a.filter == "IMPORTANT_PURGE"
+                                         or a.filter == "AUTO_PURGE"),
         purgeSize = a.purgeSize, glowSize = a.glowSize,
         anchor = flow, growH = growH, growV = pos[5],
         point = { pos[1], f, pos[2], a.x + pos[6] * a.offset, a.y + pos[7] * a.offset },
@@ -658,12 +662,13 @@ end
 -- sides the game shows and tints (works while auras are hidden)
 local function EdgeCfg(f)
     local a = f.s.debuffs
-    local mode = a.dispelEdge or "OFF"
+    local mode = a.debuffEdge or "OFF"
     local e = math.max(1, a.dispelEdgeSize or 2)
     local w, h = f.s.width + 2 * e, f.s.height + 2 * e
     return {
         enabled = mode ~= "OFF" and f.s.enabled, highlight = true,
-        kind = "HARMFUL", filter = mode == "MINE" and "DISPELLABLE" or "TEAM", mine = false,
+        kind = "HARMFUL", mine = false,
+        filter = (mode == "MINE" and "DISPELLABLE") or (mode == "TEAM" and "TEAM") or "AUTO_TEAM",
         size = w, width = w, height = h, edge = e, gap = 0, perRow = 1, rows = 1,
         countSize = 9, timer = false, timerText = false, timerSize = 0,
         borderSize = 0, dispelBorder = true,

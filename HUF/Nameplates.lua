@@ -293,7 +293,7 @@ local function Layout(p)
     d.anchor, d.growH, d.point = "BOTTOMLEFT", "RIGHT", { "BOTTOMLEFT", a, "BOTTOMLEFT", 0, 0 }
     bf.enabled, bf.kind, bf.mine = s.showBuffs, "HELPFUL", false
     bf.filter, bf.dispelBorder = s.buffFilter or "ALL", BuffMark(s)
-    bf.purge = bf.filter == "PURGE" or bf.filter == "TEAM_PURGE" or bf.filter == "IMPORTANT_PURGE"
+    bf.purge = bf.filter == "PURGE" or bf.filter == "TEAM_PURGE" or bf.filter == "IMPORTANT_PURGE" or bf.filter == "AUTO_PURGE"
     bf.purgeSize, bf.glowSize = s.buffPurgeSize, s.buffGlowSize
     bf.anchor, bf.growH, bf.point = "BOTTOMRIGHT", "LEFT", { "BOTTOMRIGHT", a, "BOTTOMRIGHT", 0, 0 }
     if AurasStacked(s, room) then

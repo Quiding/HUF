@@ -122,6 +122,9 @@ local function Build()
     w:SetSize(WIDTH, HEIGHT)
     w:SetPoint("CENTER")
     w:SetFrameStrata("DIALOG")
+    -- in front of other addons' settings windows when shown or clicked (two
+    -- windows on one strata otherwise mix their parts)
+    w:SetToplevel(true)
     w:SetClampedToScreen(true)
     w:SetMovable(true)
     w:EnableMouse(true)
@@ -310,6 +313,7 @@ local function Build()
         w.topLine:SetColorTexture(A[1], A[2], A[3], 0.8)
     end
     w:SetScript("OnShow", function()
+        w:Raise()
         w.ApplyLook()
         Select(current or "general")
     end)
@@ -343,6 +347,17 @@ end
 -- not in combat: settings changes can touch secure frames (and a reload is
 -- refused), so the window stays closed while fighting and opens after
 local reopen   -- page to open when combat ends (false: none)
+-- unlock mode puts the settings window aside and brings it back after
+function ns.ConfigShown() return window and window:IsShown() or false end
+function ns.HideConfig() if window then window:Hide() end end
+
+-- a page opened on one of its tabs (a page that offers page.OpenTab)
+function ns.OpenConfigTab(key, tab)
+    ns.ToggleConfig(key, true)
+    local p = pages[key]
+    if tab and p and p.frame and p.frame.OpenTab then pcall(p.frame.OpenTab, tab) end
+end
+
 function ns.ToggleConfig(key, open)
     if InCombatLockdown() then
         if not (window and window:IsShown()) then

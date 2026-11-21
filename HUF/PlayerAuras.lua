@@ -277,10 +277,10 @@ function PA.NewMover(kind)
     m.label:SetText(kind == "buffs" and "Buffs" or "Debuffs")
     m:SetScript("OnDragStart", function()
         m.from = { m:GetLeft(), m:GetTop() }
-        m:StartMoving()
+        ns.Snap.StartDrag(m)
     end)
     m:SetScript("OnDragStop", function()
-        m:StopMovingOrSizing()
+        ns.Snap.StopDrag(m)
         if m.SetUserPlaced then m:SetUserPlaced(false) end
         local from = m.from
         if not from then return end
@@ -290,9 +290,10 @@ function PA.NewMover(kind)
         p[4] = math.floor((p[4] or 0) + (m:GetTop() or 0) - (from[2] or 0) + 0.5)
         PA.Apply()
     end)
-    m:SetScript("OnClick", function() if ns.ToggleConfig then ns.ToggleConfig("aurabars", true) end end)
+    m:SetScript("OnClick", function() if ns.OpenConfigTab then ns.OpenConfigTab("aurabars", kind) end end)
     m:Hide()
     movers[kind] = m
+    if ns.Snap then ns.Snap.Register(m) end
     return m
 end
 

@@ -108,6 +108,7 @@ local function Type(key, def)
 end
 
 Type("fps", {
+    steady = 3,          -- its width from the text with every digit an 8 (at least 3 of them)
     title = "FPS", showIcon = false, tick = true,
     icon = { file = "Interface\\Icons\\INV_Misc_PocketWatch_01" },
     Text = function()
@@ -123,6 +124,7 @@ Type("fps", {
 })
 
 Type("ms", {
+    steady = 3,          -- its width from the text with every digit an 8 (at least 3 of them)
     title = "Latency", showIcon = false, tick = true,
     settings = { latency = "HOME" },           -- HOME | WORLD | HIGHER
     icon = { file = "Interface\\Icons\\INV_Misc_PocketWatch_01" },
@@ -138,6 +140,7 @@ Type("ms", {
 })
 
 Type("clock", {
+    steady = 1,          -- its width from the text with every digit an 8 (at least 1 of them)
     title = "Clock", showIcon = false, tick = true,
     settings = { twentyFour = true, localTime = true },
     icon = { file = "Interface\\Icons\\INV_Misc_PocketWatch_01" },
@@ -234,8 +237,16 @@ BL.CHANNELS = CHANNELS
 local function Muted() return GetCVar("Sound_EnableAllSound") == "0" end
 local function Channel(b) return CHANNELS[b.cfg.settings.channel] or CHANNELS.master end
 Type("audio", {
+    steady = 3,          -- its width from the text with every digit an 8 (at least 3 of them)
     title = "Audio", showIcon = true,
-    settings = { channel = "master" },
+    settings = { channel = "master", style = "TEXT" },     -- style: TEXT (63%) | BAR (a volume bar)
+    -- the volume bar (style BAR): how full, its colour (red when muted)
+    Bar = function(b)
+        local v = tonumber(GetCVar(Channel(b).cvar)) or 0
+        if Muted() then return v, 0.85, 0.2, 0.2 end
+        local a = ns.ACCENT
+        return v, a[1], a[2], a[3]
+    end,
     icon = { atlas = "voicechat-icon-speaker", file = "Interface\\Common\\VoiceChat-Speaker" },
     events = { "CVAR_UPDATE" },
     IconFor = function()
@@ -282,6 +293,7 @@ local function Durability()
     return any and lo or nil
 end
 Type("durability", {
+    steady = 3,          -- its width from the text with every digit an 8 (at least 3 of them)
     title = "Durability", showIcon = true,
     icon = { file = "Interface\\Minimap\\Tracking\\Repair" },
     events = { "UPDATE_INVENTORY_DURABILITY", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_ENTERING_WORLD" },
@@ -330,6 +342,7 @@ Type("combat", {
 })
 
 Type("friends", {
+    steady = 1,          -- its width from the text with every digit an 8 (at least 1 of them)
     title = "Friends online", showIcon = true,
     icon = { atlas = "socialqueuing-icon-group", file = "Interface\\FriendsFrame\\UI-Toast-FriendOnlineIcon" },
     events = { "FRIENDLIST_UPDATE", "BN_FRIEND_ACCOUNT_ONLINE", "BN_FRIEND_ACCOUNT_OFFLINE" },
@@ -343,6 +356,7 @@ Type("friends", {
 })
 
 Type("guild", {
+    steady = 1,          -- its width from the text with every digit an 8 (at least 1 of them)
     title = "Guild online", showIcon = true,
     icon = { atlas = "UI-HUD-MicroMenu-GuildCommunities-Up", trim = 0.62, shift = 0.05,
              file = "Interface\\GossipFrame\\TabardGossipIcon" },
@@ -376,6 +390,7 @@ function BL.New(key)
     if not def then return nil end
     return {
         type = key, scale = 100, align = "CENTER", padL = 10, padR = 10, fill = false,
+        center = false,         -- kept in the middle of the bar (spacing by content)
         showIcon = def.showIcon and true or false,
         textColor = "WHITE", textCustom = { r = 1, g = 1, b = 1 },
         iconColor = "MONO", iconCustom = { r = 0.85, g = 0.85, b = 0.88 },

@@ -316,6 +316,15 @@ local function UpdateBlock(b)
     local def = BL.TYPES[b.cfg.type]
     if not def then return false end
     if def.IconFor then SetBlockIcon(b, def.IconFor(b)) end
+    if b.useMeter then
+        local ok, v, r, g, bl = pcall(def.Bar, b)
+        if ok then
+            b.meter:SetValue(v or 0)
+            b.meter:SetStatusBarColor(r or 1, g or 1, bl or 1)
+        end
+        b.text:SetText("")
+        return false
+    end
     local ok, text, r, g, bl = pcall(def.Text, b)
     if not ok then text = "" end
     text = text or ""
@@ -334,6 +343,17 @@ end
 local function BuildBlock(parent)
     local b = CreateFrame("Button", nil, parent)
     b.icon = b:CreateTexture(nil, "ARTWORK")
+    -- measures the steady width (see ContentWidth)
+    b.ruler = b:CreateFontString(nil, "OVERLAY")
+    b.ruler:Hide()
+    -- a bar instead of the text (the audio block's "bar" style)
+    b.meter = CreateFrame("StatusBar", nil, b)
+    b.meter:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    b.meter:SetMinMaxValues(0, 1)
+    b.meter.bg = b.meter:CreateTexture(nil, "BACKGROUND")
+    b.meter.bg:SetAllPoints()
+    b.meter.bg:SetColorTexture(0, 0, 0, 0.5)
+    b.meter:Hide()
     b.text = b:CreateFontString(nil, "OVERLAY")
     b.text:SetWordWrap(false)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -364,10 +384,23 @@ local function BuildBlock(parent)
 end
 
 -- the block's content: icon, then the text
+-- A number block's width comes from its text with every digit an 8 (at
+-- least `steady` digits, like EllesmereUI): it only changes when the number
+-- gains a digit, so the blocks after it don't move with every new value.
+local function TextWidth(b)
+    local txt = b.text:GetText() or ""
+    if txt == "" then return 0 end
+    local def = BL.TYPES[b.cfg.type]
+    local n = def and def.steady
+    if not n then return b.text:GetStringWidth() or 0 end
+    b.ruler:SetText((txt:gsub("%d+", function(d) return ("8"):rep(math.max(n, #d)) end)))
+    return math.max(b.ruler:GetStringWidth() or 0, b.text:GetStringWidth() or 0)
+end
 local function ContentWidth(b)
     local w = 0
     if b.cfg.showIcon then w = b.iconW end
-    local tw = (b.text:GetText() or "") ~= "" and (b.text:GetStringWidth() or 0) or 0
+    if b.useMeter then return math.ceil(w + (w > 0 and 4 or 0) + b.meterW) end
+    local tw = TextWidth(b)
     if tw > 0 then w = w + (w > 0 and 3 or 0) + tw end
     return math.ceil(w)
 end
@@ -389,14 +422,44 @@ function DB.LayoutBar(cfg)
         widths[i] = ContentWidth(b) + pads
         if i ~= fillAt then sum = sum + widths[i] end
     end
+    -- a block kept in the middle (cfg.center): its text at the bar's middle,
+    -- the blocks before it from the left edge, the ones after it from the
+    -- right edge, so nothing moves when another block's text gets longer
+    local centerAt
+    if not even then
+        for i, b in ipairs(list) do if b.cfg.center then centerAt = i end end
+    end
+    local xs = {}
     if even then
         for i = 1, n do widths[i] = W / n end
+    elseif centerAt then
+        local cb = list[centerAt]
+        local cStart = math.floor(W / 2 - ContentWidth(cb) / 2 - cb.cfg.padL + 0.5)
+        local cEnd = cStart + widths[centerAt]
+        xs[centerAt] = cStart
+        -- the left side: packed from 0, its fill block (if any) takes the slack
+        local lsum, lfill = 0, nil
+        for i = 1, centerAt - 1 do
+            if list[i].cfg.fill then lfill = i else lsum = lsum + widths[i] end
+        end
+        if lfill then widths[lfill] = math.max(widths[lfill], cStart - lsum) end
+        local x = 0
+        for i = 1, centerAt - 1 do xs[i] = x x = x + widths[i] end
+        -- the right side: packed to the right edge, its fill block takes the slack
+        local rsum, rfill = 0, nil
+        for i = centerAt + 1, n do
+            if list[i].cfg.fill then rfill = i else rsum = rsum + widths[i] end
+        end
+        if rfill then widths[rfill] = math.max(widths[rfill], W - cEnd - rsum) end
+        x = W
+        for i = n, centerAt + 1, -1 do x = x - widths[i] xs[i] = x end
     else
         widths[fillAt] = math.max(widths[fillAt], W - sum)
     end
     local x = 0
     for i, b in ipairs(list) do
         local cw = widths[i]
+        if xs[i] then x = xs[i] end
         b:ClearAllPoints()
         b:SetPoint("TOPLEFT", rec.frame, "TOPLEFT", math.floor(x + 0.5), 0)
         b:SetSize(math.max(1, math.floor(cw + 0.5)), H)
@@ -410,11 +473,14 @@ function DB.LayoutBar(cfg)
         left = math.floor(left + 0.5)
         b.icon:ClearAllPoints()
         b.text:ClearAllPoints()
+        b.meter:ClearAllPoints()
         if b.cfg.showIcon then
             b.icon:SetPoint("LEFT", b, "LEFT", left, 0)
             b.text:SetPoint("LEFT", b.icon, "RIGHT", 3, 0)
+            b.meter:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
         else
             b.text:SetPoint("LEFT", b, "LEFT", left, 0)
+            b.meter:SetPoint("LEFT", b, "LEFT", left, 0)
         end
         x = x + cw
     end
@@ -431,11 +497,45 @@ local function Fade(t, a, reverse)
     t:Show()
 end
 
+local EUI_ART = "Interface\\AddOns\\EllesmereUI\\media\\modern_blizz.png"
+-- the picture cropped to fill the bar without stretching (its useful part:
+-- u 0.25-1, v 0-0.75 of a 561 x 433 image)
+local function ArtCoords(t, w, h)
+    local L, R, T, Bm, aspect = 0.25, 1, 0, 0.75, 561 / 433
+    if not (w and h) or w == 0 or h == 0 then return end
+    local fa = w / h
+    if fa > aspect then
+        local vis = (Bm - T) * (aspect / fa)
+        local trim = ((Bm - T) - vis) / 2
+        t:SetTexCoord(L, R, T + trim, Bm - trim)
+    else
+        local vis = (R - L) * (fa / aspect)
+        local trim = ((R - L) - vis) / 2
+        t:SetTexCoord(L + trim, R - trim, T, Bm)
+    end
+end
+
 local function ApplyLook(rec, cfg)
     local f = rec.frame
     local c = cfg.bgColor
     f.bg:ClearAllPoints()
-    if cfg.look == "SOFT" then
+    local art = cfg.look == "EUI" and ns.ellesmere
+    f.art:SetShown(art and true or false)
+    f.overlay:SetShown(art and true or false)
+    if art then
+        f.art:SetTexture(EUI_ART)
+        ArtCoords(f.art, cfg.width, cfg.height)
+        f.art:SetAlpha(cfg.artOpacity or 1)
+        f.overlay:SetColorTexture(0, 0, 0, cfg.softAlpha or 0.5)
+        f.overlay:SetAlpha(cfg.artOpacity or 1)
+        f.bg:Hide()
+        f.fadeL:Hide(); f.fadeR:Hide()
+    else
+        f.bg:Show()
+    end
+    if art then
+        -- (the edge below)
+    elseif cfg.look == "SOFT" or cfg.look == "EUI" then
         -- dark, see-through, its ends faded out
         local a = cfg.softAlpha or 0.5
         local fw = math.floor(cfg.width * 0.12 + 0.5)
@@ -452,9 +552,20 @@ local function ApplyLook(rec, cfg)
     end
     local bs = cfg.borderSize or 0
     f.border:SetShown(bs > 0)
+    f.border:SetColor(0, 0, 0, art and 0.8 or 1)
+    -- the edge in real screen pixels (bs of them), like EllesmereUI: a UI
+    -- unit can be 2 pixels at a small UI scale
+    local px = 1
+    local _, ph = GetPhysicalScreenSize and GetPhysicalScreenSize()
+    local es = f:GetEffectiveScale()
+    if ph and ph > 0 and es and es > 0 then px = 768 / (ph * es) end
+    local t = math.max(1, bs) * px
     local e = f.border.edges
-    e[1]:SetHeight(math.max(1, bs)); e[2]:SetHeight(math.max(1, bs))
-    e[3]:SetWidth(math.max(1, bs)); e[4]:SetWidth(math.max(1, bs))
+    for i = 1, 4 do
+        if e[i].SetSnapToPixelGrid then e[i]:SetSnapToPixelGrid(false) e[i]:SetTexelSnappingBias(0) end
+    end
+    e[1]:SetHeight(t); e[2]:SetHeight(t)
+    e[3]:SetWidth(t); e[4]:SetWidth(t)
 end
 
 local function BarFrame(cfg)
@@ -468,6 +579,14 @@ local function BarFrame(cfg)
     f.fadeR = f:CreateTexture(nil, "BACKGROUND")
     f.fadeR:SetPoint("TOPRIGHT"); f.fadeR:SetPoint("BOTTOMRIGHT")
     f.border = ns.UI.Border(f, 0, 0, 0, 1)
+    -- look EUI: EllesmereUI's background picture (from its folder, when
+    -- installed) under a black overlay
+    f.art = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+    f.art:SetAllPoints()
+    f.art:Hide()
+    f.overlay = f:CreateTexture(nil, "BACKGROUND", nil, -7)
+    f.overlay:SetAllPoints()
+    f.overlay:Hide()
     rec = { frame = f, blocks = {}, pool = {} }
     recs[cfg] = rec
     return rec
@@ -524,11 +643,16 @@ function DB.ApplyBar(cfg)
             b.cfg, b.barCfg = bc, cfg
             local size = math.max(6, math.floor(cfg.fontSize * bc.scale / 100 + 0.5))
             ns.ApplyFont(b.text, "GLOBAL", size, "GLOBAL")
+            ns.ApplyFont(b.ruler, "GLOBAL", size, "GLOBAL")
             b.iconKey = nil
             SetBlockIcon(b, def.IconFor and def.IconFor(b) or def.icon)
             b.iconW = math.floor((size + 2) * (b.icon.aspect or 1) + 0.5)
             b.icon:SetSize(b.iconW, size + 2)
             b.icon:SetShown(bc.showIcon)
+            b.useMeter = def.Bar ~= nil and bc.settings.style == "BAR"
+            b.meterW = math.floor(size * 5 + 0.5)
+            b.meter:SetSize(b.meterW, math.max(3, math.floor(size * 0.45 + 0.5)))
+            b.meter:SetShown(b.useMeter)
             PaintIcon(b)
             b:EnableMouseWheel(def.Wheel ~= nil)
             UpdateBlock(b)
@@ -538,6 +662,22 @@ function DB.ApplyBar(cfg)
     end
     f:Show()
     DB.LayoutBar(cfg)
+end
+
+-- /run HUF.DataBars.PrintEdges(): left / right / bottom / top of the chat
+-- panel and its strip, the meter windows and the data bars (UIParent units)
+function DB.PrintEdges()
+    local function P(name, f)
+        if not (f and f.GetLeft and f:GetLeft()) then return end
+        local k = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+        print(("%s: %.1f .. %.1f  (w %.1f)  bottom %.1f top %.1f"):format(name, f:GetLeft() * k, f:GetRight() * k,
+            (f:GetRight() - f:GetLeft()) * k, f:GetBottom() * k, f:GetTop() * k))
+    end
+    P("chat panel", _G.HUF_ChatPanel)
+    P("chat strip", _G.HUF_ChatButtons and _G.HUF_ChatButtons.strip)
+    P("chat window", _G.ChatFrame1)
+    for i = 1, 6 do P("meter " .. i, _G[i == 1 and "HUF_DamageMeter" or ("HUF_DamageMeter" .. i)]) end
+    for cfg, rec in pairs(recs) do P("bar " .. tostring(cfg.name), rec.frame) end
 end
 
 function DB.ApplyBars()
@@ -595,6 +735,7 @@ local function Mover(cfg)
     local m = movers[cfg]
     if m then return m end
     m = CreateFrame("Button", nil, UIParent)
+    if ns.Snap then ns.Snap.Register(m) end
     m:SetFrameStrata("DIALOG")
     m:SetMovable(true)
     m:SetClampedToScreen(true)
@@ -604,10 +745,9 @@ local function Mover(cfg)
     ns.UI.Border(m, A[1], A[2], A[3], 1)
     m.label = m:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     m.label:SetPoint("BOTTOM", m, "TOP", 0, 2)
-    m:SetScript("OnDragStart", function(self) if not InCombatLockdown() then self:StartMoving() end end)
+    m:SetScript("OnDragStart", function(self) ns.Snap.StartDrag(self) end)
     m:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        if self.SetUserPlaced then self:SetUserPlaced(false) end
+        ns.Snap.StopDrag(self)
         local sx, sy = self:GetCenter()
         local ux, uy = UIParent:GetCenter()
         if not (sx and ux) then return end

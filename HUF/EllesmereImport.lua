@@ -662,7 +662,9 @@ local function ConvertDamageMeter(addon, m, notes)
             or ns.CopyTable(m.point)
         -- each window its own height (HUF: windows[i].rows over the shared rows)
         windows[i] = { meterType = MeterType(e.curDMType) or "DamageDone", session = "CURRENT", point = point,
-                       rows = RowsFor(h) }
+                       rows = RowsFor(h),
+                       -- each its own width too (Ellesmere's can differ by a pixel)
+                       width = type(e.width) == "number" and math.floor(e.width + 0.5) or nil }
     end
     m.windows, m.windowCount = windows, count
     m.point = ns.CopyTable(windows[1].point)
@@ -839,7 +841,7 @@ local function ConvertGroup(rf, g, notes)
         d.dispelBorder = true
         -- Ellesmere's dispel border round the frame (size 0: off)
         local db = math.floor(Num(G("dispelBorderSize"), 0) + 0.5)
-        d.dispelEdge = db > 0 and "MINE" or "OFF"
+        d.debuffEdge = db > 0 and "AUTO" or "OFF"
         if db > 0 then d.dispelEdgeSize = math.min(6, db) end
         d.countSize = math.max(6, math.floor(Num(G("debuffStacksTextSize"), 8) + 0.5))
         d.timer = G("debuffShowSwipe", true) ~= false
@@ -1169,6 +1171,7 @@ local function ConvertBlock(blk, bar, out)
         c.padL = math.floor(Num(blk.contentGapL, base) + 0.5)
         c.padR = math.floor(Num(blk.contentGapR, base) + 0.5)
         c.fill = bar.fillBlockId ~= nil and blk.id == bar.fillBlockId
+        c.center = bar.centerBlockId ~= nil and blk.id == bar.centerBlockId
         BlockColors(blk, c)
         if st.showIcon ~= nil then c.showIcon = st.showIcon and true or false end
         out[#out + 1] = c
@@ -1183,6 +1186,8 @@ local function ConvertBlock(blk, bar, out)
         c.settings.latency = (m == "world" and "WORLD") or ((m == "both" or m == "higher") and "HIGHER") or "HOME"
     elseif t == "clock" then
         local c = Add("clock")
+        -- Ellesmere's clock text is 22 where the others are 13
+        c.scale = math.floor(c.scale * 22 / 13 + 0.5)
         c.settings.twentyFour = st.twentyFour ~= false
         c.settings.localTime = st.localTime ~= false
     elseif t == "gold" then
@@ -1196,6 +1201,7 @@ local function ConvertBlock(blk, bar, out)
         local c = Add("audio")
         local ch = st.channel or "master"
         c.settings.channel = BL.CHANNELS[ch] and ch or "master"
+        c.settings.style = "BAR"            -- Ellesmere shows the volume as a bar
     elseif t == "combat" then
         local c = Add("combat")
         c.settings.onlyInCombat = st.onlyInCombat and true or false
@@ -1231,12 +1237,15 @@ local function ConvertBars(addon, notes)
                     local mc = type(th.modernColor) == "table" and th.modernColor
                     if mc then c.bgColor, c.bgAlpha = Color(mc, c.bgColor), Num(mc.a, 0.95) end
                 else
-                    c.look = "SOFT"
+                    -- Ellesmere's own background art (HUF draws it from EllesmereUI's folder)
+                    c.look = "EUI"
                     c.softAlpha = Num(th.euiAlpha, 0.5)
+                    c.artOpacity = Num(th.euiOpacity, 1)
                 end
                 c.borderSize = b.hideBorder and 0 or 1
                 c.sizing = (b.sizingMode == "even") and "EVEN" or "AUTO"
-                c.fontSize = math.max(6, math.floor(12 * Num(b.fontScale, 100) / 100 + 0.5))
+                -- Ellesmere's block text is 13 at 100 % (its clock 22: see the clock block)
+                c.fontSize = math.max(6, math.floor(13 * Num(b.fontScale, 100) / 100 + 0.5))
                 c.blocks = {}
                 for _, blk in ipairs(type(b.blocks) == "table" and b.blocks or {}) do
                     if type(blk) == "table" then
@@ -1262,6 +1271,118 @@ end
 -- npOn: false when Ellesmere's nameplates are off (not loaded)
 -- parts: what the import turns on or off, for the import window:
 --   { title, tbl (its settings: .enabled), on, why (Ellesmere's state when off) }
+---------------------------------------------------------------------------
+-- Chat (EllesmereUIChat): its panel look, tabs, sidebar buttons, fading,
+-- input line, short channel names, class colours and kept history
+---------------------------------------------------------------------------
+local CHAT_FOLDER = "EllesmereUIChat"
+local function ConvertChat(addon, c, notes, prof)
+    local p = type(addon.chat) == "table" and addon.chat or addon
+    local function G(k, d) local v = p[k] if v == nil then return d end return v end
+    c.enabled = G("enabled", true) ~= false
+    c.look = "PANEL"
+    c.bgColor = { r = Num(G("bgR"), 0.03), g = Num(G("bgG"), 0.045), b = Num(G("bgB"), 0.05) }
+    c.bgAlpha = Num(G("bgAlpha"), 0.65)
+    c.fontSize = math.max(8, math.min(24, math.floor(Num(G("chatFontSize", G("fontSize")), 12) + 0.5)))
+    -- Ellesmere's chat font: the Chat page's own, else the chat entry of its
+    -- per-module fonts, else Ellesmere's global one (the same for the outline)
+    local fonts = type(prof) == "table" and type(prof.fonts) == "table" and prof.fonts or {}
+    local entry = {}
+    for _, e in ipairs(type(fonts.moduleFonts) == "table" and fonts.moduleFonts or {}) do
+        if type(e) == "table" and e.folder == CHAT_FOLDER then entry = e end
+    end
+    local fname = G("font", "__global")
+    if fname == "__global" then fname = entry.font end
+    if fname == nil or fname == "__global" then fname = fonts.global or "Expressway" end
+    c.font = FontName(fname) or "GLOBAL"
+    if c.font == "GLOBAL" and fname then
+        notes[#notes + 1] = ("Chat: font \"%s\" is not known to HUF: HUF's general font."):format(tostring(fname))
+    end
+    local om = G("outlineMode", "__global")
+    if om == "__global" then om = entry.outline end
+    if om == nil or om == "__global" then om = fonts.outlineMode or "none" end
+    c.outline = (om == "outline" and "OUTLINE") or (om == "thick" and "THICKOUTLINE") or "NONE"
+    c.tabFontSize = math.max(8, math.min(18, math.floor(Num(G("tabFontSize"), 11) + 0.5)))
+    local tc = G("tabFontColor")
+    c.tabTextAlpha = type(tc) == "table" and Num(tc.a, 0.65) or 0.65
+    c.tabUnderline = G("activeUnderline", true) ~= false
+    c.tabUnderlineAccent = (G("activeUnderlineColorMode", "accent") == "accent")
+    c.tabUnderlineColor = Color(G("activeUnderlineColor"), c.tabUnderlineColor or { r = 0.05, g = 0.82, b = 0.61 })
+    -- the panel's edge: only when Ellesmere draws one (foreverBorder belongs to
+    -- its bronze WoW Forever style, not to the EllesmereUI look)
+    local edge = G("panelBorderThickness", "none") ~= "none"
+    c.panelBorderColor = Color(G("panelBorderColor"), { r = 1, g = 1, b = 1 })
+    c.panelBorderAlpha = edge and Num(G("panelBorderOpacity"), 0.18) or 0
+    local thick = G("panelBorderThickness", "none")
+    c.panelBorderSize = (thick == "thick" and 2) or (thick == "thicker" and 3) or 1
+    -- tabs
+    c.tabHeight = math.max(14, math.min(32, math.floor(Num(G("tabHeight"), 24) - 2 + 0.5)))
+    c.tabTextColor = Color(G("tabFontColorActive"), { r = 1, g = 1, b = 1 })
+    local tb, tba = G("tabBackgroundColor"), G("tabBackgroundColorActive")
+    c.tabBg = Color(type(tba) == "table" and tba or tb, { r = 0.03, g = 0.045, b = 0.05 })
+    c.tabBgAlpha = type(tb) == "table" and Num(tb.a, 0.44) or 0.44
+    c.tabBgActiveAlpha = type(tba) == "table" and Num(tba.a, 0.65) or 0.65
+
+    c.tabActiveEdge = G("activeTabBorder", true) ~= false and G("tabBorderThickness", "none") ~= "none"
+    -- the sidebar
+    c.stripJoined = G("sidebarSeparate", false) ~= true
+    c.stripGap = math.max(0, math.min(30, math.floor(Num(G("sidebarSeparateSpacing"), 8) + 0.5)))
+    c.stripBg = G("hideSidebarBg", false) ~= true
+    c.iconAccent = G("iconUseAccent", false) == true
+    c.iconColor = { r = Num(G("iconR"), 1), g = Num(G("iconG"), 1), b = Num(G("iconB"), 1) }
+    c.iconSize = math.max(14, math.min(32, math.floor(22 * Num(G("sidebarIconScale"), 1) + 0.5)))
+    c.iconGap = math.max(0, math.min(16, math.floor(Num(G("sidebarIconSpacing"), 10) + 0.5)))
+    c.stripWidth = math.max(30, math.min(100, math.floor(Num(G("sidebarWidth"), 40) + 0.5)))
+    -- the sidebar's buttons
+    c.buttons.copy = G("showCopy", true) ~= false
+    c.buttons.social = G("showFriends", true) ~= false
+    c.buttons.guild = G("showGuild", false) == true
+    c.buttons.channels = G("showVoice", false) == true
+    c.buttons.chatmenu = G("showChatMenu", false) == true
+    c.buttons.bottom = G("showScroll", true) ~= false
+    c.buttons.settings = G("showSettings", true) ~= false
+    c.buttonSide = G("sidebarRight", false) == true and "RIGHT" or "LEFT"
+    c.buttonX, c.buttonY = 0, 0
+    c.hideStock = true
+    -- Ellesmere fades the whole chat when idle; HUF fades the buttons
+    c.fade = G("idleFadeEnabled", true) ~= false
+    c.fadeDelay = math.max(1, math.min(30, math.floor(Num(G("idleFadeDelay"), 15) + 0.5)))
+    c.fadeAlpha = math.max(0, math.min(1, 1 - Num(G("idleFadeStrength"), 40) / 100))
+    c.fadeWhole = true
+    -- Ellesmere's panel: 10 past the chat's sides; below it 6 (input on top,
+    -- over the chat's top lines) or room for the input line under the text
+    c.panelPadX = 10
+    if G("inputOnTop", false) == true then
+        c.inputPos, c.panelPadBottom = "INSIDE_TOP", 6
+    else
+        c.inputPos, c.panelPadBottom = "BELOW", 34
+    end
+    c.inputOffset = 0
+    c.abbreviate = G("abbreviateChannels", true) ~= false
+    c.classColors = G("classColorNames", true) ~= false
+    c.history = G("persistChatHistory", true) ~= false
+    c.historyLines = math.max(100, math.min(2000, math.floor(Num(G("persistChatHistoryMaxLines"), 100) / 100 + 0.5) * 100))
+    -- where the chat sits and its size: Ellesmere's chat running now = the
+    -- window as it is on screen (exact); else what Ellesmere saved
+    local pos, size = G("chatPosition"), G("chatSize")
+    local live = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(CHAT_FOLDER)
+    local cf = _G.ChatFrame1
+    local l, b = live and cf and cf:GetLeft(), live and cf and cf:GetBottom()
+    if l and b then
+        c.position = { point = "BOTTOMLEFT", relPoint = "BOTTOMLEFT", x = math.floor(l + 0.5), y = math.floor(b + 0.5),
+                       w = math.floor(cf:GetWidth() + 0.5), h = math.floor(cf:GetHeight() + 0.5) }
+    elseif type(pos) == "table" and type(pos.x) == "number" and type(pos.y) == "number" then
+        c.position = { point = pos.point or "BOTTOMLEFT", relPoint = pos.relPoint or pos.point or "BOTTOMLEFT",
+                       x = math.floor(pos.x + 0.5), y = math.floor(pos.y + 0.5) }
+        if type(size) == "table" and type(size.w) == "number" and type(size.h) == "number" then
+            c.position.w, c.position.h = math.floor(size.w + 0.5), math.floor(size.h + 0.5)
+        end
+    end
+    -- timestamps: the game's own setting, written once at the next login / reload
+    local ts = G("timestampFormat")
+    if type(ts) == "string" and ts ~= "" then c.timestamps = ts end
+end
+
 local UNIT_ORDER = { "player", "target", "targettarget", "pet" }
 local function Convert(prof, uf, np, npOn, dm, dmOn)
     local out = ns.CopyTable(ns.db)
@@ -1277,6 +1398,7 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         local okC, src = pcall(ConvertUnit, hufKey, s, uf, u, notes)
         if not okC then return false, ("Could not convert the %s frame: %s"):format(hufKey, tostring(src)) end
         parts[#parts + 1] = { title = ns.UNIT_BY_KEY[hufKey].title, tbl = u, on = u.enabled,
+            path = { "units", hufKey }, unit = true,
             why = (src == "blizzard" and "Blizzard's frame in Ellesmere") or "off in Ellesmere" }
     end
     if np then
@@ -1284,7 +1406,7 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         if not okN then return false, "Could not convert the nameplates: " .. tostring(err) end
         what[#what + 1] = "nameplates"
         out.nameplates.enabled = npOn ~= false
-        parts[#parts + 1] = { title = "Nameplates", tbl = out.nameplates, on = out.nameplates.enabled,
+        parts[#parts + 1] = { title = "Nameplates", tbl = out.nameplates, on = out.nameplates.enabled, path = { "nameplates" },
             why = "EllesmereUI Nameplates is off", folder = NP_FOLDER, module = "EllesmereUI Nameplates" }
     end
     local mmA = prof and prof.addons and prof.addons[MM_FOLDER]
@@ -1292,7 +1414,7 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         local okM, err = pcall(ConvertMinimap, mmA, out.minimap, notes)
         if not okM then return false, "Could not convert the minimap: " .. tostring(err) end
         what[#what + 1] = "minimap"
-        parts[#parts + 1] = { title = "Minimap", tbl = out.minimap, on = true,
+        parts[#parts + 1] = { title = "Minimap", tbl = out.minimap, on = true, path = { "minimap" },
             why = "off in Ellesmere", folder = MM_FOLDER, module = "EllesmereUI Minimap" }
     end
     local dbA = prof and prof.addons and prof.addons[DB_FOLDER]
@@ -1301,7 +1423,8 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         if not okB then return false, "Could not convert the data bar: " .. tostring(res) end
         if res then
             what[#what + 1] = "minimap data bar"
-            parts[#parts + 1] = { title = "Minimap data bar", tbl = out.dataBars.minimap, on = true, why = "off in Ellesmere" }
+            parts[#parts + 1] = { title = "Minimap data bar", tbl = out.dataBars.minimap, on = true, why = "off in Ellesmere",
+                path = { "dataBars", "minimap" } }
         end
         local okF, bars = pcall(ConvertBars, dbA, notes)
         if not okF then return false, "Could not convert the data bars: " .. tostring(bars) end
@@ -1310,17 +1433,25 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
             what[#what + 1] = "data bars"
             for i, b in ipairs(bars) do
                 local last = i == #bars
-                parts[#parts + 1] = { title = "Data bar: " .. b.name, tbl = b, on = true, why = "off in Ellesmere",
+                parts[#parts + 1] = { title = "Data bar: " .. b.name, tbl = b, on = true, why = "off in Ellesmere", bar = true,
                     folder = last and DB_FOLDER or nil, module = last and "EllesmereUI Data Bars" or nil }
             end
         end
+    end
+    local chA = prof and prof.addons and prof.addons[CHAT_FOLDER]
+    if type(chA) == "table" and type(out.chat) == "table" then
+        local okC, err = pcall(ConvertChat, chA, out.chat, notes, prof)
+        if not okC then return false, "Could not convert the chat: " .. tostring(err) end
+        what[#what + 1] = "chat"
+        parts[#parts + 1] = { title = "Chat", tbl = out.chat, on = out.chat.enabled, path = { "chat" },
+            why = "off in Ellesmere", folder = CHAT_FOLDER, module = "EllesmereUI Chat" }
     end
     local rf = prof and prof.addons and prof.addons[RF_FOLDER]
     if type(rf) == "table" and out.units.party then
         local okG, err = pcall(ConvertGroup, rf, out.units.party, notes)
         if not okG then return false, "Could not convert the group frames: " .. tostring(err) end
         what[#what + 1] = "group frames"
-        parts[#parts + 1] = { title = "Group frames", tbl = out.units.party, on = true,
+        parts[#parts + 1] = { title = "Group frames", tbl = out.units.party, on = true, path = { "units", "party" }, unit = true,
             why = "off in Ellesmere", folder = RF_FOLDER, module = "EllesmereUI Raid Frames" }
     end
     if dm and type(out.damageMeter) == "table" then
@@ -1328,7 +1459,7 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         if not okD then return false, "Could not convert the damage meter: " .. tostring(err) end
         what[#what + 1] = "damage meter"
         out.damageMeter.enabled = dmOn ~= false
-        parts[#parts + 1] = { title = "Damage meter", tbl = out.damageMeter, on = out.damageMeter.enabled,
+        parts[#parts + 1] = { title = "Damage meter", tbl = out.damageMeter, on = out.damageMeter.enabled, path = { "damageMeter" },
             why = "EllesmereUI Damage Meters is off", folder = DM_FOLDER, module = "EllesmereUI Damage Meters" }
     end
 
@@ -1381,6 +1512,49 @@ local function Convert(prof, uf, np, npOn, dm, dmOn)
         notes[#notes + 1] = "Focus and boss frames: HUF has none, left out."
     end
     return true, out, Unique(notes), what, parts
+end
+
+-- The profile to import: the active one, with only the ticked parts taken
+-- from the converted one (out). Unticked parts stay exactly as they are. The
+-- general font, outline, shortened texts and power colours come along only
+-- with unit or group frames.
+local GLOBAL_KEYS = { "font", "outline", "shadow", "shortenTexts", "powerColors", "customPower" }
+function ns.MergeEllesmere(out, parts, chosen)
+    local final = ns.CopyTable(ns.db)
+    local bars, anyUnit = {}, false
+    for i, part in ipairs(parts) do
+        if chosen[i] then
+            if part.bar then
+                bars[#bars + 1] = ns.CopyTable(part.tbl)
+            elseif part.path then
+                local t = final
+                for j = 1, #part.path - 1 do
+                    local k = part.path[j]
+                    if type(t[k]) ~= "table" then t[k] = {} end
+                    t = t[k]
+                end
+                t[part.path[#part.path]] = ns.CopyTable(part.tbl)
+                if part.unit then anyUnit = true end
+            end
+        end
+    end
+    if #bars > 0 and type(final.dataBars) == "table" then final.dataBars.bars = bars end
+    if anyUnit and type(out.global) == "table" then
+        for _, k in ipairs(GLOBAL_KEYS) do
+            local v = out.global[k]
+            final.global[k] = type(v) == "table" and ns.CopyTable(v) or v
+        end
+    end
+    -- a frame anchored to one that is off goes back to the screen
+    for _, u in pairs(final.units or {}) do
+        if type(u) == "table" and u.anchorTo and u.anchorTo ~= "SCREEN" and final.units[u.anchorTo]
+           and not final.units[u.anchorTo].enabled then
+            u.anchorTo = "SCREEN"
+            u.point = { "CENTER", "CENTER", 0, -200 }
+        end
+    end
+    if out._extra then final._extra = out._extra end
+    return final
 end
 
 -- ok, a whole HUF profile (the active one with Ellesmere's frames), notes,

@@ -97,4 +97,5 @@ ns.RegisterPage("aurabars", "Buff bars", "frames", function(page)
     subs.debuffs = SubFrame(page); BarPage(subs.debuffs, "debuffs")
     if strip.Bind then strip:Bind(subs, Show) end
     Show("buffs")
+    page.OpenTab = Show      -- ns.OpenConfigTab("aurabars", "debuffs")
 end, function() return ns.db.auraBars.buffs.enabled or ns.db.auraBars.debuffs.enabled end)

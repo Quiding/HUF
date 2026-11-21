@@ -354,7 +354,9 @@ function Chat.Copy()
         local f = CreateFrame("Frame", "HUF_ChatCopy", UIParent)
         f:SetSize(620, 420)
         f:SetPoint("CENTER")
-        f:SetFrameStrata("DIALOG")
+        -- above the settings window (DIALOG too): it would draw over this one
+        f:SetFrameStrata("FULLSCREEN_DIALOG")
+        f:SetToplevel(true)
         f:EnableMouse(true)
         f:SetMovable(true)
         f:RegisterForDrag("LeftButton")
@@ -383,6 +385,12 @@ function Chat.Copy()
         copyWin.area:SetText(text)
     end
     copyWin:Show()
+    copyWin:Raise()
+    -- at the newest line (once the text is laid out)
+    local sc = e and e:GetParent()
+    if sc and sc.SetVerticalScroll then
+        C_Timer.After(0.05, function() sc:SetVerticalScroll(sc:GetVerticalScrollRange()) end)
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -402,6 +410,13 @@ local BUTTONS = {
       blizzard = "ChatFrameChannelButton", tip = "Chat channels" },
     { key = "chatmenu", icon = "Interface\\ChatFrame\\UI-ChatIcon-Chat-Up", blizzard = "ChatFrameMenuButton",
       tip = "Language, emotes, chat type" },
+    { key = "settings", icon = "Interface\\Buttons\\UI-OptionsButton", tip = "HUF settings",
+      click = function() if ns.ToggleConfig then ns.ToggleConfig("chat", true) end end },
+    { key = "bottom", icon = "Interface\\ChatFrame\\UI-ChatIcon-ScrollEnd-Up", tip = "To the newest line",
+      click = function()
+          local cf = SelectedWindow()
+          if cf and cf.ScrollToBottom then cf:ScrollToBottom() end
+      end },
 }
 
 local function GuildOnline()
@@ -442,7 +457,7 @@ local function BuildBar()
     for _, info in ipairs(BUTTONS) do
         local b = CreateFrame("Button", nil, bar)
         b:SetSize(22, 22)
-        ns.UI.Fill(b, 0.05, 0.05, 0.06, 0.85)
+        b.fill = ns.UI.Fill(b, 0.05, 0.05, 0.06, 0.85)
         b.border = ns.UI.Border(b, 0.2, 0.2, 0.22, 1)
         b.icon = b:CreateTexture(nil, "ARTWORK")
         b.icon:SetPoint("TOPLEFT", 3, -3)
@@ -529,21 +544,68 @@ local function LayoutBar()
         if b.key == "guild" and not (IsInGuild and IsInGuild()) then on = false end
         if b.blizzard and not _G[b.blizzard] then on = false end
         b:ClearAllPoints()
+        local size = s.iconSize or 22
         if on then
+            b:SetSize(size, size)
             b:SetPoint("TOP", bar, "TOP", 0, -y)
-            y = y + 24
+            y = y + size + (s.iconGap or 2)
             n = n + 1
             b:Show()
         else
             b:Hide()
         end
     end
-    bar:SetSize(22, math.max(1, y - 2))
+    bar:SetSize(s.iconSize or 22, math.max(1, y - (s.iconGap or 2)))
     bar:ClearAllPoints()
-    if s.buttonSide == "LEFT" then
-        bar:SetPoint("TOPRIGHT", cf, "TOPLEFT", -6 + (s.buttonX or 0), (s.buttonY or 0))
+    local panel = Chat.PanelOn and Chat.PanelOn() and Chat.Panel and Chat.Panel()
+    -- the panel look: plain icons on a strip as tall as the panel
+    local ic = s.iconAccent and { r = A[1], g = A[2], b = A[3] } or s.iconColor or { r = 1, g = 1, b = 1 }
+    for _, b in ipairs(bar.buttons) do
+        b.fill:SetShown(not panel)
+        b.border:SetShown(not panel)
+        -- the panel look: plain grey-white icons, tinted by the icon colour
+        b.icon:SetDesaturated(panel and true or false)
+        if panel then b.icon:SetVertexColor(ic.r, ic.g, ic.b) else b.icon:SetVertexColor(1, 1, 1) end
+    end
+    if not bar.strip then
+        bar.strip = CreateFrame("Frame", nil, bar)
+        bar.strip:SetFrameLevel(math.max(0, bar:GetFrameLevel() - 1))
+        bar.strip.bg = ns.UI.Fill(bar.strip, 0, 0, 0, 0.6)
+        bar.strip.border = ns.UI.Border(bar.strip, 1, 1, 1, 0.18)
+    end
+    local st = bar.strip
+    st:ClearAllPoints()
+    if panel then
+        local gap = (s.stripJoined ~= false and 0 or (s.stripGap or 8)) + (s.buttonX or 0)
+        if s.buttonSide == "LEFT" then
+            st:SetPoint("TOPRIGHT", panel, "TOPLEFT", -gap, 0)
+            st:SetPoint("BOTTOMRIGHT", panel, "BOTTOMLEFT", -gap, 0)
+        else
+            st:SetPoint("TOPLEFT", panel, "TOPRIGHT", gap, 0)
+            st:SetPoint("BOTTOMLEFT", panel, "BOTTOMRIGHT", gap, 0)
+        end
+        st:SetWidth((s.stripWidth or 0) > 0 and s.stripWidth or ((s.iconSize or 22) + 6))
+        bar:SetPoint("TOP", st, "TOP", 0, -6 + (s.buttonY or 0))
+        -- "to the newest line" at the strip's bottom
+        for _, b in ipairs(bar.buttons) do
+            if b.key == "bottom" and b:IsShown() then
+                b:ClearAllPoints()
+                b:SetPoint("BOTTOM", st, "BOTTOM", 0, 6)
+            end
+        end
+        st.bg:SetColorTexture(s.bgColor.r, s.bgColor.g, s.bgColor.b, s.bgAlpha)
+        local bc = s.panelBorderColor or { r = 1, g = 1, b = 1 }
+        st.border:SetColor(bc.r, bc.g, bc.b, s.panelBorderAlpha or 0.18)
+        st.border:SetShown((s.panelBorderAlpha or 0) > 0 and s.stripBg ~= false)
+        st.bg:SetShown(s.stripBg ~= false)
+        st:Show()
     else
-        bar:SetPoint("TOPLEFT", cf, "TOPRIGHT", 6 + (s.buttonX or 0), (s.buttonY or 0))
+        st:Hide()
+        if s.buttonSide == "LEFT" then
+            bar:SetPoint("TOPRIGHT", cf, "TOPLEFT", -6 + (s.buttonX or 0), (s.buttonY or 0))
+        else
+            bar:SetPoint("TOPLEFT", cf, "TOPRIGHT", 6 + (s.buttonX or 0), (s.buttonY or 0))
+        end
     end
     bar:SetShown(n > 0)
     for _, b in ipairs(bar.buttons) do
@@ -565,6 +627,12 @@ end
 
 local function MouseOverChat()
     if bar and bar:IsShown() and bar:IsMouseOver(4, -4, -4, 4) then return true end
+    -- typing: awake
+    for _, cf in ipairs(Windows()) do
+        local name = cf.GetName and cf:GetName()
+        local eb = name and _G[name .. "EditBox"]
+        if eb and eb.HasFocus and eb:HasFocus() then return true end
+    end
     local cf = SelectedWindow()
     for _, f in ipairs({ cf, ChatFrame1 }) do
         -- the window with its tabs above and the input line below
@@ -579,18 +647,24 @@ end
 C_Timer.NewTicker(0.2, function()
     if not (bar and HUFDB and ns.db) then return end
     local s = S()
+    local whole = s.fadeWhole and Chat.SetWholeAlpha
     if not (s.enabled and s.fade) then
         if bar:GetAlpha() ~= 1 then bar:SetAlpha(1) end
+        if Chat.SetWholeAlpha then Chat.SetWholeAlpha(1) end
         return
     end
     if MouseOverChat() then
         idle = 0
         if bar:GetAlpha() ~= 1 then bar:SetAlpha(1) end
+        if Chat.SetWholeAlpha then Chat.SetWholeAlpha(1) end
         return
     end
     idle = idle + 0.2
     if idle >= s.fadeDelay then
         if math.abs(bar:GetAlpha() - s.fadeAlpha) > 0.01 then bar:SetAlpha(s.fadeAlpha) end
+        if whole then Chat.SetWholeAlpha(s.fadeAlpha) end
+    elseif Chat.SetWholeAlpha then
+        Chat.SetWholeAlpha(1)
     end
 end)
 
@@ -610,6 +684,13 @@ local function PlaceInput(cf)
     if want == "ABOVE" then
         eb:SetPoint("BOTTOMLEFT", cf, "TOPLEFT", -5, 28 + off)
         eb:SetPoint("BOTTOMRIGHT", cf, "TOPRIGHT", 5, 28 + off)
+    elseif want == "INSIDE_TOP" then
+        -- over the chat's top lines, right under the tabs (like EllesmereUI)
+        eb:SetPoint("TOPLEFT", cf, "TOPLEFT", -5, 5 - off)
+        eb:SetPoint("TOPRIGHT", cf, "TOPRIGHT", 5, 5 - off)
+    elseif want == "INSIDE_BOTTOM" then
+        eb:SetPoint("BOTTOMLEFT", cf, "BOTTOMLEFT", -5, -5 + off)
+        eb:SetPoint("BOTTOMRIGHT", cf, "BOTTOMRIGHT", 5, -5 + off)
     else
         eb:SetPoint("TOPLEFT", cf, "BOTTOMLEFT", -5, -2 - off)
         eb:SetPoint("TOPRIGHT", cf, "BOTTOMRIGHT", 5, -2 - off)
@@ -639,8 +720,16 @@ end
 
 local function ApplyBackground(cf)
     local s = S()
+    -- the panel look: docked windows have no background of their own (the
+    -- panel is behind them)
+    local none = false
+    if s.look == "PANEL" then
+        local dock = _G.GENERAL_CHAT_DOCK
+        local list = dock and dock.DOCKED_CHAT_FRAMES
+        for _, f in ipairs(type(list) == "table" and list or { ChatFrame1 }) do if f == cf then none = true end end
+    end
     if FCF_SetWindowColor then pcall(FCF_SetWindowColor, cf, s.bgColor.r, s.bgColor.g, s.bgColor.b) end
-    if FCF_SetWindowAlpha then pcall(FCF_SetWindowAlpha, cf, s.bgAlpha) end
+    if FCF_SetWindowAlpha then pcall(FCF_SetWindowAlpha, cf, none and 0 or s.bgAlpha) end
 end
 
 -- the game's class colour per chat type
@@ -675,6 +764,414 @@ local function HideSocial()
 end
 
 ---------------------------------------------------------------------------
+-- Panel look (option "look" = PANEL, like EllesmereUI's chat): one dark
+-- panel behind the docked windows and their tab strip, flat text tabs with
+-- a line under the active one, a flat input line, the buttons on a strip of
+-- their own. Blizzard's tab strip keeps working as it is and takes every
+-- click; only its alpha goes to 0. HUF's tabs are "ghosts": mouse-off
+-- frames anchored to the real tabs (never parented to them), and nothing
+-- is written to the tabs themselves.
+---------------------------------------------------------------------------
+local look = { ghosts = {}, boxes = {}, zeroed = {} }
+local PAD = 4
+
+local function PanelOn()
+    local s = S()
+    return s.enabled and s.look == "PANEL"
+end
+Chat.PanelOn = PanelOn
+
+local function Docked()
+    local dock = _G.GENERAL_CHAT_DOCK
+    local list = dock and dock.DOCKED_CHAT_FRAMES
+    return type(list) == "table" and list or { ChatFrame1 }, dock
+end
+
+local function BuildPanel()
+    if look.panel then return end
+    local p = CreateFrame("Frame", "HUF_ChatPanel", UIParent)
+    p:SetFrameStrata("BACKGROUND")
+    p:EnableMouse(false)
+    p.bg = ns.UI.Fill(p, 0, 0, 0, 0.6)
+    p.border = ns.UI.Border(p, 1, 1, 1, 0.18)
+    p:Hide()
+    look.panel = p
+end
+
+-- an edge of n pixels (UI.Border draws 1)
+local function EdgeSize(border, n)
+    n = math.max(1, n or 1)
+    local e = border.edges
+    e[1]:SetHeight(n) e[2]:SetHeight(n) e[3]:SetWidth(n) e[4]:SetWidth(n)
+end
+
+local function LayoutPanel()
+    local s = S()
+    BuildPanel()
+    local p, cf, gdm = look.panel, ChatFrame1, _G.GeneralDockManager
+    if not (PanelOn() and cf) then p:Hide() return end
+    -- from the top of the tabs (their bottom + the tab height) to below the chat
+    local tab = _G.ChatFrame1Tab
+    local tb, ct = tab and tab:GetBottom(), cf:GetTop()
+    local top = (tb and ct) and math.floor(tb - ct + (s.tabHeight or 22) + 0.5) or (26 + PAD)
+    local pad, padB = s.panelPadX or 10, s.panelPadBottom or 6
+    if p.top ~= top or p.pad ~= pad or p.padB ~= padB or not p:GetPoint(1) then
+        p:ClearAllPoints()
+        p:SetPoint("TOPLEFT", cf, "TOPLEFT", -pad, top)
+        p:SetPoint("BOTTOMRIGHT", cf, "BOTTOMRIGHT", pad, -padB)
+        p.top, p.pad, p.padB = top, pad, padB
+    end
+    p.bg:SetColorTexture(s.bgColor.r, s.bgColor.g, s.bgColor.b, s.bgAlpha)
+    local bc = s.panelBorderColor or { r = 1, g = 1, b = 1 }
+    p.border:SetColor(bc.r, bc.g, bc.b, s.panelBorderAlpha or 0.18)
+    EdgeSize(p.border, s.panelBorderSize)
+    p.border:SetShown((s.panelBorderAlpha or 0) > 0)
+    p:Show()
+end
+Chat.Panel = function() return look.panel end
+
+-- one ghost per real tab
+local function Ghost(tab)
+    local g = look.ghosts[tab]
+    if g then return g end
+    g = CreateFrame("Frame", nil, UIParent)
+    g:EnableMouse(false)
+    g.text = g:CreateFontString(nil, "OVERLAY")
+    g.text:SetPoint("LEFT", 2, 1)
+    g.text:SetPoint("RIGHT", -2, 1)
+    g.text:SetJustifyH("CENTER")
+    g.text:SetWordWrap(false)
+    g.bg = ns.UI.Fill(g, 0, 0, 0, 0)
+    g.edge = ns.UI.Border(g, 1, 1, 1, 0.18)
+    g.line = g:CreateTexture(nil, "OVERLAY")
+    g.line:SetHeight(2)
+    g.line:SetPoint("BOTTOMLEFT", 4, 0)
+    g.line:SetPoint("BOTTOMRIGHT", -4, 0)
+    g:Hide()
+    look.ghosts[tab] = g
+    return g
+end
+
+local function UpdateGhosts()
+    local s = S()
+    local seen = {}
+    if PanelOn() then
+        local list, dock = Docked()
+        local font = ns.FontPath(s.font == "GLOBAL" and ns.db.global.font or s.font)
+        local outline = s.outline == "GLOBAL" and ns.db.global.outline or s.outline
+        if outline == "NONE" then outline = "" end
+        local uc = s.tabUnderlineAccent ~= false and { r = A[1], g = A[2], b = A[3] }
+                   or s.tabUnderlineColor or { r = 1, g = 1, b = 1 }
+        for _, cf in ipairs(list) do
+            local name = cf.GetName and cf:GetName()
+            local tab = name and _G[name .. "Tab"]
+            if tab then
+                local g = Ghost(tab)
+                seen[g] = true
+                if not g.placed then
+                    g:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", 0, 0)
+                    g:SetPoint("BOTTOMRIGHT", tab, "BOTTOMRIGHT", 0, 0)
+                    g.placed = true
+                end
+                if g.h ~= (s.tabHeight or 22) then g:SetHeight(s.tabHeight or 22) g.h = s.tabHeight or 22 end
+                g:SetFrameStrata(tab:GetFrameStrata())
+                g:SetFrameLevel(tab:GetFrameLevel() + 5)
+                if g.font ~= font or g.size ~= s.tabFontSize or g.outline ~= outline then
+                    if font then pcall(g.text.SetFont, g.text, font, s.tabFontSize or 12, outline) end
+                    g.font, g.size, g.outline = font, s.tabFontSize, outline
+                end
+                g.text:SetText(tab:GetText() or "")
+                local active = dock and dock.selected == cf
+                local glow = tab.glow or _G[name .. "TabGlow"]
+                local flash = (not active) and glow and glow:IsShown()
+                local tc = s.tabTextColor or { r = 1, g = 1, b = 1 }
+                if flash then
+                    g.text:SetTextColor(A[1], A[2], A[3], 1)
+                else
+                    g.text:SetTextColor(tc.r, tc.g, tc.b, active and 1 or (s.tabTextAlpha or 0.65))
+                end
+                local tb = s.tabBg or { r = 0.03, g = 0.045, b = 0.05 }
+                g.bg:SetColorTexture(tb.r, tb.g, tb.b, active and (s.tabBgActiveAlpha or 0) or (s.tabBgAlpha or 0))
+                local bc = s.panelBorderColor or { r = 1, g = 1, b = 1 }
+                g.edge:SetColor(bc.r, bc.g, bc.b, math.max(0.1, s.panelBorderAlpha or 0.18))
+                g.edge:SetShown(active and s.tabActiveEdge == true or false)
+                g.line:SetColorTexture(uc.r, uc.g, uc.b, 1)
+                g.line:SetShown(active and s.tabUnderline ~= false or false)
+                g:SetShown(tab:IsShown())
+            end
+        end
+    end
+    for _, g in pairs(look.ghosts) do if not seen[g] then g:Hide() end end
+end
+
+-- the input line: its textures to alpha 0, a flat box behind it
+local function FlatInput(cf, on)
+    local name = cf.GetName and cf:GetName()
+    local eb = name and _G[name .. "EditBox"]
+    if not eb then return end
+    if on then
+        for _, r in ipairs({ eb:GetRegions() }) do
+            if r.IsObjectType and r:IsObjectType("Texture") and r:GetAlpha() > 0 then
+                r:SetAlpha(0)
+                look.zeroed[r] = eb
+            end
+        end
+    else
+        for r, owner in pairs(look.zeroed) do
+            if owner == eb then r:SetAlpha(1) look.zeroed[r] = nil end
+        end
+    end
+    local box = look.boxes[eb]
+    if not box and on then
+        box = CreateFrame("Frame", nil, UIParent)
+        box:EnableMouse(false)
+        box:SetPoint("TOPLEFT", eb, "TOPLEFT", 4, -3)
+        box:SetPoint("BOTTOMRIGHT", eb, "BOTTOMRIGHT", -4, 3)
+        box.bg = ns.UI.Fill(box, 0, 0, 0, 0.7)
+        box.border = ns.UI.Border(box, 1, 1, 1, 0.18)
+        box:Hide()
+        look.boxes[eb] = box
+    end
+    if box then box.want = on end
+end
+
+local function UpdateBoxes()
+    local s = S()
+    local bc = s.panelBorderColor or { r = 1, g = 1, b = 1 }
+    for eb, box in pairs(look.boxes) do
+        -- only while typing (the classic chat style keeps the line "shown")
+        local show = box.want and PanelOn() and eb:IsShown() and eb.HasFocus and eb:HasFocus() or false
+        if show then
+            box:SetFrameStrata(eb:GetFrameStrata())
+            box:SetFrameLevel(math.max(0, eb:GetFrameLevel() - 1))
+            local inside = s.inputPos == "INSIDE_TOP" or s.inputPos == "INSIDE_BOTTOM"
+            box.bg:SetColorTexture(s.bgColor.r, s.bgColor.g, s.bgColor.b, inside and 1 or math.max(0.5, s.bgAlpha))
+            box.border:SetColor(bc.r, bc.g, bc.b, s.panelBorderAlpha or 0.18)
+            box.border:SetShown((s.panelBorderAlpha or 0) > 0)
+        end
+        box:SetShown(show)
+    end
+end
+
+-- art made see-through: the game's own fades (the window and its scroll
+-- bar fade in under the mouse) change alpha, which then shows nothing.
+-- One way: the game's look comes back after /reload.
+local cleared = {}
+local function SeeThrough(fr)
+    if not fr or cleared[fr] then return end
+    cleared[fr] = true
+    for _, r in ipairs({ fr:GetRegions() }) do
+        if r.IsObjectType and r:IsObjectType("Texture") then r:SetAlpha(0) end
+    end
+    for _, ch in ipairs({ fr:GetChildren() }) do
+        SeeThrough(ch)
+        if ch.EnableMouse and not InCombatLockdown() then pcall(ch.EnableMouse, ch, false) end
+    end
+end
+-- the window's own background pieces (they fade in under the mouse)
+local function WindowArt(cf)
+    local name = cf.GetName and cf:GetName()
+    if not name or cleared[cf] then return end
+    cleared[cf] = true
+    for _, v in ipairs(type(_G.CHAT_FRAME_TEXTURES) == "table" and _G.CHAT_FRAME_TEXTURES or {}) do
+        local t = _G[name .. v]
+        if t and t.SetColorTexture then t:SetColorTexture(0, 0, 0, 0) end
+    end
+end
+Chat.WasPanel = function() return next(cleared) ~= nil end
+
+-- the game's scroll bar and "to the bottom" button inside each window: out
+-- of sight with the panel (alpha and mouse only; the wheel still scrolls)
+local function ScrollParts(cf, hide)
+    local name = cf.GetName and cf:GetName()
+    for _, part in ipairs({ cf.ScrollBar, cf.ScrollToBottomButton, name and _G[name .. "ScrollToBottomButton"] }) do
+        if part and part.SetAlpha then
+            if hide then
+                SeeThrough(part)
+                if part:GetAlpha() ~= 0 then part:SetAlpha(0) end
+                if not look.zeroed[part] and part.EnableMouse and not InCombatLockdown() then
+                    pcall(part.EnableMouse, part, false)
+                end
+                look.zeroed[part] = cf
+            elseif look.zeroed[part] then
+                part:SetAlpha(1)
+                if part.EnableMouse and not InCombatLockdown() then pcall(part.EnableMouse, part, true) end
+                look.zeroed[part] = nil
+            end
+        end
+    end
+end
+
+-- Blizzard's tab strip: invisible, still clickable (alpha only)
+local function StockTabs(hide)
+    local gdm = _G.GeneralDockManager
+    if not gdm then return end
+    if hide then
+        if gdm:GetAlpha() ~= 0 then gdm:SetAlpha(0) end
+        look.tabsHidden = true
+    elseif look.tabsHidden then
+        gdm:SetAlpha(1)
+        look.tabsHidden = nil
+    end
+end
+
+-- the whole chat faded (fade option "whole chat"): the panel and its parts
+-- and the docked windows
+local wholeAlpha = 1
+function Chat.SetWholeAlpha(a)
+    if a == wholeAlpha then return end
+    wholeAlpha = a
+    if look.panel then look.panel:SetAlpha(a) end
+    for _, g in pairs(look.ghosts) do g:SetAlpha(a) end
+    for _, b in pairs(look.boxes) do b:SetAlpha(a) end
+    for _, cf in ipairs(Docked()) do pcall(cf.SetAlpha, cf, a) end
+    local gdm = _G.GeneralDockManager
+    if gdm and not look.tabsHidden then gdm:SetAlpha(a) end
+end
+
+local function ApplyPanel()
+    local on = PanelOn()
+    LayoutPanel()
+    StockTabs(on)
+    for _, cf in ipairs(Windows()) do
+        pcall(FlatInput, cf, on)
+        pcall(ScrollParts, cf, on)
+    end
+    UpdateGhosts()
+    UpdateBoxes()
+end
+
+C_Timer.NewTicker(0.1, function()
+    if not (HUFDB and ns.db) then return end
+    if PanelOn() then
+        StockTabs(true)
+        LayoutPanel()
+        for _, cf in ipairs(Docked()) do
+            pcall(ScrollParts, cf, true)
+            pcall(WindowArt, cf)
+        end
+        UpdateGhosts()
+        UpdateBoxes()
+    elseif look.panel and look.panel:IsShown() then
+        ApplyPanel()
+    end
+end)
+
+---------------------------------------------------------------------------
+-- Where the main chat window sits (option chat.position: { point, relPoint,
+-- x, y, w, h }; nil = where the game / Edit Mode puts it). ChatFrame1 is an
+-- Edit Mode system: its own SetPoint / ClearAllPoints are Edit Mode's Lua
+-- versions, so the frame type's C methods place it. No SetSize: the size is
+-- a second anchor. Checked again after Edit Mode layouts and every second
+-- (Edit Mode puts it back on its own spot when it applies a layout).
+---------------------------------------------------------------------------
+local raw = getmetatable(CreateFrame("Frame")).__index
+local function EditModeOpen()
+    local em = _G.EditModeManagerFrame
+    return em and em.IsShown and em:IsShown() or false
+end
+local function PlaceChat()
+    local s = S()
+    local pos = s.enabled and s.position
+    local cf = ChatFrame1
+    if not (type(pos) == "table" and pos.point and cf) or InCombatLockdown() or EditModeOpen() then return end
+    local x, y = pos.x or 0, pos.y or 0
+    local sized = pos.w and pos.h and pos.point == "BOTTOMLEFT" and pos.relPoint == "BOTTOMLEFT"
+    local n = cf:GetNumPoints()
+    local p, rel, rp, px, py = cf:GetPoint(1)
+    if n == (sized and 2 or 1) and p == pos.point and rel == UIParent and rp == (pos.relPoint or pos.point)
+       and math.abs((px or 0) - x) < 0.5 and math.abs((py or 0) - y) < 0.5 then
+        return
+    end
+    raw.ClearAllPoints(cf)
+    raw.SetPoint(cf, pos.point, UIParent, pos.relPoint or pos.point, x, y)
+    if sized then raw.SetPoint(cf, "TOPRIGHT", UIParent, "BOTTOMLEFT", x + pos.w, y + pos.h) end
+end
+Chat.PlaceChat = PlaceChat
+
+-- the settings' buttons: keep the chat where it is now / back to the game's
+function Chat.KeepPosition()
+    local cf = ChatFrame1
+    if not cf then return end
+    local l, b, w, h = cf:GetLeft(), cf:GetBottom(), cf:GetWidth(), cf:GetHeight()
+    if not (l and b) then return end
+    S().position = { point = "BOTTOMLEFT", relPoint = "BOTTOMLEFT",
+                     x = math.floor(l + 0.5), y = math.floor(b + 0.5),
+                     w = math.floor(w + 0.5), h = math.floor(h + 0.5) }
+    PlaceChat()
+end
+function Chat.GamePosition()
+    S().position = nil
+    ns.Print("The chat goes back to the game's (Edit Mode) place after /reload.")
+end
+
+-- unlock mode: a box over the chat window to drag it (snaps like the rest);
+-- the drop is kept as the chat's place
+local chatMover
+function Chat.SetUnlocked(on)
+    local cf = ChatFrame1
+    if not cf then return end
+    if not chatMover then
+        local m = CreateFrame("Button", nil, UIParent)
+        m:SetFrameStrata("DIALOG")
+        m:SetMovable(true)
+        m:SetClampedToScreen(true)
+        m:EnableMouse(true)
+        m:RegisterForDrag("LeftButton")
+        m:RegisterForClicks("RightButtonUp")
+        ns.UI.Fill(m, A[1], A[2], A[3], 0.15)
+        ns.UI.Border(m, A[1], A[2], A[3], 0.8)
+        m.label = m:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        m.label:SetPoint("CENTER")
+        m.label:SetText("Chat")
+        m:SetScript("OnDragStart", function(self)
+            if InCombatLockdown() then return end
+            self.from = { self:GetLeft(), self:GetBottom() }
+            ns.Snap.StartDrag(self)
+        end)
+        m:SetScript("OnDragStop", function(self)
+            ns.Snap.StopDrag(self)
+            local from = self.from
+            self.from = nil
+            local k = self:GetEffectiveScale() / UIParent:GetEffectiveScale()
+            local l, b = self:GetLeft(), self:GetBottom()
+            local cl, cb = cf:GetLeft(), cf:GetBottom()
+            if from and from[1] and l and b and cl and cb then
+                -- the box covers the panel and its strip: the chat window moves by as much
+                local dx, dy = (l - from[1]) * k, (b - from[2]) * k
+                S().position = { point = "BOTTOMLEFT", relPoint = "BOTTOMLEFT",
+                                 x = math.floor(cl + dx + 0.5), y = math.floor(cb + dy + 0.5),
+                                 w = math.floor(cf:GetWidth() + 0.5), h = math.floor(cf:GetHeight() + 0.5) }
+                PlaceChat()
+            end
+            C_Timer.After(0, function() Chat.SetUnlocked(ns.unlocked) end)
+        end)
+        m:SetScript("OnClick", function() if ns.ToggleConfig then ns.ToggleConfig("chat", true) end end)
+        if ns.Snap then ns.Snap.Register(m) end
+        chatMover = m
+    end
+    chatMover:ClearAllPoints()
+    -- what you see: the panel and its button strip (panel look), else the window
+    local panel = PanelOn() and look.panel
+    if panel and panel:IsShown() then
+        local st = bar and bar.strip and bar.strip:IsShown() and bar.strip
+        local L, R = panel, panel
+        if st then
+            if S().buttonSide == "LEFT" then L = st else R = st end
+        end
+        chatMover:SetPoint("TOPLEFT", L, "TOPLEFT")
+        chatMover:SetPoint("BOTTOMRIGHT", R, "BOTTOMRIGHT")
+    else
+        chatMover:SetAllPoints(cf)
+    end
+    chatMover:SetShown(on and S().enabled and true or false)
+end
+
+ns.On("EDIT_MODE_LAYOUTS_UPDATED", function() C_Timer.After(0, PlaceChat) end)
+ns.On("PLAYER_ENTERING_WORLD", function() C_Timer.After(1, PlaceChat) end)
+C_Timer.NewTicker(1, function() if HUFDB and ns.db then PlaceChat() end end)
+
+---------------------------------------------------------------------------
 -- Apply
 ---------------------------------------------------------------------------
 function Chat.Apply(full)
@@ -684,13 +1181,15 @@ function Chat.Apply(full)
         Hook(cf)
         if s.enabled then
             ApplyLook(cf)
-            if full then ApplyBackground(cf) end
+            if full or PanelOn() then ApplyBackground(cf) end
             if s.hideStock then pcall(HideStock, cf) end
         end
         pcall(PlaceInput, cf)
     end
     if s.enabled and s.hideStock then pcall(HideSocial) end
+    ApplyPanel()
     LayoutBar()
+    PlaceChat()
 end
 
 function Chat.Report(add)
@@ -705,8 +1204,21 @@ function Chat.Report(add)
         tostring(s.classColors), tostring(bar and bar:IsShown())))
 end
 
+-- people writing wake the chat up (the fading)
+for _, e in ipairs({ "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_WHISPER", "CHAT_MSG_BN_WHISPER", "CHAT_MSG_PARTY",
+                     "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING",
+                     "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER", "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER" }) do
+    pcall(ns.On, e, function() Chat.Wake() end)
+end
+
 ns.OnLogin(function()
     local s = S()
+    -- timestamps from an import: the game's own setting, written once
+    if s.timestamps then
+        local set = C_CVar and C_CVar.SetCVar or SetCVar
+        if set then pcall(set, "showTimestamps", s.timestamps) end
+        s.timestamps = nil
+    end
     Chat.Apply(true)
     if s.enabled and s.classColors then Chat.ApplyClassColors(true) end
     if s.enabled then Chat.Restore() end

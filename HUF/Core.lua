@@ -6,6 +6,9 @@
 
 local ADDON, ns = ...
 _G.HUF = ns                      -- public: other addons (MMT) reach HUF here
+-- what unlock mode can snap to: here, so a box made before Movers.lua loads is listed too
+ns.Snap = { targets = {} }
+function ns.Snap.Register(f) if f then ns.Snap.targets[f] = true end end
 
 ns.name = ADDON
 ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
@@ -88,13 +91,14 @@ ns.fonts = {
     { name = "Skurri",        path = "Fonts\\SKURRI.TTF" },
 }
 local EUI_FONTS = {
-    "Expressway", "Expressway Bold", "Expressway CAPS", "Arial Bold", "Avant Garde Naowh", "Barlow Condensed",
+    "Expressway", "Expressway Bold", "Expressway CAPS", "Arial Bold", "Arial Narrow", "Avant Garde Naowh", "Barlow Condensed",
     "Changa", "Cinzel Decorative", "Exo", "FiraSans Bold", "FiraSans Medium", "FiraSans Light", "Future X Black",
     "Gotham Narrow", "Gotham Narrow Ultra", "Homespun", "HWT Artz", "KMT Kimberley", "Poppins", "Russo One", "Ubuntu",
 }
 local EUI_FONT_FILES = {
     ["Expressway"] = "Expressway.TTF", ["Expressway Bold"] = "Expressway Bold.ttf", ["Expressway CAPS"] = "Expressway CAPS.ttf",
-    ["Arial Bold"] = "Arial Bold.TTF", ["Avant Garde Naowh"] = "Avant Garde Naowh.ttf", ["Barlow Condensed"] = "Barlow Condensed.ttf",
+    ["Arial Bold"] = "Arial Bold.TTF", ["Arial Narrow"] = "Arial Narrow.ttf",
+    ["Avant Garde Naowh"] = "Avant Garde Naowh.ttf", ["Barlow Condensed"] = "Barlow Condensed.ttf",
     ["Changa"] = "Changa.ttf", ["Cinzel Decorative"] = "Cinzel Decorative.ttf", ["Exo"] = "Exo.otf",
     ["FiraSans Bold"] = "FiraSans Bold.ttf", ["FiraSans Medium"] = "FiraSans Medium.ttf", ["FiraSans Light"] = "FiraSans Light.ttf",
     ["Future X Black"] = "Future X Black.otf", ["Gotham Narrow"] = "Gotham Narrow.otf", ["Gotham Narrow Ultra"] = "Gotham Narrow Ultra.otf",
@@ -318,10 +322,11 @@ local function AuraRow(on, position)
              borderSize = 1,         -- the black edge around each icon
              dispelBorder = false,   -- debuffs: the edge in the debuff type's colour
              mark = "OFF",           -- buffs: OFF | EDGE | GLOW (golden) for their type
+             glow = false,           -- debuffs: the golden glow on dispellable ones (with a dispel filter)
              purgeSize = 100,        -- buffs, purge filters: removable ones' size, percent
              glowSize = 140,         -- the golden glow's size, percent of the icon
-             dispelEdge = "OFF",      -- debuffs: an edge round the frame in the debuff type's colour:
-                                     -- OFF | MINE (ones I can dispel) | TEAM (ones my group can)
+             debuffEdge = "OFF",      -- debuffs: an edge round the frame in the debuff type's colour:
+                                     -- OFF | AUTO (my group with an MMT team, else me) | MINE | TEAM
              dispelEdgeSize = 2 }
 end
 
@@ -430,7 +435,7 @@ local function BuildDefaults()
     g.debuffs = AuraRow(true, "ABOVE_RIGHT")
     for _, r in ipairs({ g.buffs, g.debuffs }) do r.size, r.perRow, r.rows, r.offset = 16, 5, 1, 1 end
     g.buffs.position, g.buffs.offset = "BELOW_LEFT", 8     -- my HoTs under the frame
-    g.debuffs.dispelEdge = "TEAM"      -- edge round the frame for a debuff the group can dispel
+    g.debuffs.debuffEdge = "AUTO"      -- edge round the frame: my MMT team can dispel it, else I can
     g.castBar.enabled = true
     g.group = {
         showPlayer = true,          -- me in the group frames
@@ -454,6 +459,9 @@ local function BuildDefaults()
             statusText = true,         -- "Dead", "Ghost", "Offline" instead of health values
             hideBlizzard = true,
             hideRaidManager = true,    -- Blizzard's raid / party manager on the left edge
+            snap = true, snapDistance = 8, snapGap = 0,   -- unlock mode: frames snap to each other (Alt: not)
+            snapMiddle = true,                            -- unlock mode: lines through the screen's middle
+            grid = false, gridSize = 32, gridAlpha = 0.12, -- unlock mode: a grid of squares (frames snap to it), its opacity
             menuMode = "PROXY",        -- right-click menu: PROXY (secure proxy, 12.x) | DIRECT
             clickCast = true,
             configBg = "None",         -- background of the settings window
@@ -542,10 +550,26 @@ local function BuildDefaults()
                      INSTANCE_CHAT = "I", INSTANCE_CHAT_LEADER = "IL" },
             classColors = true, urls = true, linkTooltips = true,
             history = true, historyLines = 2000,
-            buttons = { copy = true, guild = true, social = false, channels = true, chatmenu = true },
+            buttons = { copy = true, guild = true, social = false, channels = true, chatmenu = true, bottom = false,
+                        settings = false },
             buttonSide = "RIGHT", buttonX = 8, buttonY = 0,
             fade = true, fadeAlpha = 0.4, fadeDelay = 5, hideStock = true,     -- the buttons fade while the mouse is elsewhere
             inputPos = "BELOW", inputOffset = 0,              -- the input line: BELOW | ABOVE the chat
+            -- look: GAME (the game's window and tabs) | PANEL (one dark panel behind
+            -- the docked windows and tabs, flat tabs, a flat input line, a button strip)
+            look = "GAME",
+            panelBorderColor = C(1, 1, 1), panelBorderAlpha = 0.18,
+            tabFontSize = 12, tabTextAlpha = 0.65,             -- tabs: text size, opacity of the inactive ones
+            tabUnderline = true, tabUnderlineAccent = true, tabUnderlineColor = C(0.05, 0.82, 0.61),
+            panelBorderSize = 1, tabHeight = 22, tabTextColor = C(1, 1, 1),
+            tabBg = C(0.03, 0.045, 0.05), tabBgAlpha = 0, tabBgActiveAlpha = 0,   -- tab backgrounds: inactive / active
+            tabActiveEdge = false,                             -- an edge round the active tab
+            stripJoined = true, stripGap = 8, stripBg = true,  -- the button strip: joined to the panel, its background
+            iconColor = C(1, 1, 1), iconAccent = false,        -- the strip's icons (panel look)
+            iconSize = 22, iconGap = 2,
+            stripWidth = 0,                                    -- the strip's width (0: the icons + 6)
+            fadeWhole = false,                                 -- fading: the whole chat (panel, tabs, text) or the buttons
+            panelPadX = 10, panelPadBottom = 6,                -- the panel reaches this far past the chat: sides, below
         },
         -- buff and debuff bars (HUF's instead of Blizzard's at the top right)
         auraBars = {
