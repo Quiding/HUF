@@ -728,6 +728,17 @@ local function Build()
     map:SetScript("OnLeave", function() GameTooltip:Hide() end)
     frame.mapBtn = map
 
+    -- parchment under the quest's text: Forever's copy of the art is dark there
+    -- (the game's own parchment, as Kerzo's quest log uses it)
+    local parch = frame:CreateTexture(nil, "ARTWORK")
+    parch:SetPoint("TOPLEFT", LIST_X - 2, DETAIL_Y + 2)
+    parch:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", LIST_X + DETAIL_W, DETAIL_Y - DETAIL_H - 1)
+    if not (parch.SetAtlas and pcall(parch.SetAtlas, parch, "QuestDetailsBackgrounds")) then
+        parch:SetTexture("Interface\\QuestFrame\\QuestBG")
+        parch:SetTexCoord(0, 0.586, 0.02, 0.655)
+    end
+    frame.parchment = parch
+
     -- the list and the quest's text
     frame.list, frame.listChild = Scroll("HUF_QuestLogList", LIST_X, LIST_Y, DETAIL_W - 4, ROWS * ROW_H)
     frame.detail, frame.detailChild = Scroll("HUF_QuestLogDetail", LIST_X, DETAIL_Y, DETAIL_W, DETAIL_H)
