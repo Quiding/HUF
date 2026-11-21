@@ -558,8 +558,12 @@ local function DrawDetails()
                         frame.xpText = t
                     end
                     Font(t)
+                    -- a thin dark grey edge: the game's outline is black and can't be thinner,
+                    -- so a 1 px dark grey shadow instead
                     local path, size = t:GetFont()
-                    if path then t:SetFont(path, size, "OUTLINE") end
+                    if path then t:SetFont(path, size, "") end
+                    t:SetShadowColor(0.22, 0.22, 0.22, 1)
+                    t:SetShadowOffset(1, -1)
                 else
                     n = n + 1
                     t = Text(n)
