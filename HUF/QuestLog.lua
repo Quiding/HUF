@@ -450,6 +450,7 @@ local function Item(i)
         b.nameFrame:SetTexture("Interface\\QuestFrame\\UI-QuestItemNameFrame")
         b.nameFrame:SetSize(128, 64)
         b.nameFrame:SetPoint("LEFT", b.icon, "RIGHT", -10, 0)
+        b.nameFrame:SetVertexColor(0.22, 0.19, 0.16)    -- dark box: quality colours stay readable on the parchment
         b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
         b.count:SetPoint("BOTTOMRIGHT", b.icon, "BOTTOMRIGHT", -2, 2)
         b.name = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
