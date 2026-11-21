@@ -937,7 +937,8 @@ local function BuildClassic()
 end
 
 -- two sides: the game's window frame, the quest list left, the quest's text right
-local DUAL_W, DUAL_H, TOP_Y, BOTTOM_Y = 695, 496, -60, 26
+local DUAL_W, DUAL_H, TOP_Y, BOTTOM_Y = 765, 570, -60, 26    -- 695 x 496 + 10 % wider (right side only), 15 % taller
+local DUAL_MID = 347                                          -- the list side keeps its width
 local function BuildDual()
     local ok, f = pcall(CreateFrame, "Frame", "HUF_QuestLog", UIParent, "ButtonFrameTemplate")
     frame = (ok and f) or CreateFrame("Frame", "HUF_QuestLog", UIParent)
@@ -976,7 +977,7 @@ local function BuildDual()
     frame.count:SetPoint("LEFT", frame.allBtn, "RIGHT", 8, 0)
     frame.track:SetPoint("TOPRIGHT", -70, -31)
 
-    local mid = math.floor(DUAL_W / 2)
+    local mid = DUAL_MID
     local left = Inset(frame)
     left:SetPoint("TOPLEFT", 6, TOP_Y)
     left:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", mid - 1, BOTTOM_Y)
