@@ -250,4 +250,82 @@ function ns.ImportProfile(t)
     ns.Log("config", "profile imported into %s", name)
 end
 
+-- A HUF profile text's parts, for the import window's tick boxes, and the
+-- profile made from the ticked ones (the active profile with those parts
+-- replaced; click-cast bindings and the game's chat settings only if ticked)
+local HUF_PARTS = {
+    { "global", "General (fonts, accent, power colours)" }, { "privacy", "Names & MMT" },
+    "UNITS",
+    { "nameplates", "Nameplates" }, { "minimap", "Minimap" }, { "dataBars", "Data bars" },
+    { "chat", "Chat" }, { "damageMeter", "Damage meter" }, { "bags", "Bags" },
+    { "auraBars", "Buff bars" }, { "windows", "Windows" }, { "questLog", "Quest log" },
+}
+function ns.ProfileParts(t)
+    local parts = {}
+    for _, e in ipairs(HUF_PARTS) do
+        if e == "UNITS" then
+            local units = type(t.units) == "table" and t.units or {}
+            for _, list in ipairs({ ns.UNITS, ns.GROUPS }) do
+                for _, u in ipairs(list) do
+                    if type(units[u.key]) == "table" then
+                        parts[#parts + 1] = { title = u.title, tbl = units[u.key], on = true, path = { "units", u.key } }
+                    end
+                end
+            end
+        elseif type(t[e[1]]) == "table" then
+            parts[#parts + 1] = { title = e[2], tbl = t[e[1]], on = true, path = { e[1] } }
+        end
+    end
+    local x = type(t._extra) == "table" and t._extra or {}
+    if type(x.clickcast) == "table" then
+        parts[#parts + 1] = { title = "Click-cast bindings (this character)", tbl = x.clickcast, on = true, extra = "clickcast" }
+    end
+    if type(x.cvars) == "table" or type(x.chatColors) == "table" then
+        parts[#parts + 1] = { title = "The game's chat settings and colours", tbl = x, on = true, extra = "game" }
+    end
+    return parts
+end
+function ns.MergeParts(_, parts, chosen)
+    local final = ns.CopyTable(ns.db)
+    local extra = {}
+    for i, part in ipairs(parts) do
+        if chosen[i] then
+            if part.path then
+                local t = final
+                for j = 1, #part.path - 1 do
+                    local k = part.path[j]
+                    if type(t[k]) ~= "table" then t[k] = {} end
+                    t = t[k]
+                end
+                t[part.path[#part.path]] = ns.CopyTable(part.tbl)
+            elseif part.extra == "clickcast" then
+                extra.clickcast = ns.CopyTable(part.tbl)
+            elseif part.extra == "game" then
+                extra.cvars = part.tbl.cvars and ns.CopyTable(part.tbl.cvars) or nil
+                extra.chatColors = part.tbl.chatColors and ns.CopyTable(part.tbl.chatColors) or nil
+            end
+        end
+    end
+    if next(extra) then final._extra = extra end
+    return final
+end
+
+-- an import into a new profile (the active one is left as it is): a free
+-- name from base ("EllesmereUI", "EllesmereUI 2", ...), switched to
+function ns.ImportProfileAsNew(base, t)
+    local name, n = base, 1
+    while HUFDB.profiles[name] do
+        n = n + 1
+        name = ("%s %d"):format(base, n)
+    end
+    t = ns.CopyTable(t)
+    local extra = t._extra
+    t._extra = nil
+    ApplyExtra(extra)
+    HUFDB.profiles[name] = t
+    ns.SetProfile(name)
+    ns.Log("config", "profile imported as %s", name)
+    return name
+end
+
 ns.ShareTest = { Ser = Ser, Parse = Parse, Encode = Encode, Decode = Decode }

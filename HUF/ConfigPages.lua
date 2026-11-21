@@ -101,6 +101,16 @@ ns.RegisterPage("general", "General", "general", function(page)
     local R = UI.Column(page, COL2_X, 0, COL_W)
     R:Header("Frames")
     R:Button("Unlock frames (move, preview)", function() ns.Movers.Toggle() end)
+    local gsn, ssn = Opt(G, "snap")
+    R:Check("Snap to other frames when moving", gsn, ssn,
+        "A frame you drop near another one lines up with its edge or middle (or the screen's middle). Hold Alt while dropping to place it freely.")
+    R:Slider("Snap distance", 2, 30, 1, Opt(G, "snapDistance"))
+    R:Slider("Space between frames side by side", 0, 20, 1, Opt(G, "snapGap"))
+    local gmid, smid = Opt(G, "snapMiddle")
+    R:Check("Lines through the screen's middle (unlock mode)", gmid, function(v)
+        smid(v)
+        if ns.Snap and ns.unlocked then ns.Snap.ShowMiddle(true) end
+    end)
     local gh, sh = Opt(G, "hideBlizzard")
     R:Check("Hide Blizzard's frames HUF replaces", gh, function(v)
         sh(v)
@@ -271,7 +281,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
     -- frame Ellesmere has off can be turned on), and while EllesmereUI
     -- Nameplates is loaded, whether to turn it off (two plates otherwise)
     local dlg
-    local MAX_ROWS, MAX_EXTRA = 14, 6
+    local MAX_ROWS, MAX_EXTRA = 20, 6
     local function ImportWindow()
         if dlg then return dlg end
         local f = CreateFrame("Frame", "HUFEllesmereImportFrame", UIParent)
@@ -301,12 +311,19 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         end
         f.accept = UI.Button(f, 116, "Import", Accept)
         f.accept:SetPoint("BOTTOMLEFT", 16, 14)
-        -- every listed part on, whatever Ellesmere has
-        f.all = UI.Button(f, 116, "Import all", function()
+        -- every listed part off (then pick the few to import), or on again
+        f.all = UI.Button(f, 116, "Untick all", function()
+            local any = false
             for _, row in ipairs(f.rows) do
-                if row.part then row.on = true end
+                if row.part and row.on then any = true end
             end
-            Accept()
+            for _, row in ipairs(f.rows) do
+                if row.part then
+                    row.on = not any
+                    row.check.Refresh()
+                end
+            end
+            f.all.label:SetText(any and "Tick all" or "Untick all")
         end)
         f.all:SetPoint("BOTTOM", 0, 14)
         f.cancel = UI.Button(f, 116, "Cancel", function() f:Hide() end)
@@ -320,12 +337,15 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
 
     -- parts: { title, tbl (.enabled), on, why, folder (the EllesmereUI module
     -- drawing the same thing, offered to be turned off while it is loaded) }
-    local function EllesmereImport(ok, t, notes, what, parts)
+    -- src: { name (shown), base (the new profile's name), merge (t, parts, chosen) -> profile }
+    local ELLESMERE = { name = "EllesmereUI", base = "EllesmereUI", merge = function(...) return ns.MergeEllesmere(...) end }
+    local function EllesmereImport(ok, t, notes, what, parts, src)
         if not ok then msg:SetText("|cffff6060" .. t .. "|r") return end
+        src = src or ELLESMERE
         parts = parts or {}
         local list = table.concat(what, ", "):gsub(", ([^,]*)$", " and %1")
         local f = ImportWindow()
-        f.text:SetText(("Replace the %s of \"%s\" with EllesmereUI's.\nShow in HUF:"):format(list, ns.CurrentProfileName()))
+        f.text:SetText(("A new profile: a copy of \"%s\" with the ticked parts from %s.\nYour profile stays as it is (Active profile switches back)."):format(ns.CurrentProfileName(), src.name))
         local y = -52
         local function Place(row)
             row.check:ClearAllPoints()
@@ -334,12 +354,14 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
             row.check:Show()
             y = y - (UI.ROW - 2)
         end
+        f.all.label:SetText("Untick all")
         for i, row in ipairs(f.rows) do
             local part = parts[i]
             row.part = part
             if part then
-                row.on = part.on and true or false
-                row.check.label:SetText(part.on and part.title or (part.title .. "  |cff888888(" .. part.why .. ")|r"))
+                row.on = true
+                row.check.label:SetText(part.on and part.title
+                    or (part.title .. "  |cff888888(" .. part.why .. ": imported as off)|r"))
                 Place(row)
             else
                 row.check:Hide()
@@ -364,26 +386,39 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         end
         f:SetHeight(-y + 64)
         f.onAccept = function()
+            -- the parts to import (a module is turned off only for those)
+            local chosen, names, taken = {}, {}, {}
+            for i, row in ipairs(f.rows) do
+                if row.part and row.on then
+                    chosen[i] = true
+                    taken[row.part] = true
+                    names[#names + 1] = row.part.title:lower()
+                end
+            end
+            if #names == 0 then
+                msg:SetText("Nothing ticked: nothing imported.")
+                return
+            end
             -- a module to turn off needs a reload. The game allows it only from
             -- a click and only when asked first thing in it; the client
             -- reloads once this click's code is done, so the import below
             -- still runs and is saved. In combat: ask again after the fight.
             local reload = false
             for _, row in ipairs(f.extras) do
-                if row.part and row.check:IsShown() and row.on then reload = true end
+                if row.part and taken[row.part] and row.check:IsShown() and row.on then reload = true end
             end
             local fight = InCombatLockdown()
             if reload and not fight then ReloadUI() end
-            for _, row in ipairs(f.rows) do
-                if row.part then row.part.tbl.enabled = row.on end
-            end
-            ns.ImportProfile(t)
+            list = table.concat(names, ", "):gsub(", ([^,]*)$", " and %1")
+            local newName = ns.ImportProfileAsNew(src.base, src.merge(t, parts, chosen))
             area.edit:SetText("")
-            msg:SetText(("EllesmereUI %s imported%s"):format(list, #notes > 0 and " (details in chat)." or "."))
+            msg:SetText(("%s: %s imported into the new profile \"%s\"%s"):format(src.name, list, newName,
+                #notes > 0 and " (details in chat)." or "."))
+            ns.Print("Import: a new profile \"%s\" (your old one is still there: Profiles > Active profile).", newName)
             for _, line in ipairs(notes) do ns.Print("Ellesmere import: %s", line) end
             for _, row in ipairs(f.extras) do
                 local part = row.part
-                if part and row.check:IsShown() then
+                if part and taken[part] and row.check:IsShown() then
                     if row.on then
                         pcall(C_AddOns.DisableAddOn, part.folder, UnitName("player"))
                     elseif part.tbl.enabled then
@@ -408,12 +443,12 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         end
         local ok, t = ns.ReadProfileText(text)
         if not ok then msg:SetText("|cffff6060" .. t .. "|r") return end
-        UI.Confirm(("Replace every setting of the active profile \"%s\" with the imported ones?"):format(ns.CurrentProfileName()), "Import",
-            function()
-                ns.ImportProfile(t)
-                area.edit:SetText("")
-                msg:SetText("Imported. Frames and settings are updated.")
-            end)
+        -- the same window: tick what to take, into a new profile
+        local parts = ns.ProfileParts(t)
+        local names = {}
+        for _, p in ipairs(parts) do names[#names + 1] = p.title:lower() end
+        EllesmereImport(true, t, {}, names, parts,
+            { name = "the imported text", base = "Imported", merge = ns.MergeParts })
     end)
     imp:SetPoint("TOPLEFT", exp, "TOPRIGHT", 6, 0)
     R:Space(UI.ROW + 4)
@@ -423,7 +458,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         end)
     end
     R:Add(msg, 40)
-    R:Note("Import replaces the active profile (to keep it, create a new profile first, left, and import into that one); click-cast bindings go to the character you import on. Kept chat lines are not exported.")
+    R:Note("An import (a HUF text or EllesmereUI) goes into a new profile, \"Imported\" or \"EllesmereUI\", with only the parts you tick; click-cast bindings go to the character you import on. Kept chat lines are not exported.")
     if _G.EllesmereUI then R:Note("EllesmereUI: \"Import from EllesmereUI\" or an EllesmereUI string (!EUI_...) in the box: its unit frames (player, target, target of target, pet, with the font), nameplates and damage meter replace HUF's; group frames stay. Close to Ellesmere's look, not identical.") end
 end)
 
@@ -721,6 +756,7 @@ local DEBUFF_FILTERS = {
     { value = "RAID", text = "Important (Blizzard's raid frames)" },
     { value = "DISPELLABLE", text = "Only ones I can dispel" },
     { value = "TEAM", text = "Ones my group can dispel" },
+    { value = "AUTO_TEAM", text = "My group (MMT team) or me" },
     { value = "CC", text = "Only crowd control" },
 }
 local BUFF_FILTERS = {
@@ -730,6 +766,7 @@ local BUFF_FILTERS = {
     { value = "CANCELABLE", text = "Only ones that can be cancelled" },
     { value = "PURGE", text = "Only ones that can be dispelled or stolen" },
     { value = "TEAM_PURGE", text = "Ones my group can purge or steal" },
+    { value = "AUTO_PURGE", text = "Purgeable: my group (MMT team) or me" },
     { value = "IMPORTANT_PURGE", text = "Important ones and dispellable ones" },
 }
 local BUFF_MARKS = {
@@ -759,9 +796,10 @@ local function AuraPage(f, key, which)
         L:Header("Edge round the frame")
         L:Cycle("When the unit has a debuff", {
             { value = "OFF", text = "No edge" },
+            { value = "AUTO", text = "My group (MMT team) or me" },
             { value = "MINE", text = "That I can dispel" },
             { value = "TEAM", text = "That my group can dispel" },
-        }, Opt(T, "dispelEdge"))
+        }, Opt(T, "debuffEdge"))
         L:Slider("Edge size", 1, 6, 1, Opt(T, "dispelEdgeSize"))
         L:Note("In the debuff type's colour: magic blue, curse purple, disease brown, poison green. The game colours it, so it works in every fight.")
     end
@@ -771,6 +809,8 @@ local function AuraPage(f, key, which)
     if debuffs then
         local gd, sd = Opt(T, "dispelBorder")
         L:Check("Edge in the debuff type's colour", gd, sd, "Magic blue, curse purple, disease brown, poison green, bleed red. Needs an edge of 1 or more.")
+        local gg, sg = Opt(T, "glow")
+        L:Check("Golden glow on dispellable debuffs", gg, sg, "With the filters \"Ones I can dispel\", \"Ones my group can dispel\" or \"My group (MMT team) or me\": every debuff shown can be removed and glows like a spell that lights up. The type's edge stays when it is on.")
     else
         L:Cycle("Mark buffs by type", BUFF_MARKS, Opt(T, "mark"))
         L:Slider("Glow size (% of the icon)", 100, 250, 5, Opt(T, "glowSize"))

@@ -995,14 +995,14 @@ local function Build()
     mover.label = mover:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     mover.label:SetPoint("CENTER")
     mover.label:SetText("Minimap")
+    if ns.Snap then ns.Snap.Register(mover) end
     mover:SetScript("OnDragStart", function()
         if InCombatLockdown() then return end
         mover.from = { holder:GetLeft(), holder:GetTop() }
-        holder:StartMoving()
+        ns.Snap.StartDrag(holder)
     end)
     mover:SetScript("OnDragStop", function()
-        holder:StopMovingOrSizing()
-        if holder.SetUserPlaced then holder:SetUserPlaced(false) end
+        ns.Snap.StopDrag(holder)
         local from = mover.from
         if not from then return end
         mover.from = nil

@@ -32,11 +32,30 @@ local function LookPage(f)
     L:Cycle("Font", Fonts, Opt(C, "font"))
     L:Slider("Size", 8, 24, 1, Opt(C, "fontSize"))
     L:Cycle("Outline", OUTLINES, Opt(C, "outline"))
+    L:Header("Look")
+    L:Cycle("Style", {
+        { value = "GAME", text = "The game's window and tabs" },
+        { value = "PANEL", text = "A panel, like EllesmereUI" },
+    }, function() return C().look end, function(v)
+        C().look = v
+        if v ~= "PANEL" and ns.Chat and ns.Chat.WasPanel and ns.Chat.WasPanel() then
+            ns.Print("The game's chat background and scroll bar come back after /reload.")
+        end
+    end)
+    L:Note("Panel: its settings are on the Panel tab.")
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Input line")
-    R:Cycle("Where", { { value = "BELOW", text = "Below the chat" }, { value = "ABOVE", text = "Above the chat (over the tabs)" } },
-        Opt(C, "inputPos"))
+    R:Cycle("Where", {
+        { value = "BELOW", text = "Below the chat" },
+        { value = "ABOVE", text = "Above the chat (over the tabs)" },
+        { value = "INSIDE_TOP", text = "Inside the chat, at the top" },
+        { value = "INSIDE_BOTTOM", text = "Inside the chat, at the bottom" },
+    }, Opt(C, "inputPos"))
     R:Slider("Distance", -20, 40, 1, Opt(C, "inputOffset"))
+    R:Header("Place")
+    R:Button("Keep the chat where it is now", function() if ns.Chat then ns.Chat.KeepPosition() end end)
+    R:Button("Back to the game's place", function() if ns.Chat then ns.Chat.GamePosition() end end)
+    R:Note("Move the chat with the game's Edit Mode (or the chat tab's lock off), then keep it here: HUF puts it back there, also when Edit Mode moves it. The Ellesmere import brings Ellesmere's place.")
     R:Header("Window background")
     R:Color("Colour", Opt(C, "bgColor"))
     R:Slider("Opacity", 0, 1, 0.05, function() return C().bgAlpha end, function(v) C().bgAlpha = v end, "%.2f")
@@ -103,6 +122,54 @@ local function LinesPage(f, page)
     end)
 end
 
+local function A01(k) return function() return C()[k] end, function(v) C()[k] = v end end
+local function PanelPage(f)
+    local L = UI.Column(f, 0, 0, COL_W)
+    L:Header("Panel")
+    L:Note("For the style \"A panel, like EllesmereUI\" (Look tab). Colour and opacity: Look > Window background.")
+    L:Color("Edge colour", Opt(C, "panelBorderColor"))
+    local ge, se = A01("panelBorderAlpha")
+    L:Slider("Edge opacity (0: none)", 0, 1, 0.05, ge, se, "%.2f")
+    L:Slider("Edge size", 1, 4, 1, Opt(C, "panelBorderSize"))
+    L:Slider("Room left and right of the chat", 0, 30, 1, Opt(C, "panelPadX"))
+    L:Slider("Room below the chat", 0, 60, 1, Opt(C, "panelPadBottom"))
+    L:Header("Tabs")
+    L:Slider("Text size", 8, 18, 1, Opt(C, "tabFontSize"))
+    L:Color("Text colour", Opt(C, "tabTextColor"))
+    local gt, st = A01("tabTextAlpha")
+    L:Slider("Inactive tabs' text opacity", 0.2, 1, 0.05, gt, st, "%.2f")
+    L:Slider("Height", 14, 32, 1, Opt(C, "tabHeight"))
+    L:Color("Background colour", Opt(C, "tabBg"))
+    local gb, sb = A01("tabBgAlpha")
+    L:Slider("Inactive tabs' background", 0, 1, 0.05, gb, sb, "%.2f")
+    local gba, sba = A01("tabBgActiveAlpha")
+    L:Slider("Active tab's background", 0, 1, 0.05, gba, sba, "%.2f")
+    local gae, sae = Opt(C, "tabActiveEdge")
+    L:Check("Edge round the active tab", gae, sae)
+    local gu, su = Opt(C, "tabUnderline")
+    L:Check("Line under the active tab", gu, su)
+    local ga, sa = Opt(C, "tabUnderlineAccent")
+    L:Check("Line in the accent colour", ga, sa)
+    L:Color("Line colour (accent off)", Opt(C, "tabUnderlineColor"))
+    local R = UI.Column(f, COL2_X, 0, COL_W)
+    R:Header("Button strip")
+    local gj, sj = Opt(C, "stripJoined")
+    R:Check("Joined to the panel", gj, sj, "Off: a gap between the strip and the panel.")
+    R:Slider("Gap (when apart)", 0, 30, 1, Opt(C, "stripGap"))
+    local gsb, ssb = Opt(C, "stripBg")
+    R:Check("Background behind the buttons", gsb, ssb)
+    R:Color("Icon colour", Opt(C, "iconColor"))
+    local gia, sia = Opt(C, "iconAccent")
+    R:Check("Icons in the accent colour", gia, sia)
+    R:Slider("Icon size", 14, 32, 1, Opt(C, "iconSize"))
+    R:Slider("Strip width (0: from the icons)", 0, 100, 1, Opt(C, "stripWidth"))
+    R:Slider("Space between icons", 0, 16, 1, Opt(C, "iconGap"))
+    R:Note("Which buttons and the side: Buttons tab.")
+    R:Header("Fading")
+    local gw, sw = Opt(C, "fadeWhole")
+    R:Check("Fade the whole chat", gw, sw, "The panel, tabs and text fade too, not only the buttons (when fading is on, Buttons tab). Awake again while the mouse is over the chat, while you type, and when someone writes.")
+end
+
 local function ButtonsPage(f)
     local B = function() return ns.db.chat.buttons end
     local L = UI.Column(f, 0, 0, COL_W)
@@ -117,6 +184,10 @@ local function ButtonsPage(f)
     L:Check("Chat channels (the game's button)", g4, s4, "The game's chat channel / voice chat button, moved beside the chat.")
     local g5, s5 = Opt(B, "chatmenu")
     L:Check("Chat menu (the game's button)", g5, s5, "Language, emotes and the chat type to write in, moved beside the chat.")
+    local g7, s7 = Opt(B, "bottom")
+    L:Check("To the newest line", g7, s7, "Scrolls the chat down to the newest line. With the panel look: at the bottom of the strip.")
+    local g8, s8 = Opt(B, "settings")
+    L:Check("HUF settings", g8, s8, "Opens HUF's settings on the Chat page.")
     local g6, s6 = Opt(C, "hideStock")
     L:Check("Hide the game's button column", g6, function(v)
         s6(v)
@@ -205,7 +276,7 @@ ns.RegisterPage("chat", "Chat", "frames", function(page)
             if not v then ns.Print("The chat is back to normal after /reload.") end
         end, "Look, short channel names, links, history and buttons. Off: the game's chat as it was (after /reload).")
     on:SetPoint("TOPLEFT", 0, 4)
-    local tabs = { { "look", "Look" }, { "lines", "Lines" }, { "buttons", "Buttons" }, { "game", "Game settings" } }
+    local tabs = { { "look", "Look" }, { "panel", "Panel" }, { "lines", "Lines" }, { "buttons", "Buttons" }, { "game", "Game settings" } }
     local subs, strip = {}, nil
     local function Show(k)
         for n, sf in pairs(subs) do sf:SetShown(n == k) end
@@ -215,6 +286,7 @@ ns.RegisterPage("chat", "Chat", "frames", function(page)
     strip:SetPoint("TOPLEFT", 0, -22)
     strip:SetPoint("TOPRIGHT", 0, -22)
     subs.look = SubFrame(page); LookPage(subs.look)
+    subs.panel = SubFrame(page); PanelPage(subs.panel)
     subs.lines = SubFrame(page); LinesPage(subs.lines, page)
     subs.buttons = SubFrame(page); ButtonsPage(subs.buttons)
     subs.game = SubFrame(page); GamePage(subs.game)

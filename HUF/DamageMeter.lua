@@ -304,6 +304,7 @@ end
 -- The window code works on `win`, the window at hand.
 local win
 local wins = {}
+function DM.Windows() return wins end
 local ROW_POOL = 40
 local MAX_WINDOWS = 5
 
@@ -314,6 +315,13 @@ local function Rows()
     local r = win and win.cfg and win.cfg.rows
     if type(r) == "number" and r >= 1 then return r end
     return S().rows
+end
+-- its width: its own (windows[i].width, e.g. from an EllesmereUI import,
+-- whose windows can differ) or the shared setting
+local function Width()
+    local wd = win and win.cfg and win.cfg.width
+    if type(wd) == "number" and wd >= 50 then return wd end
+    return S().width
 end
 
 -- per-window settings; the first window takes over the settings from
@@ -1350,7 +1358,7 @@ local function Layout()
     local w = win
     w:SetScale(c.scale)
     local th = c.titleHeight or 20
-    w:SetSize(c.width, th + Rows() * (c.rowHeight + c.rowGap) + 2)
+    w:SetSize(Width(), th + Rows() * (c.rowHeight + c.rowGap) + 2)
     local pt = WC().point
     w:ClearAllPoints()
     w:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
@@ -1403,7 +1411,7 @@ local function Layout()
     else
         w.typeB:SetPoint("TOPLEFT", 3, 0)
         w.typeB:SetPoint("BOTTOMLEFT", 3, 0)
-        w.typeB:SetWidth(math.max(70, c.width * 0.42))
+        w.typeB:SetWidth(math.max(70, Width() * 0.42))
         w.addB:SetPoint("TOPLEFT", w.typeB, "TOPRIGHT", 3, 0)
         w.addB:SetPoint("BOTTOMLEFT", w.typeB, "BOTTOMRIGHT", 3, 0)
         w.addB:SetWidth(14)
@@ -1442,6 +1450,11 @@ local function Layout()
         if i > Rows() then r:Hide() end
     end
     ns.ApplyFont(w.empty, c.font, c.fontSize, c.outline)
+end
+-- lays out one window (default: the one at hand); unlock mode boxes pass theirs
+DM.LayoutWindows = function(w)
+    if w then win = w end
+    if win then Layout() end
 end
 
 
@@ -1557,6 +1570,7 @@ end
 local function Build(index)
     if wins[index] then win = wins[index] return end
     local w = CreateFrame("Frame", index == 1 and "HUF_DamageMeter" or ("HUF_DamageMeter" .. index), UIParent)
+    if ns.Snap then ns.Snap.Register(w) end
     wins[index] = w
     w.index = index
     win = w
@@ -1577,12 +1591,12 @@ local function Build(index)
     title:EnableMouse(true)
     title:RegisterForDrag("LeftButton")
     title:SetScript("OnDragStart", function()
-        if S().locked then return end
+        if S().locked and not ns.unlocked then return end      -- unlock mode moves it even when locked
         w.dragFrom = { w:GetLeft() or 0, w:GetTop() or 0 }
-        w:StartMoving()
+        ns.Snap.StartDrag(w)
     end)
     title:SetScript("OnDragStop", function()
-        w:StopMovingOrSizing()
+        ns.Snap.StopDrag(w)
         local from = w.dragFrom
         if not from then return end
         w.dragFrom = nil

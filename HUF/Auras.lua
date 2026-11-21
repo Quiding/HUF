@@ -77,8 +77,30 @@ local function Make(base, mine, ...)
     if #rest == 0 then return base end
     return base .. "|" .. table.concat(rest, "|")
 end
+-- the automatic choices: "my group" when the group is your MMT team, else
+-- "me" (AUTO_TEAM: debuffs my group / I can dispel; AUTO_PURGE: buffs my
+-- group / I can purge)
+local function GroupIsTeam()
+    return ns.Bridge and ns.Bridge.GroupIsTeam and ns.Bridge.GroupIsTeam() or false
+end
+local lastIsTeam
+local function Eff(cfg)
+    local f = cfg.filter or "ALL"
+    if f == "AUTO_TEAM" then
+        if lastIsTeam == nil then lastIsTeam = GroupIsTeam() end
+        return lastIsTeam and "TEAM" or "DISPELLABLE"
+    elseif f == "AUTO_PURGE" then
+        if lastIsTeam == nil then lastIsTeam = GroupIsTeam() end
+        return lastIsTeam and "TEAM_PURGE" or "MINE_PURGE"
+    end
+    return f
+end
+A.Eff = Eff
+-- rows that change when the group (or who of it can dispel / purge) does
+local GROUP_FILTERS = { TEAM = true, TEAM_PURGE = true, AUTO_TEAM = true, AUTO_PURGE = true }
+
 function A.Groups(cfg)
-    local base, mine, f = cfg.kind, cfg.mine and true or false, cfg.filter or "ALL"
+    local base, mine, f = cfg.kind, cfg.mine and true or false, Eff(cfg)
     local g = {}
     if base == "HARMFUL" then
         local lead = cfg.ccFirst and not mine and f ~= "CC"
@@ -102,7 +124,7 @@ function A.Groups(cfg)
             g.extra = Make(base, mine, "EXTERNAL_DEFENSIVE", "!BIG_DEFENSIVE")
         elseif f == "CANCELABLE" then
             g.main = Make(base, mine, "CANCELABLE")
-        elseif f == "PURGE" or f == "TEAM_PURGE" then
+        elseif f == "PURGE" or f == "TEAM_PURGE" or f == "MINE_PURGE" then
             -- enemies: the ones you (or anyone) can dispel or steal;
             -- TEAM_PURGE: of the types your group can remove (see below)
             g.main = Make(base, mine, DISPELLABLE)
@@ -156,6 +178,7 @@ local PURGES = {
 A.PURGES = PURGES
 local purgeTypes, purgeKey = {}, ""
 local purgeCand
+local minePurgeTypes, minePurgeKey, minePurgeCand = {}, "", nil
 
 local function Plain(v) if v == nil or ns.IsSecret(v) then return nil end return v end
 -- the role of a member's spec, as far as the game knows it (others: once
@@ -260,7 +283,7 @@ end
 
 -- works out the types again; true when they changed
 local function ReadTeam()
-    local set, pset = {}, {}
+    local set, pset, mset = {}, {}, {}
     wipe(unknownSpec)
     for _, unit in ipairs(GroupUnits()) do
         local okE, exists = pcall(UnitExists, unit)
@@ -276,7 +299,10 @@ local function ReadTeam()
             end
             for _, p in ipairs(class and PURGES[class] or {}) do
                 if CanPurge(unit, class, p) then
-                    for _, t in ipairs(p.types) do pset[t] = true end
+                    for _, t in ipairs(p.types) do
+                        pset[t] = true
+                        if unit == "player" then mset[t] = true end
+                    end
                 end
             end
         end
@@ -287,7 +313,16 @@ local function ReadTeam()
     local pkey = {}
     for _, t in ipairs(TYPE_ORDER) do if pset[t] then pkey[#pkey + 1] = t end end
     pkey = table.concat(pkey, ",")
-    if key == teamKey and pkey == purgeKey and teamCand then return false end
+    local mkey = {}
+    for _, t in ipairs(TYPE_ORDER) do if mset[t] then mkey[#mkey + 1] = t end end
+    mkey = table.concat(mkey, ",")
+    local isTeam = GroupIsTeam()
+    if key == teamKey and pkey == purgeKey and mkey == minePurgeKey and isTeam == lastIsTeam and teamCand then
+        return false
+    end
+    lastIsTeam = isTeam
+    minePurgeKey, minePurgeTypes = mkey, mset
+    minePurgeCand = { includeDispelTypes = mset }
     teamKey, teamTypes = key, set
     teamCand = { includeDispelTypes = set }
     teamCandSated = { includeDispelTypes = set, excludeSpellIDs = SATED }
@@ -302,12 +337,13 @@ end
 
 -- the candidate filter of a group slot ("lead": crowd control keeps every type)
 local function Cand(cfg, key)
+    local f = Eff(cfg)
     if cfg.kind ~= "HARMFUL" then
-        if cfg.filter ~= "TEAM_PURGE" then return nil end
+        if f ~= "TEAM_PURGE" and f ~= "MINE_PURGE" then return nil end
         if not teamCand then ReadTeam() end
-        return purgeCand
+        return f == "TEAM_PURGE" and purgeCand or minePurgeCand
     end
-    if cfg.filter == "TEAM" and key ~= "lead" then
+    if f == "TEAM" and key ~= "lead" then
         if not teamCand then ReadTeam() end
         return cfg.hideSated and teamCandSated or teamCand
     end
@@ -316,11 +352,12 @@ local function Cand(cfg, key)
 end
 -- the group can dispel nothing: the TEAM row shows nothing
 local function TeamEmpty(cfg)
-    if cfg.kind == "HELPFUL" and cfg.filter == "TEAM_PURGE" then
+    local f = Eff(cfg)
+    if cfg.kind == "HELPFUL" and (f == "TEAM_PURGE" or f == "MINE_PURGE") then
         if not teamCand then ReadTeam() end
-        return purgeKey == ""
+        return (f == "TEAM_PURGE" and purgeKey or minePurgeKey) == ""
     end
-    if cfg.kind ~= "HARMFUL" or cfg.filter ~= "TEAM" then return false end
+    if cfg.kind ~= "HARMFUL" or f ~= "TEAM" then return false end
     if not teamCand then ReadTeam() end
     return teamKey == ""
 end
@@ -336,6 +373,11 @@ local function Removable(cfg, key)
 end
 local function WantDispel(cfg, key)
     local v = cfg.dispelBorder
+    -- debuffs (cfg.glowAll): the golden glow on every dispellable one, the
+    -- type edge kept when it is on ("EDGE_GLOW")
+    if cfg.glowAll and Removable(cfg, key) then
+        return v and "EDGE_GLOW" or "GLOW_ALL"
+    end
     if not v then return false end
     v = v == "GLOW" and "GLOW" or "EDGE"
     return Removable(cfg, key) and (v .. "_ALL") or v
@@ -479,6 +521,20 @@ end
 
 -- the type look for scan and preview icons (no game button to tint them)
 local function ShowType(d, look, col)
+    if look == "EDGE_GLOW" then
+        -- the type's edge and the glow
+        if col then
+            d.ring:SetColorTexture(col[1], col[2], col[3], 1)
+            d.ring:Show()
+        else
+            d.ring:Hide()
+        end
+        if d.proc then
+            ProcShow(d, true)
+            if not d.procAnim:IsPlaying() then d.procAnim:Play() end
+        end
+        return
+    end
     if look == "GLOW_ALL" or look == "EDGE_ALL" then
         col = col or DISPEL_COLORS.Magic
         look = look == "GLOW_ALL" and "GLOW" or "EDGE"
@@ -590,19 +646,27 @@ local function SetDispel(b, d, on)
         d.dispelReg = nil
     end
     d.ring:Hide()
-    if on == "GLOW_ALL" then
-        if not d.proc then return true end
-        if not d.procReg then
-            if not b.AddAuraShownAnimation then A.glowErr = "no AddAuraShownAnimation" return true end
-            local ok, err = pcall(b.AddAuraShownAnimation, b, d.procAnim)
-            if not ok then A.glowErr = tostring(err) return false end
-            d.procReg = true
+    if on == "GLOW_ALL" or on == "EDGE_GLOW" then
+        if d.proc then
+            if not d.procReg then
+                if not b.AddAuraShownAnimation then
+                    A.glowErr = "no AddAuraShownAnimation"
+                else
+                    local ok, err = pcall(b.AddAuraShownAnimation, b, d.procAnim)
+                    if not ok then A.glowErr = tostring(err) return false end
+                    d.procReg = true
+                end
+            end
+            ProcShow(d, d.procReg and true or false)
         end
-        ProcShow(d, true)
-        d.dispelWant = on
-        return true
+        if on == "GLOW_ALL" then
+            d.dispelWant = on
+            return true
+        end
+        -- EDGE_GLOW: the type's edge too (below)
+    else
+        ProcShow(d, false)    -- its animation stays with the button, unseen
     end
-    ProcShow(d, false)    -- its animation stays with the button, unseen
     if on == "EDGE_ALL" then
         local c = DISPEL_COLORS.Magic
         d.ring:SetColorTexture(c[1], c[2], c[3], 1)
@@ -883,10 +947,11 @@ function Row:Scan()
         local max = cfg.perRow * cfg.rows
         local seen = {}
         local sated = cfg.kind == "HARMFUL" and cfg.hideSated
-        local team = (cfg.kind == "HARMFUL" and cfg.filter == "TEAM")
-                     or (cfg.kind == "HELPFUL" and cfg.filter == "TEAM_PURGE")
+        local f = Eff(cfg)
+        local team = (cfg.kind == "HARMFUL" and f == "TEAM")
+                     or (cfg.kind == "HELPFUL" and (f == "TEAM_PURGE" or f == "MINE_PURGE"))
         if team and not teamCand then ReadTeam() end
-        local types = cfg.kind == "HARMFUL" and teamTypes or purgeTypes
+        local types = (cfg.kind == "HARMFUL" and teamTypes) or (f == "MINE_PURGE" and minePurgeTypes) or purgeTypes
         if team and TeamEmpty(cfg) then max = 0 end
         for _, key in ipairs(A.SLOTS) do
           local filter = g[key]
@@ -1067,8 +1132,7 @@ local function TeamChanged()
            purgeKey ~= "" and purgeKey or "nothing")
     for _, r in ipairs(rows) do
         local cfg = r.cfg
-        local uses = cfg and ((cfg.filter == "TEAM" and cfg.kind == "HARMFUL")
-                              or (cfg.filter == "TEAM_PURGE" and cfg.kind == "HELPFUL"))
+        local uses = cfg and GROUP_FILTERS[cfg.filter]
         if uses and cfg.enabled and not r.preview then
             if r.c then
                 local ok, err = pcall(r.ApplyEngine, r)

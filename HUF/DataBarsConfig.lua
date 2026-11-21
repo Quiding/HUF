@@ -154,12 +154,13 @@ local function BarsPage(f)
     R:Cycle("Look", {
         { value = "FLAT", text = "Solid" },
         { value = "SOFT", text = "Soft (see-through, faded ends)" },
+        { value = "EUI", text = "EllesmereUI's background (when installed)" },
     }, BOpt("look"))
     R:Color("Background colour (solid)", BOpt("bgColor"))
     local ga, sa = BOpt("bgAlpha")
     R:Slider("Background opacity (solid)", 0, 1, 0.05, ga, sa, "%.2f")
     local gs, ss = BOpt("softAlpha")
-    R:Slider("Darkness (soft)", 0, 1, 0.05, gs, ss, "%.2f")
+    R:Slider("Darkness (soft / EllesmereUI)", 0, 1, 0.05, gs, ss, "%.2f")
     R:Slider("Line around it", 0, 2, 1, BOpt("borderSize"))
     R:Header("Blocks")
     R:Cycle("Spacing", {
@@ -213,6 +214,7 @@ local TYPE_OPTIONS = {
         local l = {}
         for _, k in ipairs(BL.CHANNEL_ORDER) do l[#l + 1] = { value = k, text = BL.CHANNELS[k].name } end
         C:Cycle("Volume of", l, SOpt("channel"))
+        C:Cycle("Show as", { { value = "TEXT", text = "Text (63%)" }, { value = "BAR", text = "A bar" } }, SOpt("style"))
     end,
     combat = function(C)
         local g, s = SOpt("onlyInCombat")
@@ -273,6 +275,12 @@ local function BlocksPage(f)
         if b and v then for _, c in ipairs(b.blocks) do c.fill = false end end
         sf(v)
     end, "With spacing by content. Without one set, the last block does.")
+    local gc, sc = KOpt("center")
+    L:Check("Keep in the middle of the bar", function() return gc() end, function(v)
+        local b = Bar()
+        if b and v then for _, c in ipairs(b.blocks) do c.center = false end end
+        sc(v)
+    end, "With spacing by content: its text stays at the bar's middle; the blocks before it start at the left edge, the ones after it end at the right edge, so nothing moves when another block's text gets longer (an FPS number, say).")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Colours")

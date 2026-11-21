@@ -633,6 +633,9 @@ local function Look()
     frame:SetPoint(s.point[1], UIParent, s.point[2], s.point[3], s.point[4])
 end
 
+Bags.Frame = function() return frame end
+Bags.Look = function() if frame then Look() end end
+
 local function Dropdown(parent, w, get, choices, set)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(w, 18)
@@ -654,6 +657,7 @@ end
 local function Build()
     if frame then return end
     frame = CreateFrame("Frame", "HUF_Bags", UIParent)
+    if ns.Snap then ns.Snap.Register(frame) end
     Bags.frame = frame
     frame:SetFrameStrata("MEDIUM")
     frame:SetToplevel(true)
@@ -675,11 +679,10 @@ local function Build()
     head:RegisterForDrag("LeftButton")
     head:SetScript("OnDragStart", function()
         frame.from = { frame:GetLeft(), frame:GetTop() }
-        frame:StartMoving()
+        ns.Snap.StartDrag(frame)
     end)
     head:SetScript("OnDragStop", function()
-        frame:StopMovingOrSizing()
-        if frame.SetUserPlaced then frame:SetUserPlaced(false) end
+        ns.Snap.StopDrag(frame)
         local from = frame.from
         if not from then return end
         frame.from = nil

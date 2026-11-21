@@ -16,6 +16,9 @@
 -- The other direction (HUF's public API, for MMT or any other addon):
 --   HUF.API_VERSION                      -> 1
 --   HUF.RegisterNameProvider(id, fn)     fn(unit, first, last) -> shown name or nil
+--   HUF.RegisterMover(id, spec)          a window of yours in HUF's unlock mode (box, snapping,
+--                                        guide lines, grid): spec = { label, frame, save(frame),
+--                                        shown(), settings() } (Movers.lua); HUF.UnregisterMover(id)
 --   HUF.RefreshNames()                   redraw every name on HUF's frames
 --   HUF.Refresh()                        re-apply all HUF settings
 --   HUF.ToggleConfig([page])             open the settings (/huf)
@@ -50,6 +53,29 @@ local function TeamKey(m, first, last)
         return m.Resolve(first .. "-" .. last) or m.Resolve(first .. " " .. last)
     end
     return m.Resolve(first)
+end
+
+-- every other member of the group is on the MMT team (MMT loaded, in a
+-- group): then "my group" in the automatic dispel / purge settings
+function Bridge.GroupIsTeam()
+    local m = Bridge.MMT()
+    if not m or not (GetNumGroupMembers and IsInGroup and IsInGroup()) then return false end
+    local raid = IsInRaid and IsInRaid()
+    local n = GetNumGroupMembers() or 0
+    local any = false
+    for i = 1, raid and n or (n - 1) do
+        local unit = (raid and "raid" or "party") .. i
+        local okU, me = pcall(UnitIsUnit, unit, "player")
+        if not (okU and me == true) then
+            local ok, first, last = pcall(UnitName, unit)
+            if not ok or type(first) ~= "string" or ns.IsSecret(first) then return false end
+            if ns.IsSecret(last) then last = nil end
+            local okK, key = pcall(TeamKey, m, first, (last and last ~= "") and last or nil)
+            if not (okK and key) then return false end
+            any = true
+        end
+    end
+    return any
 end
 
 -- the name provider HUF registers for MMT

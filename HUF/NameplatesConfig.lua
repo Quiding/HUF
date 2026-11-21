@@ -288,6 +288,7 @@ local function AuraPage(f)
         { value = "ALL", text = "All" },
         { value = "PURGE", text = "Only ones that can be dispelled or stolen" },
         { value = "TEAM_PURGE", text = "Ones my group can purge or steal" },
+        { value = "AUTO_PURGE", text = "Purgeable: my group (MMT team) or me" },
         { value = "IMPORTANT_PURGE", text = "Important ones and dispellable ones" },
     }, Opt("buffFilter"))
     L:Cycle("Mark buffs by type", {
