@@ -30,7 +30,12 @@ local Bridge = {}
 ns.Bridge = Bridge
 Bridge.PRIVACY_API = 1          -- the MMT privacy API version HUF is written for
 
+-- General > Addon support > "Allow MMT interaction" off: HUF ignores MMT
+-- (no names, no team, no hooks, its windows not in unlock mode)
+function Bridge.Allowed() return not (ns.db and ns.db.global.mmt == false) end
+
 function Bridge.MMT()
+    if not Bridge.Allowed() then return nil end
     local m = _G.MMT
     if type(m) == "table" and type(m.db) == "table" and type(m.ShownName) == "function" then return m end
     return nil

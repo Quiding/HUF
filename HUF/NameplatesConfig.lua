@@ -16,7 +16,7 @@ local FRIENDLY = { { value = "SAME", text = "Same as enemies" } }
 for _, m in ipairs(MODES) do FRIENDLY[#FRIENDLY + 1] = m end
 
 local OUTLINES = {
-    { value = "GLOBAL", text = "General outline" },
+    { value = "GLOBAL", text = "HUF Global Outline" },
     { value = "NONE", text = "None" },
     { value = "OUTLINE", text = "Thin" },
     { value = "THICKOUTLINE", text = "Thick" },
@@ -24,7 +24,7 @@ local OUTLINES = {
 }
 
 local function Fonts()
-    local l = { { value = "GLOBAL", text = "General font" } }
+    local l = { { value = "GLOBAL", text = "HUF Global Font" } }
     for _, f in ipairs(ns.fonts) do l[#l + 1] = { value = f.name, text = f.name } end
     return l
 end

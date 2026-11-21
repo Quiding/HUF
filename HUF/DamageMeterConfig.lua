@@ -8,7 +8,7 @@ local function D() return ns.db.damageMeter end
 local function Opt(k) return function() return D()[k] end, function(v) D()[k] = v end end
 
 local function Fonts()
-    local l = { { value = "GLOBAL", text = "General font" } }
+    local l = { { value = "GLOBAL", text = "HUF Global Font" } }
     for _, f in ipairs(ns.fonts) do l[#l + 1] = { value = f.name, text = f.name } end
     return l
 end
@@ -95,7 +95,7 @@ local function BarsPage(f)
     R:Cycle("Font", Fonts, Opt("font"))
     R:Slider("Size", 6, 20, 1, Opt("fontSize"))
     R:Cycle("Outline", {
-        { value = "GLOBAL", text = "General outline" },
+        { value = "GLOBAL", text = "HUF Global Outline" },
         { value = "NONE", text = "None" },
         { value = "OUTLINE", text = "Thin" },
         { value = "THICKOUTLINE", text = "Thick" },

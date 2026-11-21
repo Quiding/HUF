@@ -8,7 +8,7 @@ local function B() return ns.db.bags end
 local function Opt(k) return function() return B()[k] end, function(v) B()[k] = v end end
 
 local function Fonts()
-    local l = { { value = "GLOBAL", text = "General font" } }
+    local l = { { value = "GLOBAL", text = "HUF Global Font" } }
     for _, f in ipairs(ns.fonts) do l[#l + 1] = { value = f.name, text = f.name } end
     return l
 end
@@ -19,7 +19,7 @@ ns.RegisterPage("bags", "Bags", "frames", function(page)
     local ge, se = Opt("enabled")
     L:Check("Use HUF's bag window", ge, function(v)
         se(v)
-        if not v then ns.Print("Blizzard's bags come back after /reload.") end
+        if not v then ns.AskReload("Blizzard's bags come back after a reload.") end
     end, "All bags in one window with the bank and your other characters (from what HUF saw), search and the counts in tooltips. Using and moving items works as in Blizzard's bags.")
     local go, so = Opt("oneBag")
     L:Check("The game's combined bags (one bag)", go, so, "The game's own option: all bags in one window. Matters for Blizzard's bags (HUF's window is always one bag).")

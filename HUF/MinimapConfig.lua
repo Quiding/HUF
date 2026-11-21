@@ -10,12 +10,12 @@ local function M() return ns.db.minimap end
 local function Opt(tbl, k) return function() return tbl()[k] end, function(v) tbl()[k] = v end end
 
 local function Fonts()
-    local l = { { value = "GLOBAL", text = "General font" } }
+    local l = { { value = "GLOBAL", text = "HUF Global Font" } }
     for _, f in ipairs(ns.fonts) do l[#l + 1] = { value = f.name, text = f.name } end
     return l
 end
 local OUTLINES = {
-    { value = "GLOBAL", text = "General outline" },
+    { value = "GLOBAL", text = "HUF Global Outline" },
     { value = "NONE", text = "None" },
     { value = "OUTLINE", text = "Thin" },
     { value = "THICKOUTLINE", text = "Thick" },

@@ -442,6 +442,10 @@ local boxes = {}
 Movers.external = {}
 function ns.RegisterMover(id, spec)
     if type(id) ~= "string" or type(spec) ~= "table" or type(spec.save) ~= "function" then return false end
+    -- MMT interaction switched off: MMT's windows are declined
+    if ns.Bridge and not ns.Bridge.Allowed() and (id:upper():find("^MMT") or tostring(spec.addon or ""):upper() == "MMT") then
+        return false
+    end
     local fr = spec.frame
     local getFrame = type(fr) == "function" and fr or function() return fr end
     Movers.external[id] = {
@@ -641,7 +645,7 @@ local function G() return ns.db.global end
 local function UnlockPanel()
     if panel then return panel end
     local p = CreateFrame("Frame", "HUF_UnlockPanel", UIParent)
-    p:SetSize(280, 304)
+    p:SetSize(280, 344)
     p:SetPoint("TOP", UIParent, "TOP", 0, -60)
     p:SetFrameStrata("FULLSCREEN_DIALOG")
     p:SetMovable(true)
@@ -673,6 +677,8 @@ local function UnlockPanel()
         function(v) G().snapMiddle = v Snap.ShowMiddle(ns.unlocked) end), UI.ROW + 2)
     p.dist = Add(UI.Slider(p, 260, "Snap distance", 2, 30, 1,
         function() return G().snapDistance or 8 end, function(v) G().snapDistance = v end), 40)
+    p.gap = Add(UI.Slider(p, 260, "Space between frames side by side", 0, 20, 1,
+        function() return G().snapGap or 0 end, function(v) G().snapGap = v end), 40)
     p.grid = Add(UI.Check(p, 260, "Show a grid (frames snap to it)",
         function() return G().grid and true or false end,
         function(v) G().grid = v Snap.ShowGrid(ns.unlocked) end), UI.ROW + 2)

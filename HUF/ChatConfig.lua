@@ -10,12 +10,12 @@ local function C() return ns.db.chat end
 local function Opt(tbl, k) return function() return tbl()[k] end, function(v) tbl()[k] = v end end
 
 local function Fonts()
-    local l = { { value = "GLOBAL", text = "General font" } }
+    local l = { { value = "GLOBAL", text = "HUF Global Font" } }
     for _, f in ipairs(ns.fonts) do l[#l + 1] = { value = f.name, text = f.name } end
     return l
 end
 local OUTLINES = {
-    { value = "GLOBAL", text = "General outline" }, { value = "NONE", text = "None" },
+    { value = "GLOBAL", text = "HUF Global Outline" }, { value = "NONE", text = "None" },
     { value = "OUTLINE", text = "Thin" }, { value = "THICKOUTLINE", text = "Thick" },
 }
 
@@ -39,7 +39,7 @@ local function LookPage(f)
     }, function() return C().look end, function(v)
         C().look = v
         if v ~= "PANEL" and ns.Chat and ns.Chat.WasPanel and ns.Chat.WasPanel() then
-            ns.Print("The game's chat background and scroll bar come back after /reload.")
+            ns.AskReload("The game's chat background and scroll bar come back after a reload.")
         end
     end)
     L:Note("Panel: its settings are on the Panel tab.")
@@ -191,7 +191,7 @@ local function ButtonsPage(f)
     local g6, s6 = Opt(C, "hideStock")
     L:Check("Hide the game's button column", g6, function(v)
         s6(v)
-        if not v then ns.Print("The game's chat column and Social button come back after /reload.") end
+        if not v then ns.AskReload("The game's chat column and Social button come back after a reload.") end
     end, "The empty dark column at the left of the chat windows and the game's Social (quick join) button.")
     L:Header("Fading")
     local gf, sf = Opt(C, "fade")
@@ -273,7 +273,7 @@ ns.RegisterPage("chat", "Chat", "frames", function(page)
     local on = UI.Check(page, 260, "Use HUF's chat changes", function() return C().enabled end,
         function(v)
             C().enabled = v
-            if not v then ns.Print("The chat is back to normal after /reload.") end
+            if not v then ns.AskReload("The chat is back to normal after a reload.") end
         end, "Look, short channel names, links, history and buttons. Off: the game's chat as it was (after /reload).")
     on:SetPoint("TOPLEFT", 0, 4)
     local tabs = { { "look", "Look" }, { "panel", "Panel" }, { "lines", "Lines" }, { "buttons", "Buttons" }, { "game", "Game settings" } }

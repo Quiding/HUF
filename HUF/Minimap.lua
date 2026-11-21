@@ -1041,7 +1041,7 @@ function MM.Apply()
     if not s.enabled then
         if MM.active and not MM.warned then
             MM.warned = true
-            ns.Print("The minimap goes back to Blizzard's after /reload.")
+            ns.AskReload("The minimap goes back to Blizzard's after a reload.")
         end
         return
     end

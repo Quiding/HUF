@@ -338,7 +338,7 @@ end
 
 function Frame.ApplyMenu(f)
     if not f.secure or InCombatLockdown() then return end
-    if ns.db.global.menuMode == "DIRECT" then
+    if false then           -- the right-click menu is always the secure proxy (the "Direct" way was removed)
         f:SetAttribute("*macrotext2", nil)
         f:SetAttribute("*type2", "togglemenu")
     else

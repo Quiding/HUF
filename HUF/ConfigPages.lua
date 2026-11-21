@@ -19,7 +19,7 @@ end
 
 local function FontChoices(withGlobal)
     local l = {}
-    if withGlobal then l[1] = { value = "GLOBAL", text = "General font" } end
+    if withGlobal then l[1] = { value = "GLOBAL", text = "HUF Global Font" } end
     local blizz, eui = {}, {}
     for _, f in ipairs(ns.fonts) do
         if f.ellesmere then eui[#eui + 1] = f else blizz[#blizz + 1] = f end
@@ -56,140 +56,252 @@ local OUTLINES = {
     { value = "THICKOUTLINE", text = "Thick" },
     { value = "MONOCHROME,OUTLINE", text = "Mono" },
 }
-local OUTLINES_G = { { value = "GLOBAL", text = "General outline" } }
+local OUTLINES_G = { { value = "GLOBAL", text = "HUF Global Outline" } }
 for _, o in ipairs(OUTLINES) do OUTLINES_G[#OUTLINES_G + 1] = o end
 
 ---------------------------------------------------------------------------
--- GENERAL
+-- GENERAL: three tiles (as MMT's settings): Look and Feel, Frames & Features,
+-- Addon Support
 ---------------------------------------------------------------------------
+local TILE_W, TILE_GAP = 344, 10
+local function Tile(parent, x, y, w, h, title, icon)
+    local t = CreateFrame("Frame", nil, parent)
+    t:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    t:SetSize(w, h)
+    UI.Fill(t, A[1], A[2], A[3], 0.04)
+    UI.Border(t, A[1], A[2], A[3], 0.30)
+    local ic = t:CreateTexture(nil, "ARTWORK")
+    ic:SetTexture(icon)
+    ic:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    ic:SetSize(22, 22)
+    ic:SetPoint("TOPLEFT", 8, -7)
+    local label = UI.Label(t, title, "GameFontNormalLarge")
+    label:SetPoint("LEFT", ic, "RIGHT", 8, 0)
+    label:SetTextColor(A[1], A[2], A[3])
+    local line = t:CreateTexture(nil, "ARTWORK")
+    line:SetColorTexture(A[1], A[2], A[3], 0.35)
+    line:SetHeight(1)
+    line:SetPoint("TOPLEFT", 8, -34)
+    line:SetPoint("TOPRIGHT", -8, -34)
+    return t, UI.Column(t, 8, -42, w - 16)
+end
+ns.ConfigTile = Tile
+
+-- every unit frame text back to the HUF global font and outline
+local function OverwriteFrameFonts()
+    local n = 0
+    local function Walk(t)
+        for k, v in pairs(t) do
+            if type(v) == "table" then Walk(v) end
+        end
+        if t.font ~= nil and t.font ~= "GLOBAL" then t.font = "GLOBAL" n = n + 1 end
+        if t.outline ~= nil and t.outline ~= "GLOBAL" then t.outline = "GLOBAL" n = n + 1 end
+    end
+    for _, u in pairs(ns.db.units) do if type(u) == "table" then Walk(u) end end
+    ns.Refresh()
+    ns.Print("Every unit frame text uses the HUF global font now (%d settings changed).", n)
+end
+
+-- the list of the game's windows that can be moved, with a reset each
+local resetWin
+local function ResetWindows()
+    local W = ns.Windows
+    if not resetWin then
+        local f = CreateFrame("Frame", "HUF_ResetWindows", UIParent)
+        f:SetSize(340, 440)
+        f:SetPoint("CENTER", 0, 20)
+        f:SetFrameStrata("FULLSCREEN_DIALOG")
+        f:SetToplevel(true)
+        f:EnableMouse(true)
+        f:SetMovable(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+        UI.Fill(f, 0.05, 0.05, 0.06, 0.97)
+        UI.Border(f, A[1], A[2], A[3], 0.9)
+        local title = UI.Label(f, "Reset frames", "GameFontNormal")
+        title:SetPoint("TOPLEFT", 12, -10)
+        title:SetTextColor(A[1], A[2], A[3])
+        local close = UI.Button(f, 22, "x", function() f:Hide() end)
+        close:SetPoint("TOPRIGHT", -6, -6)
+        local note = UI.Label(f, "Moved windows go back where the game puts them.")
+        note:SetPoint("TOPLEFT", 12, -30)
+        note:SetTextColor(0.6, 0.6, 0.6)
+        local sf = CreateFrame("ScrollFrame", nil, f)
+        sf:SetPoint("TOPLEFT", 10, -52)
+        sf:SetPoint("BOTTOMRIGHT", -10, 46)
+        local child = CreateFrame("Frame", nil, sf)
+        child:SetSize(320, 10)
+        sf:SetScrollChild(child)
+        sf:EnableMouseWheel(true)
+        sf:SetScript("OnMouseWheel", function(self, d)
+            local max = math.max(0, child:GetHeight() - self:GetHeight())
+            self:SetVerticalScroll(math.max(0, math.min(max, self:GetVerticalScroll() - d * 40)))
+        end)
+        f.child, f.rows = child, {}
+        local all = UI.Button(f, 140, "Reset all", function()
+            W.ResetAll()
+            f.Fill()
+        end)
+        all:SetPoint("BOTTOM", 0, 12)
+        f.Fill = function()
+            local names = W.List()
+            for i, name in ipairs(names) do
+                local r = f.rows[i]
+                if not r then
+                    r = CreateFrame("Frame", nil, child)
+                    r:SetSize(316, 24)
+                    r:SetPoint("TOPLEFT", 0, -(i - 1) * 26)
+                    if i % 2 == 0 then UI.Fill(r, 1, 1, 1, 0.03) end
+                    r.label = UI.Label(r, "")
+                    r.label:SetPoint("LEFT", 6, 0)
+                    r.state = UI.Label(r, "")
+                    r.state:SetPoint("RIGHT", -86, 0)
+                    r.btn = UI.Button(r, 76, "Reset", function()
+                        W.Reset(r.name)
+                        f.Fill()
+                    end)
+                    r.btn:SetPoint("RIGHT", -2, 0)
+                    f.rows[i] = r
+                end
+                r.name = name
+                r.label:SetText(W.Pretty(name))
+                local moved = W.IsMoved(name)
+                r.state:SetText(moved and "moved" or "")
+                r.state:SetTextColor(A[1], A[2], A[3])
+                UI.SetActive(r.btn, moved)
+                r:Show()
+            end
+            for i = #names + 1, #f.rows do f.rows[i]:Hide() end
+            child:SetHeight(math.max(10, #names * 26))
+        end
+        UI.CloseOnEscape(f)
+        resetWin = f
+    end
+    resetWin.Fill()
+    resetWin:Show()
+end
+ns.ShowResetWindows = ResetWindows
+
 ns.RegisterPage("general", "General", "general", function(page)
     local G = function() return ns.db.global end
-    local L = UI.Column(page, 0, 0, COL_W)
-    L:Header("Look")
+    local P = function() return ns.db.privacy end
+    local H = ns.PAGE_H
+    local X2 = TILE_W + TILE_GAP
+
+    -- Look and Feel ---------------------------------------------------------
+    local _, L = Tile(page, 0, 0, TILE_W, H, "Look and Feel", "Interface\\Icons\\INV_Misc_Ribbon_01")
     L:Cycle("Accent colour", ns.ACCENTS, function() return G().accent end, function(v)
         G().accent = v
         ns.ApplyAccent()
-        ns.Print("Accent colour changed. The settings window takes it fully after /reload.")
-    end)
+        ns.AskReload("The settings window takes the new accent colour fully after a reload.")
+    end, "Used by the settings window and by every bar colour set to \"accent\" (the default health gradients).")
     L:Color("Custom accent", function() return G().accentColor end, function(c)
         G().accentColor = c
         if G().accent == "CUSTOM" then ns.ApplyAccent() end
     end)
-    L:Note("Used by the settings window and by every bar colour set to \"accent\" (the default health gradients).")
-    L:Cycle("Settings window background", BackgroundChoices, Opt(G, "configBg"))
-
-    L:Header("Text")
-    L:Cycle("Font", function() return FontChoices(false) end, Opt(G, "font"))
-    L:Cycle("Outline", OUTLINES, Opt(G, "outline"))
-    L:Check("Text shadow", Opt(G, "shadow"))
+    L:Cycle("Settings background", BackgroundChoices, Opt(G, "configBg"))
+    L:Cycle("HUF Global Font", function() return FontChoices(false) end, Opt(G, "font"),
+        "The font every HUF text uses whose own font is set to \"HUF Global Font\".")
+    L:Cycle("Font Outline", OUTLINES, Opt(G, "outline"))
+    L:Check("Text Shadow", Opt(G, "shadow"))
+    L:Button("Overwrite individual frame font settings", function()
+        UI.Confirm("Set the font and outline of every unit frame text back to the HUF global font?", "Overwrite", OverwriteFrameFonts)
+    end)
+    L:Space(14)
     local ga, sa = Opt(G, "abbreviate")
     L:Check("Short numbers (12.3k)", ga, sa, "Health and power values as 12.3k instead of 12345.")
     local gs, ss = Opt(G, "statusText")
-    L:Check("Dead, Ghost, Offline instead of health", gs, ss)
+    L:Check("Show Dead, Ghost or Offline instead of health", gs, ss)
     local gx, sx = Opt(G, "shortenTexts")
-    L:Check("Shorten a left text next to a right text", gx, sx, "A left text sharing its row with a right text is cut short (\"Burnin...\") instead of running into it.")
+    L:Check("Avoid overlapping texts", gx, sx,
+        "When an object, like the player health bar, has a text set on the left side (like the name) and one on the right side (like %HP) it may happen that they clip into each other. Enabling this option will avoid this by truncating texts if necessary.")
 
-    L:Header("Power colours")
-    L:Cycle("Power bars by type", {
-        { value = "GAME", text = "The game's colours" },
-        { value = "CUSTOM", text = "My colours (below)" },
-    }, Opt(G, "powerColors"))
-    for _, p in ipairs({ { "MANA", "Mana" }, { "RAGE", "Rage" }, { "ENERGY", "Energy" }, { "FOCUS", "Focus" } }) do
-        L:Color(p[2], function() return G().customPower[p[1]] end, function(c) G().customPower[p[1]] = c end)
-    end
-
-    local R = UI.Column(page, COL2_X, 0, COL_W)
-    R:Header("Frames")
-    R:Button("Unlock frames (move, preview)", function() ns.Movers.Toggle() end)
-    local gsn, ssn = Opt(G, "snap")
-    R:Check("Snap to other frames when moving", gsn, ssn,
-        "A frame you drop near another one lines up with its edge or middle (or the screen's middle). Hold Alt while dropping to place it freely.")
-    R:Slider("Snap distance", 2, 30, 1, Opt(G, "snapDistance"))
-    R:Slider("Space between frames side by side", 0, 20, 1, Opt(G, "snapGap"))
-    local gmid, smid = Opt(G, "snapMiddle")
-    R:Check("Lines through the screen's middle (unlock mode)", gmid, function(v)
-        smid(v)
-        if ns.Snap and ns.unlocked then ns.Snap.ShowMiddle(true) end
-    end)
+    -- Frames & Features -----------------------------------------------------
+    local FF_H = 168
+    local ff, F = Tile(page, X2, 0, TILE_W, FF_H, "Frames & Features", "Interface\\Icons\\INV_Misc_Gear_01")
     local gh, sh = Opt(G, "hideBlizzard")
-    R:Check("Hide Blizzard's frames HUF replaces", gh, function(v)
+    F:Check("Hide Blizzard's frames HUF replaces", gh, function(v)
         sh(v)
-        if not v then ns.Print("Blizzard's frames come back after /reload.") end
-    end, "Hides Blizzard's player, target and target-of-target frames while HUF's are on. Turning this off needs /reload.")
+        if not v then ns.AskReload("Blizzard's frames come back after a reload.") end
+    end, "Hides Blizzard's player, target and target-of-target frames while HUF's are on.")
     local gr, sr = Opt(G, "hideRaidManager")
-    R:Check("Hide Blizzard's raid / party manager", gr, function(v)
+    F:Check("Hide Blizzard's raid / party manager", gr, function(v)
         sr(v)
-        if not v then ns.Print("The raid / party manager comes back after /reload.") end
-    end, "The panel on the left edge of the screen in a group (marks, ready check, roles). Turning this off needs /reload.")
-    R:Header("Clicks")
-    R:Note("Left-click targets the unit, right-click opens its menu.")
-    local gm, sm = Opt(G, "menuMode")
-    R:Cycle("Right-click menu", {
-        { value = "PROXY", text = "Secure proxy (12.x)" },
-        { value = "DIRECT", text = "Direct (togglemenu)" },
-    }, gm, sm)
-    R:Note("If the menu doesn't open on right-click, try the other way (outside combat).")
-    local gc, sc = Opt(G, "clickCast")
-    R:Check("Click-casting addons (Clique)", gc, function(v)
-        sc(v)
-        ns.Print("Takes effect after /reload.")
-    end, "Registers HUF's frames for click-casting addons.")
-    R:Header("Media")
-    R:Note("Barlow Condensed (default) and Roboto Condensed come with HUF. " .. (ns.ellesmere and "EllesmereUI is installed: its fonts (Expressway, ...) and bar textures are in the lists too (used from its folder)."
-        or "With EllesmereUI installed, its fonts and bar textures show up in the lists too."))
-end)
+        if not v then ns.AskReload("The raid / party manager comes back after a reload.") end
+    end, "The panel on the left edge of the screen in a group (marks, ready check, roles).")
+    -- windows: the two switches narrower, the reset button beside them
+    local Win = function() return ns.db.windows end
+    local shiftBox
+    local move = UI.Check(ff, F.width - 112, "Allow all windows to move", function() return Win().enabled end, function(v)
+        Win().enabled = v
+        if v then ns.Windows.Apply() else ns.AskReload("The windows stay where they are until a reload.") end
+        UI.SetActive(shiftBox, v)
+    end, "Drag the game's windows (character, spellbook, professions, quests, map, mail, merchant, bank, friends, guild, ...) by an empty part; their places are remembered. Shift + right-click on a window puts it back."
+        .. (ns.Windows.Other() and " ForeverMove is enabled: it moves the windows, so HUF leaves them alone." or ""))
+    F:Add(move, UI.ROW)
+    shiftBox = UI.Check(ff, F.width - 128, "Only while Shift is held", function() return Win().shift end,
+        function(v) Win().shift = v end, "Drag with Shift held, so a window doesn't move by accident.")
+    F:Add(shiftBox, UI.ROW, 16)
+    local reset = UI.Button(ff, 104, "Reset frames", ResetWindows)
+    reset:SetPoint("TOPRIGHT", move, "TOPRIGHT", 112, -10)
+    table.insert(page.widgets, { Refresh = function() UI.SetActive(shiftBox, Win().enabled) end })
 
----------------------------------------------------------------------------
--- Names & MMT
----------------------------------------------------------------------------
-ns.RegisterPage("names", "Names & MMT", "general", function(page)
-    local P = function() return ns.db.privacy end
-    local L = UI.Column(page, 0, 0, COL_W)
-    L:Header("Privacy")
+    -- Addon Support ---------------------------------------------------------
+    local AS_Y = -(FF_H + TILE_GAP)
+    local as, S = Tile(page, X2, AS_Y, TILE_W, H + AS_Y, "Addon Support", "Interface\\Icons\\INV_Misc_Book_09")
+    local mmtLoaded = function() return type(_G.MMT) == "table" end
+    local mmtCheck, privCheck, nameDrop
+    local function Deps()
+        local allowed = G().mmt ~= false
+        UI.SetActive(mmtCheck, mmtLoaded())
+        UI.SetActive(privCheck, mmtLoaded() and allowed)
+        local mmtNames = mmtLoaded() and allowed and P().mmt ~= "NEVER"
+        UI.SetActive(nameDrop, not mmtNames)
+    end
+    mmtCheck = S:Check("Allow MMT interaction", function() return G().mmt ~= false end, function(v)
+        G().mmt = v
+        Deps()
+        ns.RefreshNames()
+        ns.AskReload(v and "HUF links up with MMT after a reload." or "HUF lets go of MMT completely after a reload.")
+    end, "HUF works together with MMT (Manage My Team): its privacy names, its team (\"my group\" in the dispel settings) and its windows in HUF's unlock mode. Off: HUF ignores MMT.")
+    privCheck = S:Check("Use MMT privacy setting for names", function() return P().mmt ~= "NEVER" end, function(v)
+        P().mmt = v and "ALWAYS" or "NEVER"
+        Deps()
+        ns.RefreshNames()
+    end, "Your MMT team's characters show the name MMT > Team > Privacy chooses (First name, Last name, Class X, Slot X).")
     local gm, sm = Opt(P, "mode")
-    L:Cycle("[name] shows players as", {
+    nameDrop = S:Cycle("Names show players as", {
         { value = "FIRST", text = "First name" },
         { value = "LAST",  text = "Last name" },
         { value = "FULL",  text = "Full name" },
         { value = "CLASS", text = "Class X (group)" },
         { value = "SLOT",  text = "Slot X (group)" },
-    }, gm, function(v) sm(v) ns.RefreshNames() end)
-    L:Note("For texts using [name]. [name:first], [name:last] and [name:full] always show that part. Class X and Slot X number the members of your group; players outside it show their first name. NPC names are never changed.")
-
-    L:Header("MMT")
-    local gu, su = Opt(P, "mmt")
-    L:Cycle("MMT's privacy for my team", {
-        { value = "ALWAYS",  text = "Always" },
-        { value = "OUTSIDE", text = "When MMT hides names outside MMT" },
-        { value = "NEVER",   text = "Never" },
-    }, gu, function(v) su(v) ns.RefreshNames() end)
-    L:Note("Characters of your MMT team show the name MMT > Team > Privacy chooses (First name, Last name, Class X, Slot X) in every name value. With MMT set to Full name, the settings here decide.")
-    local status = UI.Label(page, "")
+    }, gm, function(v) sm(v) ns.RefreshNames() end,
+        "For texts using [name]. [name:first], [name:last] and [name:full] always show that part. Class X and Slot X number the members of your group; players outside it show their first name. NPC names are never changed.")
+    local status = UI.Label(as, "")
     status:SetJustifyH("LEFT")
-    status:SetWidth(COL_W)
-    L:Add(status, 60)
+    status:SetWidth(S.width)
+    S:Add(status, 34)
+    S:Space(6)
+    local gc, sc = Opt(G, "clickCast")
+    S:Check("Register for click-casting addons (Clique)", gc, function(v)
+        sc(v)
+        ns.AskReload("Click-casting addons see the change after a reload.")
+    end, "Registers HUF's frames for click-casting addons like Clique.")
     table.insert(page.widgets, { Refresh = function()
+        Deps()
         local st = ns.Bridge.Status()
-        local lines = {}
-        if st.loaded then
-            lines[#lines + 1] = ("MMT is loaded%s. Team: %d characters."):format(st.version and (" (v" .. st.version .. ")") or "", st.teamSize)
-            lines[#lines + 1] = ("MMT shows characters by: %s%s."):format(ns.Bridge.ModeText(st.mode), st.hideOutside and ", hides names outside MMT" or "")
-            lines[#lines + 1] = st.active and "|cff66dd66HUF follows it.|r" or "|cffaaaaaaNot used.|r"
-            if st.apiState == "newer" then
-                lines[#lines + 1] = ("|cffff8040MMT's privacy interface is v%d, HUF knows v%d: HUF may need an update.|r"):format(st.api, st.apiExpected)
-            elseif st.apiState == "older" then
-                lines[#lines + 1] = "|cffaaaaaaOlder MMT (no privacy interface version): updating MMT is recommended.|r"
-            end
+        if not mmtLoaded() then
+            status:SetText("|cffaaaaaaMMT is not installed or not enabled.|r")
+        elseif G().mmt == false then
+            status:SetText("|cffaaaaaaMMT is loaded; HUF ignores it.|r")
         else
-            lines[#lines + 1] = "|cffaaaaaaMMT is not loaded.|r"
+            local line = ("MMT%s loaded, team: %d characters."):format(st.version and (" " .. st.version) or "", st.teamSize or 0)
+            if st.apiState == "newer" then line = line .. "\n|cffff8040MMT is newer than this HUF knows: HUF may need an update.|r" end
+            status:SetText(line)
         end
-        status:SetText(table.concat(lines, "\n"))
     end })
-
-    local R = UI.Column(page, COL2_X, 0, COL_W)
-    R:Header("How HUF and MMT work together")
-    R:Note("HUF reads MMT's privacy setting and team and redraws its names the moment either changes in MMT. Internally both addons always use the full real name, so targeting, menus and macros keep working.")
-    R:Note("For addon authors: _G.HUF.RegisterNameProvider(id, fn) adds a name source (fn(unit, first, last) returns the name to show), HUF.RefreshNames() redraws all names.")
 end)
 
 -- Profiles
@@ -845,7 +957,7 @@ local function AuraPage(f, key, which)
             if v then
                 if ns.Units then ns.Units.HideBlizzardAuras() end
             else
-                ns.Print("Blizzard's buff and debuff icons come back after /reload.")
+                ns.AskReload("Blizzard's buff and debuff icons come back after a reload.")
             end
         end, "The icons at the top right of the screen. HUF's own icons on the player frame replace them.")
     end
@@ -928,7 +1040,7 @@ local function UnitPage(key)
             function(v)
                 U(key).enabled = v
                 if v and ns.Units then ns.Units.HideBlizzard() end
-                if not v and ns.db.global.hideBlizzard then ns.Print("Blizzard's frame comes back after /reload.") end
+                if not v and ns.db.global.hideBlizzard then ns.AskReload("Blizzard's frame comes back after a reload.") end
             end)
         on:SetPoint("TOPLEFT", 0, 4)
         local copy = UI.Dropdown(page, 200, "Copy look from", function()

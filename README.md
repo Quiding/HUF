@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.26.
+Version 0.5.27.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -102,7 +102,7 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   clicks on quests in the tracker open it instead of the map + quest window. For addon authors
   (MMT's quest tracker): `HUF.QuestLog` API 1 - GetCategories, GetCategory, SetCategory,
   GetSections, Listen.
-- **The game's windows can be moved** (General > Windows, on): character, spellbook, professions,
+- **The game's windows can be moved** (General > Frames & Features, on): character, spellbook, professions,
   quests, map, mail, merchant, bank, friends, guild and more; drag an empty part (optionally only
   with Shift). Places are remembered; Shift + right-click puts one back, or reset them all. Every
   window that opens through the game's panel system is taken, and inner panels covering a window
@@ -123,7 +123,12 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
 
 ## Settings
 `/huf`. A search box (top right) finds any setting by its name; a click opens its page and tab.
-The settings close when a fight starts and come back after it.
+The settings close when a fight starts and come back after it. The General page has three tiles:
+**Look and Feel** (accent colour, settings background, HUF Global Font, outline, shadow, a button
+that puts every unit frame text back on the global font, short numbers, status texts, avoiding
+overlapping texts), **Frames & Features** (hiding Blizzard's frames and raid manager, moving the
+game's windows with a reset list) and **Addon Support** (MMT interaction, MMT's privacy names or
+HUF's own name setting, click-casting addons). A setting that needs a reload asks for one.
 
 ## Click-cast
 General > Click-cast: pick a spell (typed or from the spellbook), press a key or mouse button
@@ -135,8 +140,8 @@ Over a HUF frame it casts on that unit like a `[@mouseover]` macro
 Characters have a first and a last name. HUF always uses the full real name internally
 (targeting, menus, macros, addon messages); what you see follows HUF's name setting
 (first name by default, last name, full name, "Class X", "Slot X"). With MMT installed, your
-team shows the way MMT > Team > Privacy says ("MMT's privacy for my team": always / only while
-MMT hides names outside MMT / never). HUF uses MMT's documented privacy API (top of
+team shows the way MMT > Team > Privacy says ("Use MMT privacy setting for names"); "Allow MMT
+interaction" off makes HUF ignore MMT completely. HUF uses MMT's documented privacy API (top of
 `MMT/Privacy.lua`, `MMT.PRIVACY_API`, version 1) and warns if MMT ever moves to a newer one.
 
 ## Profiles

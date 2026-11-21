@@ -5,12 +5,12 @@ local UI = ns.UI
 local COL_W, COL2_X, TOP = 330, 366, -36
 
 local function Fonts()
-    local l = { { value = "GLOBAL", text = "General font" } }
+    local l = { { value = "GLOBAL", text = "HUF Global Font" } }
     for _, f in ipairs(ns.fonts) do l[#l + 1] = { value = f.name, text = f.name } end
     return l
 end
 local OUTLINES = {
-    { value = "GLOBAL", text = "General outline" }, { value = "NONE", text = "None" },
+    { value = "GLOBAL", text = "HUF Global Outline" }, { value = "NONE", text = "None" },
     { value = "OUTLINE", text = "Thin" }, { value = "THICKOUTLINE", text = "Thick" },
 }
 -- icons first, then where new rows / columns go
@@ -42,7 +42,7 @@ local function BarPage(f, kind)
     local ge, se = Opt("enabled")
     L:Check("Use HUF's " .. title .. " bar", ge, function(v)
         se(v)
-        if not v then ns.Print("Blizzard's " .. title .. "s come back after /reload.") end
+        if not v then ns.AskReload("Blizzard's " .. title .. "s come back after a reload.") end
     end, "Replaces Blizzard's " .. title .. " icons at the top right. Right-click a buff to cancel it.")
     L:Cycle("Growth direction", GROW, Opt("grow"))
     L:Slider("Most icons", 1, 40, 1, Opt("max"))

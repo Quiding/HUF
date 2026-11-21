@@ -9,12 +9,12 @@ local function Redraw() if ns.QuestLog then ns.QuestLog.Look() ns.QuestLog.Refre
 local function Opt(k) return function() return Q()[k] end, function(v) Q()[k] = v Redraw() end end
 
 local function Fonts()
-    local l = { { value = "CLASSIC", text = "The game's quest fonts" }, { value = "GLOBAL", text = "General font" } }
+    local l = { { value = "CLASSIC", text = "The game's quest fonts" }, { value = "GLOBAL", text = "HUF Global Font" } }
     for _, f in ipairs(ns.fonts) do l[#l + 1] = { value = f.name, text = f.name } end
     return l
 end
 local OUTLINES = {
-    { value = "GLOBAL", text = "General outline" }, { value = "NONE", text = "None" },
+    { value = "GLOBAL", text = "HUF Global Outline" }, { value = "NONE", text = "None" },
     { value = "OUTLINE", text = "Thin" }, { value = "THICKOUTLINE", text = "Thick" },
 }
 
@@ -23,7 +23,7 @@ ns.RegisterPage("questlog", "Quest log", "frames", function(page)
     L:Header("Quest log")
     L:Check("Use HUF's classic quest log", function() return Q().enabled end, function(v)
         Q().enabled = v
-        if v then ns.QuestLog.Apply() else ns.Print("The game's quest window comes back after /reload.") end
+        if v then ns.QuestLog.Apply() else ns.AskReload("The game's quest window comes back after a reload.") end
     end, "The quest log as in the original game: the quest list over the quest's text, objectives and rewards. The quest log key opens it instead of the map + quest window; the map key still opens the map.")
     local gt, st = Opt("tracker")
     L:Check("Also from the quest tracker", gt, st, "A click on a quest in the tracker opens it here (not while the map is open: there the map shows it).")

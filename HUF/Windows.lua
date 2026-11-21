@@ -116,6 +116,24 @@ local function Reset(name)
 end
 W.Reset = Reset
 
+-- every window that can be moved here: the known ones this client has, the
+-- ones taken so far and the ones with a saved place, sorted
+function W.List()
+    local seen, out = {}, {}
+    local function Add(n) if n and not seen[n] then seen[n] = true out[#out + 1] = n end end
+    for _, n in ipairs(KNOWN) do if type(_G[n]) == "table" then Add(n) end end
+    for _, n in pairs(hooked) do Add(n) end
+    for n in pairs(Saved()) do Add(n) end
+    table.sort(out, function(a, b) return W.Pretty(a) < W.Pretty(b) end)
+    return out
+end
+function W.IsMoved(name) return Saved()[name] ~= nil end
+-- "PlayerSpellsFrame" -> "Player Spells"
+function W.Pretty(name)
+    local n = name:gsub("Frame$", ""):gsub("([a-z])([A-Z])", "%1 %2")
+    return n
+end
+
 function W.ResetAll()
     local names = {}
     for name in pairs(Saved()) do names[#names + 1] = name end

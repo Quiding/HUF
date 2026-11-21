@@ -1102,7 +1102,7 @@ function Chat.KeepPosition()
 end
 function Chat.GamePosition()
     S().position = nil
-    ns.Print("The chat goes back to the game's (Edit Mode) place after /reload.")
+    ns.AskReload("The chat goes back to the game's (Edit Mode) place after a reload.")
 end
 
 -- unlock mode: a box over the chat window to drag it (snaps like the rest);

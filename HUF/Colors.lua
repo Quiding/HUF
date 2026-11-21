@@ -52,9 +52,7 @@ local POWER_FALLBACK = {
 }
 function ns.PowerColor(token)
     if token and not IsSecret(token) then
-        local g = ns.db and ns.db.global
-        local own = g and g.powerColors == "CUSTOM" and type(g.customPower) == "table" and g.customPower[token]
-        if type(own) == "table" and type(own.r) == "number" then return own end
+        -- power bars always in the game's colours (own power colours were removed)
         local c = (PowerBarColor and PowerBarColor[token]) or POWER_FALLBACK[token]
         if c then return c end
     end

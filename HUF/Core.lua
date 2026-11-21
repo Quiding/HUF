@@ -464,6 +464,7 @@ local function BuildDefaults()
             grid = false, gridSize = 32, gridAlpha = 0.12, -- unlock mode: a grid of squares (frames snap to it), its opacity
             menuMode = "PROXY",        -- right-click menu: PROXY (secure proxy, 12.x) | DIRECT
             clickCast = true,
+            mmt = true,                -- allow MMT interaction (names, team, MMT's windows in unlock mode)
             configBg = "None",         -- background of the settings window
             powerColors = "GAME",      -- power bars by type: GAME (the game's colours) | CUSTOM (below)
             customPower = {            -- softer than the game's (mana 0, 0.55, 1: EllesmereUI's)
@@ -1215,6 +1216,16 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 22
+    end
+    -- 0.5.27: the right-click menu is always the secure proxy, power bars always in the game's colours
+    if HUFDB.dataVersion < 23 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            if type(prof.global) == "table" then
+                prof.global.menuMode = "PROXY"
+                prof.global.powerColors = "GAME"
+            end
+        end
+        HUFDB.dataVersion = 23
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

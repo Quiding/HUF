@@ -308,7 +308,7 @@ function UI.OpenList(owner, items, current, onPick, isOn)
     p:Show()
 end
 
-function UI.Dropdown(parent, width, text, choices, get, set)
+function UI.Dropdown(parent, width, text, choices, get, set, tip)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(width, UI.ROW - 2)
     UI.Fill(b, 0.12, 0.12, 0.12, 1)
@@ -347,6 +347,7 @@ function UI.Dropdown(parent, width, text, choices, get, set)
             ns.Refresh()
         end)
     end)
+    if tip then UI.Tooltip(b, text, tip) end
     Track(parent, b)
     return b
 end
@@ -749,4 +750,25 @@ function UI.ScrollArrow(parent, dir, onClick)
     b:SetScript("OnLeave", function() Colour(A[1], A[2], A[3], 0.9) end)
     b:Hide()
     return b
+end
+
+-- A setting needs a reload to take full effect: ask instead of a chat line.
+-- In combat the question waits for the end of the fight.
+function ns.AskReload(text)
+    local function Ask()
+        UI.Confirm((text and (text .. "\n\n") or "") .. "Reload the interface now?", "Reload", ReloadUI, "Later")
+    end
+    if InCombatLockdown() then
+        ns.Print("%s A reload is offered after the fight.", text or "")
+        if ns.RunOOC then ns.RunOOC("reload", Ask) end
+    else
+        Ask()
+    end
+end
+
+-- greys a settings widget out (and takes its mouse) or brings it back
+function UI.SetActive(w, on)
+    if not w then return end
+    w:SetAlpha(on and 1 or 0.35)
+    if w.EnableMouse then w:EnableMouse(on and true or false) end
 end
