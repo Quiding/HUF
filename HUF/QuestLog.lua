@@ -487,6 +487,7 @@ end
 local function DrawDetails()
     for _, t in ipairs(texts) do t:Hide() end
     for _, b in ipairs(items) do b:Hide() end
+    if frame.xpText then frame.xpText:Hide() end
     local id = selected
     local e
     for _, x in ipairs(entries) do if x.questID == id then e = x break end end
@@ -545,10 +546,25 @@ local function DrawDetails()
         if xp > 0 or money > 0 then
             local half = math.floor(width / 2)
             local h = 0
-            local function Part(text, x)
-                n = n + 1
-                local t = Text(n)
-                Font(t)
+            local function Part(text, x, outline)
+                local t
+                if outline then
+                    -- its own font string: the outline never carries over to other text
+                    t = frame.xpText
+                    if not t then
+                        t = frame.detailChild:CreateFontString(nil, "OVERLAY")
+                        Font(t)
+                        t:SetJustifyH("LEFT")
+                        frame.xpText = t
+                    end
+                    Font(t)
+                    local path, size = t:GetFont()
+                    if path then t:SetFont(path, size, "OUTLINE") end
+                else
+                    n = n + 1
+                    t = Text(n)
+                    Font(t)
+                end
                 t:SetWidth(half - 4)
                 t:ClearAllPoints()
                 t:SetPoint("TOPLEFT", 4 + x, -y)
@@ -560,7 +576,7 @@ local function DrawDetails()
             local x = 0
             if xp > 0 then
                 -- the game's own XP colour (the floating "XP: 144" text): deep magenta, label and amount
-                Part("|cff8e1a8eXP: " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp) .. "|r", 0)
+                Part("|cff7a127aXP: " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp) .. "|r", 0, true)
                 x = half
             end
             if money > 0 then Part((_G.MONEY and (_G.MONEY .. ": ") or "Money: ") .. Money(money), x) end

@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.19.
+Version 0.5.20.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
