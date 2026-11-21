@@ -451,29 +451,67 @@ local function Text(i)
     end
     return t
 end
+-- thin edges round a region (four textures on `owner`, around `anchor`)
+local function Edges(owner, anchor, layer, size)
+    local e = {}
+    for k, pts in ipairs({ { "TOPLEFT", "TOPRIGHT", "H" }, { "BOTTOMLEFT", "BOTTOMRIGHT", "H" },
+        { "TOPLEFT", "BOTTOMLEFT", "V" }, { "TOPRIGHT", "BOTTOMRIGHT", "V" } }) do
+        local t = owner:CreateTexture(nil, layer or "BORDER")
+        t:SetPoint(pts[1], anchor, pts[1], 0, 0)
+        t:SetPoint(pts[2], anchor, pts[2], 0, 0)
+        if pts[3] == "H" then t:SetHeight(size or 1) else t:SetWidth(size or 1) end
+        e[k] = t      -- 1 top, 2 bottom, 3 left, 4 right
+    end
+    e.Color = function(_, r, g, b, a) for k = 1, 4 do e[k]:SetColorTexture(r, g, b, a or 1) end end
+    return e
+end
+
+-- the XP icon: the game's XP_Icon when this client has it, else a purple "XP" square
+local XP_ICON
+local function XPIcon()
+    if XP_ICON == nil then
+        local id = GetFileIDFromPath and Safe(GetFileIDFromPath, "Interface\\Icons\\XP_Icon")
+        XP_ICON = id and "Interface\\Icons\\XP_Icon" or false
+    end
+    return XP_ICON
+end
+
+-- a reward: icon with a quality edge and a dark sunken box for its name (the
+-- game's modern reward look); also used for XP and money
+local REWARD_H, ICON = 38, 34
 local function Item(i)
     local b = items[i]
     if not b then
         b = CreateFrame("Button", nil, frame.detailChild)
-        b:SetSize(147, 41)
+        b:SetSize(150, REWARD_H)
         b.icon = b:CreateTexture(nil, "ARTWORK")
-        b.icon:SetSize(39, 39)
-        b.icon:SetPoint("TOPLEFT", 0, 0)
-        -- a dark box for the name: quality colours stay readable on the parchment
-        b.nameFrame = CreateFrame("Frame", nil, b)
-        b.nameFrame:SetPoint("TOPLEFT", b.icon, "TOPRIGHT", 1, -1)
-        b.nameFrame:SetSize(104, 37)
-        b.nameFrame:SetFrameLevel(b:GetFrameLevel())
-        ns.UI.Fill(b.nameFrame, 0.07, 0.05, 0.03, 0.92)
-        ns.UI.Border(b.nameFrame, 0.42, 0.33, 0.20, 1)
+        b.icon:SetSize(ICON, ICON)
+        b.icon:SetPoint("LEFT", 2, 0)
+        b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        b.iconEdge = Edges(b, b.icon, "OVERLAY", 1)
+        b.iconText = b:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        b.iconText:SetPoint("CENTER", b.icon, "CENTER", 0, 0)
+        b.iconText:SetText("XP")
+        b.iconText:Hide()
+        -- the sunken name box: dark, darker edge top / left, lighter bottom / right
+        b.box = b:CreateTexture(nil, "BACKGROUND")
+        b.box:SetPoint("TOPLEFT", b.icon, "TOPRIGHT", 3, -1)
+        b.box:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, (REWARD_H - ICON) / 2 + 1)
+        b.box:SetColorTexture(0.035, 0.035, 0.04, 0.95)
+        local e = Edges(b, b.box, "BORDER", 1)
+        e[1]:SetColorTexture(0, 0, 0, 1)
+        e[3]:SetColorTexture(0, 0, 0, 1)
+        e[2]:SetColorTexture(0.30, 0.27, 0.22, 0.9)
+        e[4]:SetColorTexture(0.30, 0.27, 0.22, 0.9)
         b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-        b.count:SetPoint("BOTTOMRIGHT", b.icon, "BOTTOMRIGHT", -2, 2)
-        b.name = b.nameFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        b.name:SetPoint("LEFT", b.icon, "RIGHT", 6, 0)
-        b.name:SetWidth(94)
+        b.count:SetPoint("BOTTOMRIGHT", b.icon, "BOTTOMRIGHT", -1, 1)
+        b.name = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        b.name:SetPoint("TOPLEFT", b.box, "TOPLEFT", 6, -2)
+        b.name:SetPoint("BOTTOMRIGHT", b.box, "BOTTOMRIGHT", -4, 2)
         b.name:SetJustifyH("LEFT")
-        b.name:SetHeight(36)
+        b.name:SetJustifyV("MIDDLE")
         b:SetScript("OnEnter", function(self)
+            if self.kind ~= "choice" and self.kind ~= "reward" then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             if not (GameTooltip.SetQuestLogItem and pcall(GameTooltip.SetQuestLogItem, GameTooltip, self.kind, self.idx, self.questID))
                 and self.itemID then
@@ -483,6 +521,7 @@ local function Item(i)
         end)
         b:SetScript("OnLeave", function() GameTooltip:Hide() end)
         b:SetScript("OnClick", function(self)
+            if self.kind ~= "choice" and self.kind ~= "reward" then return end
             if IsModifiedClick and IsModifiedClick("CHATLINK") and GetQuestLogItemLink then
                 local link = Safe(GetQuestLogItemLink, self.kind, self.idx, self.questID)
                 if link then ChatEdit_InsertLink(link) end
@@ -490,6 +529,8 @@ local function Item(i)
         end)
         items[i] = b
     end
+    b.iconText:Hide()
+    b.icon:SetVertexColor(1, 1, 1)
     return b
 end
 
@@ -500,7 +541,6 @@ end
 local function DrawDetails()
     for _, t in ipairs(texts) do t:Hide() end
     for _, b in ipairs(items) do b:Hide() end
-    if frame.xpText then frame.xpText:Hide() end
     local id = selected
     local e
     for _, x in ipairs(entries) do if x.questID == id then e = x break end end
@@ -513,12 +553,13 @@ local function DrawDetails()
     frame.track:SetChecked(hasQuest and IsTracked(id) or false)
     local width = frame.detailW - 8
     local y, n = 0, 0
-    local function Line(text, kind, color, gap)
+    local function Line(text, kind, color, gap, justify)
         if not text or text == "" then return end
         n = n + 1
         local t = Text(n)
         Font(t, kind)
         t:SetWidth(width)
+        t:SetJustifyH(justify or "LEFT")
         t:ClearAllPoints()
         t:SetPoint("TOPLEFT", 4, -y)
         t:SetTextColor(color[1], color[2], color[3])
@@ -553,53 +594,71 @@ local function DrawDetails()
     local numC = Safe(GetNumQuestLogChoices, id, true) or 0
     local money = Safe(GetQuestLogRewardMoney, id) or 0
     local xp = Safe(GetQuestLogRewardXP, id) or 0
+    -- the rewards on a dark panel (the game's modern reward look): gold heading,
+    -- light text, icons with a quality edge and dark sunken boxes; XP and money first
+    local panel = frame.rewardPanel
+    if not panel then
+        local c = frame.detailChild
+        panel = { bg = c:CreateTexture(nil, "BACKGROUND", nil, -6) }
+        panel.bg:SetColorTexture(0.075, 0.06, 0.05, 0.94)
+        panel.top = c:CreateTexture(nil, "BACKGROUND", nil, -5)
+        panel.top:SetColorTexture(1, 0.82, 0, 0.06)
+        panel.anchor = CreateFrame("Frame", nil, c)
+        panel.edge = Edges(c, panel.anchor, "BACKGROUND", 1)
+        panel.edge:Color(0.42, 0.33, 0.20, 0.9)
+        frame.rewardPanel = panel
+    end
+    local function ShowPanel(on) panel.bg:SetShown(on) panel.top:SetShown(on) for k = 1, 4 do panel.edge[k]:SetShown(on) end end
+    ShowPanel(false)
     if numR + numC > 0 or money > 0 or xp > 0 then
-        Line(_G.REWARDS or "Rewards", "title", INK, 6)
-        -- XP and money first, on one line (XP left, money right)
-        if xp > 0 or money > 0 then
-            local half = math.floor(width / 2)
-            local h = 0
-            local function Part(text, x, outline)
-                local t
-                if outline then
-                    -- its own font string: the outline never carries over to other text
-                    t = frame.xpText
-                    if not t then
-                        t = frame.detailChild:CreateFontString(nil, "OVERLAY")
-                        Font(t)
-                        t:SetJustifyH("LEFT")
-                        frame.xpText = t
-                    end
-                    Font(t)
-                    -- a thin dark grey edge: the game's outline is black and can't be thinner,
-                    -- so a 1 px dark grey shadow instead
-                    local path, size = t:GetFont()
-                    if path then t:SetFont(path, size, "") end
-                    t:SetShadowColor(0.10, 0.10, 0.10, 1)
-                    t:SetShadowOffset(1, -1)
-                else
-                    n = n + 1
-                    t = Text(n)
-                    Font(t)
-                end
-                t:SetWidth(half - 4)
-                t:ClearAllPoints()
-                t:SetPoint("TOPLEFT", 4 + x, -y)
-                t:SetTextColor(INK[1], INK[2], INK[3])
-                t:SetText(text)
-                t:Show()
-                h = math.max(h, t:GetStringHeight() or 12)
-            end
-            local x = 0
-            if xp > 0 then
-                -- the game's own XP colour (the floating "XP: 144" text): deep magenta, label and amount
-                Part("|cff9b1f9bXP: " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp) .. "|r", 0, true)
-                x = half
-            end
-            if money > 0 then Part((_G.MONEY and (_G.MONEY .. ": ") or "Money: ") .. Money(money), x) end
-            y = y + h + 8
-        end
+        local LIGHT = { 0.92, 0.85, 0.70 }
+        local GOLD = { 1, 0.82, 0 }
+        y = y + 4
+        local top = y
+        y = y + 8
+        Line(_G.REWARDS or "Rewards", "title", GOLD, 8, "CENTER")
+        local half = math.floor((width - 16) / 2)
         local k = 0
+        local function Place(b, col)
+            b:SetWidth(half)
+            b:ClearAllPoints()
+            b:SetPoint("TOPLEFT", 10 + col * (half + 4), -y)
+            b:Show()
+        end
+        -- XP left, money right, on one row
+        if xp > 0 or money > 0 then
+            local col = 0
+            if xp > 0 then
+                k = k + 1
+                local b = Item(k)
+                b.kind = "xp"
+                local icon = XPIcon()
+                if icon then
+                    b.icon:SetTexture(icon)
+                else
+                    b.icon:SetColorTexture(0.42, 0.12, 0.55, 1)
+                    b.iconText:Show()
+                end
+                b.iconEdge:Color(0.62, 0.30, 0.80, 1)
+                b.count:SetText("")
+                b.name:SetText(BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or tostring(xp))
+                b.name:SetTextColor(1, 1, 1)
+                Place(b, col)
+                col = 1
+            end
+            if money > 0 then
+                k = k + 1
+                local b = Item(k)
+                b.kind = "money"
+                b.icon:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
+                b.iconEdge:Color(0.55, 0.45, 0.20, 1)
+                b.count:SetText("")
+                b.name:SetText(Money(money))
+                b.name:SetTextColor(1, 1, 1)
+                Place(b, col)
+            end
+            y = y + REWARD_H + 6
+        end
         local function Items(kind, count, info)
             local col = 0
             for i = 1, count do
@@ -611,26 +670,52 @@ local function DrawDetails()
                     b.icon:SetTexture(tex)
                     b.count:SetText((num and num > 1) and num or "")
                     b.name:SetText(name or "")
+                    b.name:SetTextColor(1, 1, 1)
                     local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-                    if qc then b.name:SetTextColor(qc.r, qc.g, qc.b) else b.name:SetTextColor(1, 1, 1) end
-                    b:ClearAllPoints()
-                    b:SetPoint("TOPLEFT", 4 + col * 150, -y)
-                    b:Show()
+                    if qc then b.iconEdge:Color(qc.r, qc.g, qc.b, 1) else b.iconEdge:Color(0.4, 0.4, 0.4, 1) end
+                    Place(b, col)
                     col = col + 1
-                    if col == 2 then col = 0 y = y + 43 end
+                    if col == 2 then col = 0 y = y + REWARD_H + 4 end
                 end
             end
-            if col > 0 then y = y + 43 end
+            if col > 0 then y = y + REWARD_H + 4 end
+            y = y + 2
+        end
+        local function Sub(text)
+            n = n + 1
+            local t = Text(n)
+            Font(t, "small")
+            t:SetWidth(width - 20)
+            t:SetJustifyH("LEFT")
+            t:ClearAllPoints()
+            t:SetPoint("TOPLEFT", 12, -y)
+            t:SetTextColor(LIGHT[1], LIGHT[2], LIGHT[3])
+            t:SetText(text)
+            t:Show()
+            y = y + (t:GetStringHeight() or 12) + 4
         end
         if numC > 0 then
-            Line(numC > 1 and (_G.REWARD_CHOICES or "You will be able to choose one of these rewards:")
-                or (_G.REWARD_ITEMS_ONLY or "You will receive:"), nil, INK, 4)
+            Sub(numC > 1 and (_G.REWARD_CHOICES or "You will be able to choose one of these rewards:")
+                or (_G.REWARD_ITEMS_ONLY or "You will receive:"))
             Items("choice", numC, function(i) return Safe(GetQuestLogChoiceInfo, i) end)
         end
         if numR > 0 then
-            Line(numC > 0 and (_G.REWARD_ITEMS or "You will also receive:") or (_G.REWARD_ITEMS_ONLY or "You will receive:"), nil, INK, 4)
+            Sub(numC > 0 and (_G.REWARD_ITEMS or "You will also receive:") or (_G.REWARD_ITEMS_ONLY or "You will receive:"))
             Items("reward", numR, function(i) return Safe(GetQuestLogRewardInfo, i, id) end)
         end
+        y = y + 4
+        -- the panel behind it all
+        panel.anchor:ClearAllPoints()
+        panel.anchor:SetPoint("TOPLEFT", frame.detailChild, "TOPLEFT", 2, -top)
+        panel.anchor:SetSize(width + 4, y - top)
+        panel.bg:ClearAllPoints()
+        panel.bg:SetAllPoints(panel.anchor)
+        panel.top:ClearAllPoints()
+        panel.top:SetPoint("TOPLEFT", panel.anchor, "TOPLEFT", 1, -1)
+        panel.top:SetPoint("TOPRIGHT", panel.anchor, "TOPRIGHT", -1, -1)
+        panel.top:SetHeight(30)
+        ShowPanel(true)
+        y = y + 6
     end
     frame.detailChild:SetHeight(math.max(y + 10, 10))
     frame.detail:SetVerticalScroll(0)
