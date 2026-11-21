@@ -500,6 +500,8 @@ local function BuildDefaults()
         },
         -- bags: HUF's one bag window, bank / other characters from snapshots,
         -- search, counts in tooltips (snapshots: HUFDB.inventory, not here)
+        -- the game's own windows: drag to move, places remembered (Windows.lua)
+        windows = { enabled = true, shift = false, positions = {} },
         bags = {
             enabled = true,
             oneBag = true,              -- the game's "combined bags" option
