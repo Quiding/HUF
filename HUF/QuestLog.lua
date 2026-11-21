@@ -562,7 +562,7 @@ local function DrawDetails()
                     -- so a 1 px dark grey shadow instead
                     local path, size = t:GetFont()
                     if path then t:SetFont(path, size, "") end
-                    t:SetShadowColor(0.22, 0.22, 0.22, 1)
+                    t:SetShadowColor(0.10, 0.10, 0.10, 1)
                     t:SetShadowOffset(1, -1)
                 else
                     n = n + 1
@@ -580,7 +580,7 @@ local function DrawDetails()
             local x = 0
             if xp > 0 then
                 -- the game's own XP colour (the floating "XP: 144" text): deep magenta, label and amount
-                Part("|cffb52ab5XP: " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp) .. "|r", 0, true)
+                Part("|cff9b1f9bXP: " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp) .. "|r", 0, true)
                 x = half
             end
             if money > 0 then Part((_G.MONEY and (_G.MONEY .. ": ") or "Money: ") .. Money(money), x) end
