@@ -640,7 +640,11 @@ local function AuraCfg(f, which)
         mine = a.mine, size = a.size, gap = a.gap, perRow = a.perRow, rows = a.rows,
         countSize = a.countSize, timer = a.timer, timerText = a.timerText, timerSize = a.timerSize,
         filter = a.filter, ccFirst = a.ccFirst, hideSated = a.hideSated,
-        borderSize = a.borderSize, dispelBorder = a.dispelBorder,
+        borderSize = a.borderSize,
+        dispelBorder = which == "debuffs" and a.dispelBorder
+                       or ((a.mark == "EDGE" or a.mark == "GLOW") and a.mark or false),
+        purge = which ~= "debuffs" and (a.filter == "PURGE" or a.filter == "TEAM_PURGE" or a.filter == "IMPORTANT_PURGE"),
+        purgeSize = a.purgeSize, glowSize = a.glowSize,
         anchor = flow, growH = growH, growV = pos[5],
         point = { pos[1], f, pos[2], a.x + pos[6] * a.offset, a.y + pos[7] * a.offset },
         level = f.textLayer and (f.textLayer:GetFrameLevel() + 2) or nil,

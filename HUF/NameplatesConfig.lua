@@ -293,8 +293,14 @@ local function AuraPage(f)
     L:Cycle("Mark buffs by type", {
         { value = "OFF", text = "No" },
         { value = "EDGE", text = "Edge in the type's colour" },
-        { value = "GLOW", text = "Glow in the type's colour" },
+        { value = "GLOW", text = "Golden glow, like a spell that lights up" },
     }, Opt("buffMark"))
+    L:Slider("Glow size (% of the icon)", 100, 250, 5, Opt("buffGlowSize"))
+    L:Slider("Removable buffs' size (%)", 100, 200, 5, Opt("buffPurgeSize"))
+    L:Cycle("Buffs go", {
+        { value = "SAME", text = "On the debuffs' row" },
+        { value = "ABOVE", text = "Always a row above the debuffs" },
+    }, Opt("buffRow"))
     L:Note("My group: a shaman from 12 (Purge), a priest from 18 (Dispel Magic), a warlock with a Felhunter, a hunter from 60 (enrages), a mage from 70 (Spellsteal); you by your spellbook. Magic blue, enrage red: a buff you can purge stands out. Dispellable: by anyone, whatever your class (purges, enrages, spell steal). The game checks it itself, so it works in every fight.")
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Size")
