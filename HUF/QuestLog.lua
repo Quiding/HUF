@@ -497,12 +497,12 @@ local function Item(i)
         b.box = b:CreateTexture(nil, "BACKGROUND")
         b.box:SetPoint("TOPLEFT", b.icon, "TOPRIGHT", 3, -1)
         b.box:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, (REWARD_H - ICON) / 2 + 1)
-        b.box:SetColorTexture(0.035, 0.035, 0.04, 0.95)
+        b.box:SetColorTexture(0.10, 0.08, 0.065, 0.96)
         local e = Edges(b, b.box, "BORDER", 1)
         e[1]:SetColorTexture(0, 0, 0, 1)
         e[3]:SetColorTexture(0, 0, 0, 1)
-        e[2]:SetColorTexture(0.30, 0.27, 0.22, 0.9)
-        e[4]:SetColorTexture(0.30, 0.27, 0.22, 0.9)
+        e[2]:SetColorTexture(0.45, 0.36, 0.24, 0.9)
+        e[4]:SetColorTexture(0.45, 0.36, 0.24, 0.9)
         b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
         b.count:SetPoint("BOTTOMRIGHT", b.icon, "BOTTOMRIGHT", -1, 1)
         b.name = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -600,12 +600,12 @@ local function DrawDetails()
     if not panel then
         local c = frame.detailChild
         panel = { bg = c:CreateTexture(nil, "BACKGROUND", nil, -6) }
-        panel.bg:SetColorTexture(0.075, 0.06, 0.05, 0.94)
+        panel.bg:SetColorTexture(0.235, 0.17, 0.12, 0.96)        -- warm bronze brown
         panel.top = c:CreateTexture(nil, "BACKGROUND", nil, -5)
-        panel.top:SetColorTexture(1, 0.82, 0, 0.06)
+        panel.top:SetColorTexture(0.50, 0.36, 0.18, 0.45)       -- bronze band behind the heading
         panel.anchor = CreateFrame("Frame", nil, c)
         panel.edge = Edges(c, panel.anchor, "BACKGROUND", 1)
-        panel.edge:Color(0.42, 0.33, 0.20, 0.9)
+        panel.edge:Color(0.62, 0.47, 0.26, 1)
         frame.rewardPanel = panel
     end
     local function ShowPanel(on) panel.bg:SetShown(on) panel.top:SetShown(on) for k = 1, 4 do panel.edge[k]:SetShown(on) end end
