@@ -506,8 +506,8 @@ local function BuildDefaults()
         questLog = {
             enabled = false, tracker = true, levels = true,
             point = { "CENTER", "CENTER", 0, 40 }, scale = 1,
-            font = "GLOBAL", fontSize = 12, titleSize = 14, outline = "GLOBAL",
-            bgColor = C(0.04, 0.04, 0.05), bgAlpha = 0.94,
+            font = "CLASSIC", fontSize = 13, outline = "GLOBAL",   -- CLASSIC = the game's quest fonts
+            categories = { list = {}, quests = {} },               -- own quest categories (HUF.QuestLog API)
         },
         bags = {
             enabled = true,
@@ -1167,6 +1167,18 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 21
+    end
+    -- 0.5.14: the quest log is the classic window, in the game's quest fonts
+    if HUFDB.dataVersion < 22 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local q = prof.questLog
+            if type(q) == "table" then
+                if q.font == "GLOBAL" then q.font = "CLASSIC" end
+                if q.fontSize == 12 then q.fontSize = 13 end
+                q.titleSize, q.bgColor, q.bgAlpha = nil, nil, nil
+            end
+        end
+        HUFDB.dataVersion = 22
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

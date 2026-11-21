@@ -1,16 +1,42 @@
--- HUF: a classic quest log window (quest list left, details right) instead of
--- the game's combined map + quest window. Off by default. While on, the quest
--- log key (ToggleQuestLog) and a click on a quest in the tracker
--- (QuestMapFrame_OpenToQuestDetails, MMT's QuestLog_OpenToQuest) open it; the
--- map key still opens the map, and a quest clicked on the open map still shows
--- in the map. Those globals are replaced while on (back after /reload when off).
+-- HUF: the classic quest log (World of Warcraft 1.12 layout and art) instead of
+-- the game's combined map + quest window. Off by default.
+--
+-- The window is drawn from the game's own classic quest log art, which Forever
+-- still ships (Interface\QuestFrame\UI-QuestLog-*, the book icon, +/- buttons,
+-- title highlight, reward name frames), laid out like the 1.12 QuestLogFrame:
+-- 384 x 512, six quest rows over the quest's text, Abandon / Share / Exit.
+--
+-- Own categories: quests can be put into categories of your own (right-click a
+-- quest); they show above the zones. Other addons (MMT's quest tracker) read
+-- them through HUF.QuestLog (API below).
+--
+-- While on, the quest log key (ToggleQuestLog / OpenQuestLog) and a click on a
+-- quest in the tracker (QuestMapFrame_OpenToQuestDetails, MMT's
+-- QuestLog_OpenToQuest) open it; the map key still opens the map, and a quest
+-- clicked on the open map stays in the map. Off again: back after /reload.
+--
+-- API for other addons (HUF.QuestLog, API 1):
+--   QL.API                               -> 1
+--   QL.IsEnabled()                       -> HUF's quest log is on
+--   QL.GetCategories()                   -> { "name", ... } in their order
+--   QL.GetCategory(questID)              -> category name or nil (= its zone)
+--   QL.SetCategory(questID, name|nil)    -> put a quest into a category (nil: back to its zone)
+--   QL.AddCategory(name), QL.RemoveCategory(name), QL.RenameCategory(old, new), QL.MoveCategory(name, delta)
+--   QL.GetSections()                     -> { { title, custom = bool, quests = { questID, ... } }, ... }
+--                                           as the log shows them (own categories first, then zones)
+--   QL.Listen(fn)                        -> fn("CATEGORIES_CHANGED") after any category change
+--   QL.Show(questID?), QL.Toggle()
 
 local _, ns = ...
 local QL = {}
 ns.QuestLog = QL
-local A = ns.ACCENT
+QL.API = 1
 
-local W, H, LIST_W, HEAD_H, FOOT_H, PAD = 700, 470, 260, 26, 32, 8
+local FRAME_W, FRAME_H = 384, 512
+local ROWS, ROW_H = 6, 16
+local LIST_X, LIST_Y = 19, -75
+local DETAIL_Y, DETAIL_W, DETAIL_H = -176, 300, 261
+local INK, INK_DONE = { 0.10, 0.07, 0.03 }, { 0.38, 0.33, 0.27 }   -- text on the parchment
 
 local function S() return ns.db.questLog end
 local function Safe(fn, ...)
@@ -23,17 +49,17 @@ local CQ = C_QuestLog or {}
 
 local frame
 local selected            -- questID
-local collapsed = {}      -- header title -> true
-local listOffset = 0
-local entries = {}
+local collapsed = {}      -- section title -> true (this session)
+local entries = {}        -- the list as shown
+local sections = {}       -- QL.GetSections()
 
 ---------------------------------------------------------------------------
--- Data
+-- Quest data
 ---------------------------------------------------------------------------
 local function Info(i)
     if CQ.GetInfo then return Safe(CQ.GetInfo, i) end
     if GetQuestLogTitle then
-        local title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID = GetQuestLogTitle(i)
+        local title, level, suggestedGroup, isHeader, _, isComplete, frequency, questID = GetQuestLogTitle(i)
         if not title then return nil end
         return { title = title, level = level, suggestedGroup = suggestedGroup, isHeader = isHeader,
             questID = questID, questLogIndex = i, frequency = frequency, hufComplete = isComplete }
@@ -51,99 +77,292 @@ local function IsFailed(q)
     if CQ.IsFailed then return Safe(CQ.IsFailed, q.questID) end
     return q.hufComplete == -1
 end
-local function IsTracked(id)
-    if CQ.GetQuestWatchType then return Safe(CQ.GetQuestWatchType, id) ~= nil end
-    if IsQuestWatched and CQ.GetLogIndexForQuestID then return Safe(IsQuestWatched, CQ.GetLogIndexForQuestID(id)) end
-    return false
-end
 local function IndexOf(id)
     if CQ.GetLogIndexForQuestID then return Safe(CQ.GetLogIndexForQuestID, id) end
+end
+local function IsTracked(id)
+    if CQ.GetQuestWatchType then return Safe(CQ.GetQuestWatchType, id) ~= nil end
+    if IsQuestWatched then return Safe(IsQuestWatched, IndexOf(id)) end
+    return false
 end
 local function Select(id)
     if CQ.SetSelectedQuest then Safe(CQ.SetSelectedQuest, id)
     elseif SelectQuestLogEntry then Safe(SelectQuestLogEntry, IndexOf(id)) end
 end
+local function MaxQuests()
+    return (CQ.GetMaxNumQuestsCanAccept and Safe(CQ.GetMaxNumQuestsCanAccept)) or MAX_QUESTS or 25
+end
+local function TitleOf(id)
+    return CQ.GetTitleForQuestID and Safe(CQ.GetTitleForQuestID, id)
+end
 
--- the list: headers (collapsible, HUF's own state) and quests
+---------------------------------------------------------------------------
+-- Own categories (profile: questLog.categories = { list = {names}, quests = {[questID] = name} })
+---------------------------------------------------------------------------
+local function Cat()
+    local c = S().categories
+    if type(c) ~= "table" then c = {} S().categories = c end
+    c.list = c.list or {}
+    c.quests = c.quests or {}
+    return c
+end
+local listeners = {}
+local function Changed()
+    if frame and frame:IsShown() then QL.Refresh() end
+    for _, fn in ipairs(listeners) do pcall(fn, "CATEGORIES_CHANGED") end
+end
+function QL.Listen(fn) if type(fn) == "function" then listeners[#listeners + 1] = fn end end
+function QL.IsEnabled() return ns.db and S().enabled or false end
+function QL.GetCategories()
+    local t = {}
+    for i, n in ipairs(Cat().list) do t[i] = n end
+    return t
+end
+local function HasCat(name)
+    for _, n in ipairs(Cat().list) do if n == name then return true end end
+    return false
+end
+function QL.GetCategory(id)
+    local n = Cat().quests[id]
+    return (n and HasCat(n)) and n or nil
+end
+function QL.AddCategory(name)
+    name = type(name) == "string" and ns.Trim(name) or ""
+    if name == "" or HasCat(name) then return false end
+    table.insert(Cat().list, name)
+    Changed()
+    return true
+end
+function QL.RemoveCategory(name)
+    local c = Cat()
+    for i, n in ipairs(c.list) do
+        if n == name then
+            table.remove(c.list, i)
+            for id, cn in pairs(c.quests) do if cn == name then c.quests[id] = nil end end
+            Changed()
+            return true
+        end
+    end
+    return false
+end
+function QL.RenameCategory(old, new)
+    new = type(new) == "string" and ns.Trim(new) or ""
+    if new == "" or HasCat(new) then return false end
+    local c = Cat()
+    for i, n in ipairs(c.list) do
+        if n == old then
+            c.list[i] = new
+            for id, cn in pairs(c.quests) do if cn == old then c.quests[id] = new end end
+            if collapsed[old] then collapsed[new], collapsed[old] = true, nil end
+            Changed()
+            return true
+        end
+    end
+    return false
+end
+function QL.MoveCategory(name, delta)
+    local l = Cat().list
+    for i, n in ipairs(l) do
+        if n == name then
+            local j = math.max(1, math.min(#l, i + delta))
+            if j ~= i then table.remove(l, i) table.insert(l, j, name) Changed() end
+            return true
+        end
+    end
+    return false
+end
+function QL.SetCategory(id, name)
+    if name ~= nil and not HasCat(name) then return false end
+    Cat().quests[id] = name
+    Changed()
+    return true
+end
+
+---------------------------------------------------------------------------
+-- The list: own categories first, then the game's zone headers
+---------------------------------------------------------------------------
 local function Collect()
     wipe(entries)
-    local n = NumEntries() or 0
-    local header, hidden = nil, false
+    wipe(sections)
+    local own, zones, order = {}, {}, {}
+    for _, n in ipairs(Cat().list) do own[n] = {} end
+    local zone = "?"
     local quests = 0
-    for i = 1, n do
+    for i = 1, NumEntries() or 0 do
         local q = Info(i)
         if q and q.isHeader then
-            header = q.title or ""
-            hidden = collapsed[header]
-            entries[#entries + 1] = { header = true, title = header, collapsed = hidden }
+            zone = q.title or "?"
         elseif q and q.questID and not q.isHidden and not q.isTask and not q.isBounty then
             quests = quests + 1
-            if not hidden then
-                entries[#entries + 1] = {
-                    questID = q.questID, index = q.questLogIndex or i, title = q.title or "?", level = q.level,
-                    group = q.suggestedGroup, daily = Enum and Enum.QuestFrequency and q.frequency == Enum.QuestFrequency.Daily,
-                    complete = IsComplete(q), failed = IsFailed(q), tracked = IsTracked(q.questID),
-                }
+            local e = {
+                questID = q.questID, index = q.questLogIndex or i, title = q.title or "?", level = q.level,
+                group = q.suggestedGroup, daily = Enum and Enum.QuestFrequency and q.frequency == Enum.QuestFrequency.Daily,
+                complete = IsComplete(q), failed = IsFailed(q), tracked = IsTracked(q.questID),
+            }
+            local c = QL.GetCategory(q.questID)
+            if c then
+                table.insert(own[c], e)
+            else
+                if not zones[zone] then zones[zone] = {} order[#order + 1] = zone end
+                table.insert(zones[zone], e)
             end
         end
     end
     QL.count = quests
+    local function Add(title, list, custom)
+        local sec = { title = title, custom = custom, quests = {} }
+        for _, e in ipairs(list) do sec.quests[#sec.quests + 1] = e.questID end
+        sections[#sections + 1] = sec
+        entries[#entries + 1] = { header = true, title = title, custom = custom, collapsed = collapsed[title], n = #list }
+        if not collapsed[title] then
+            for _, e in ipairs(list) do entries[#entries + 1] = e end
+        end
+    end
+    for _, n in ipairs(Cat().list) do Add(n, own[n], true) end
+    for _, z in ipairs(order) do Add(z, zones[z], false) end
     return entries
 end
 
-local function MaxQuests()
-    return (CQ.GetMaxNumQuestsCanAccept and Safe(CQ.GetMaxNumQuestsCanAccept)) or MAX_QUESTS or 25
+function QL.GetSections()
+    Collect()
+    local t = {}
+    for i, s in ipairs(sections) do
+        local q = {}
+        for j, id in ipairs(s.quests) do q[j] = id end
+        t[i] = { title = s.title, custom = s.custom, quests = q }
+    end
+    return t
 end
 
-local function Hex(c) return ("|cff%02x%02x%02x"):format(c.r * 255, c.g * 255, c.b * 255) end
+---------------------------------------------------------------------------
+-- Fonts: the game's quest fonts (classic) or a HUF font
+---------------------------------------------------------------------------
+local function Font(fs, kind)
+    local s = S()
+    if s.font == "CLASSIC" then
+        local obj = (kind == "title" and (_G.QuestTitleFont or _G.GameFontNormalLarge))
+            or (kind == "list" and _G.GameFontNormal)
+            or (kind == "small" and _G.GameFontHighlightSmall)
+            or _G.QuestFont or _G.GameFontHighlight
+        if obj then fs:SetFontObject(obj) end
+    else
+        local size = s.fontSize + (kind == "title" and 4 or (kind == "small" and -1 or 0))
+        ns.ApplyFont(fs, s.font, size, s.outline)
+    end
+end
+
 local function LevelColor(level)
     local c = ns.LevelColor and ns.LevelColor(level)
     return c or { r = 1, g = 0.82, b = 0 }
 end
 
 ---------------------------------------------------------------------------
--- Window
+-- Name prompt (a new category, a new name)
 ---------------------------------------------------------------------------
-local function Font(fs, size)
-    local s = S()
-    ns.ApplyFont(fs, s.font, size or s.fontSize, s.outline)
+local prompt
+local function Prompt(text, value, onOk)
+    if not prompt then
+        prompt = CreateFrame("Frame", "HUF_QuestLogPrompt", UIParent)
+        prompt:SetSize(280, 92)
+        prompt:SetFrameStrata("DIALOG")
+        prompt:SetPoint("CENTER", 0, 120)
+        prompt:EnableMouse(true)
+        ns.UI.Fill(prompt, 0.05, 0.05, 0.06, 0.96)
+        ns.UI.Border(prompt, ns.ACCENT[1], ns.ACCENT[2], ns.ACCENT[3], 1)
+        prompt.text = ns.UI.Label(prompt, "")
+        prompt.text:SetPoint("TOP", 0, -10)
+        prompt.box = ns.UI.EditBox(prompt, 240, "", function(t) prompt.ok:Click() end)
+        prompt.box:SetPoint("TOP", 0, -30)
+        prompt.ok = ns.UI.Button(prompt, 90, "OK", function()
+            local v = prompt.box:GetText()
+            prompt:Hide()
+            if prompt.onOk then prompt.onOk(v) end
+        end)
+        prompt.ok:SetPoint("BOTTOMRIGHT", -40, 10)
+        local cancel = ns.UI.Button(prompt, 90, "Cancel", function() prompt:Hide() end)
+        cancel:SetPoint("BOTTOMLEFT", 40, 10)
+        if UISpecialFrames then table.insert(UISpecialFrames, "HUF_QuestLogPrompt") end
+    end
+    prompt.text:SetText(text)
+    prompt.box:SetText(value or "")
+    prompt.onOk = onOk
+    prompt:Show()
+    prompt.box:SetFocus()
+    prompt.box:HighlightText()
 end
 
-local function Btn(parent, text, w, onClick)
-    local b = ns.UI.Button(parent, w, text, onClick)
-    b:SetHeight(20)
-    return b
+-- right-click menus
+local function QuestMenu(row, e)
+    local items, actions = {}, {}
+    local cur = QL.GetCategory(e.questID)
+    for _, n in ipairs(Cat().list) do
+        items[#items + 1] = { value = "cat:" .. n, text = (n == cur and "> " or "Move to ") .. n }
+    end
+    items[#items + 1] = { value = "new", text = "New category..." }
+    if cur then items[#items + 1] = { value = "zone", text = "Back to its zone" } end
+    items[#items + 1] = { value = "track", text = e.tracked and "Untrack" or "Track" }
+    ns.UI.OpenList(row, items, nil, function(v)
+        if v == "new" then
+            Prompt("Name of the new category:", "", function(name)
+                if QL.AddCategory(name) then QL.SetCategory(e.questID, ns.Trim(name)) end
+            end)
+        elseif v == "zone" then QL.SetCategory(e.questID, nil)
+        elseif v == "track" then QL.ToggleTrack(e.questID) QL.Refresh()
+        elseif type(v) == "string" and v:sub(1, 4) == "cat:" then QL.SetCategory(e.questID, v:sub(5)) end
+    end)
+end
+local function CategoryMenu(row, e)
+    ns.UI.OpenList(row, {
+        { value = "rename", text = "Rename..." }, { value = "up", text = "Move up" },
+        { value = "down", text = "Move down" }, { value = "delete", text = "Delete (quests go back to their zones)" },
+    }, nil, function(v)
+        if v == "rename" then Prompt("New name for \"" .. e.title .. "\":", e.title, function(n) QL.RenameCategory(e.title, n) end)
+        elseif v == "up" then QL.MoveCategory(e.title, -1)
+        elseif v == "down" then QL.MoveCategory(e.title, 1)
+        elseif v == "delete" then QL.RemoveCategory(e.title) end
+    end)
 end
 
-local function RowH() return S().fontSize + 7 end
-
+---------------------------------------------------------------------------
+-- The quest list (classic title buttons)
+---------------------------------------------------------------------------
 local rows = {}
 local function NewRow(i)
-    local r = CreateFrame("Button", nil, frame.list)
-    r:SetHeight(RowH())
-    r:SetPoint("LEFT", 0, 0)
-    r:SetPoint("RIGHT", 0, 0)
-    r.sel = r:CreateTexture(nil, "BACKGROUND")
-    r.sel:SetAllPoints()
-    r.sel:SetColorTexture(A[1], A[2], A[3], 0.25)
-    r.hl = r:CreateTexture(nil, "HIGHLIGHT")
-    r.hl:SetAllPoints()
-    r.hl:SetColorTexture(1, 1, 1, 0.06)
+    local r = CreateFrame("Button", nil, frame.listChild)
+    r:SetSize(DETAIL_W - 4, ROW_H)
+    r.expand = r:CreateTexture(nil, "ARTWORK")
+    r.expand:SetSize(16, 16)
+    r.expand:SetPoint("LEFT", 0, 0)
+    r.check = r:CreateTexture(nil, "ARTWORK")
+    r.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+    r.check:SetSize(16, 16)
+    r.check:SetPoint("LEFT", 2, 0)
     r.text = r:CreateFontString(nil, "OVERLAY")
-    Font(r.text)
-    r.text:SetPoint("LEFT", 6, 0)
-    r.text:SetPoint("RIGHT", -18, 0)
+    Font(r.text, "list")
+    r.text:SetPoint("LEFT", 20, 0)
     r.text:SetJustifyH("LEFT")
     r.text:SetWordWrap(false)
-    r.mark = r:CreateFontString(nil, "OVERLAY")
-    Font(r.mark)
-    r.mark:SetPoint("RIGHT", -4, 0)
-    r:RegisterForClicks("LeftButtonUp")
-    r:SetScript("OnClick", function(self)
+    r.tag = r:CreateFontString(nil, "OVERLAY")
+    Font(r.tag, "list")
+    r.tag:SetPoint("RIGHT", -2, 0)
+    r.text:SetPoint("RIGHT", r.tag, "LEFT", -4, 0)
+    r.hl = r:CreateTexture(nil, "BACKGROUND")
+    r.hl:SetTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight")
+    r.hl:SetBlendMode("ADD")
+    r.hl:SetAllPoints()
+    r.hl:Hide()
+    r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    r:SetScript("OnEnter", function(self) if self.entry and not self.entry.header then self.hl:Show() end end)
+    r:SetScript("OnLeave", function(self) if not (self.entry and self.entry.questID == selected) then self.hl:Hide() end end)
+    r:SetScript("OnClick", function(self, button)
         local e = self.entry
         if not e then return end
         if e.header then
+            if button == "RightButton" and e.custom then CategoryMenu(self, e) return end
             collapsed[e.title] = not collapsed[e.title] or nil
+        elseif button == "RightButton" then
+            QuestMenu(self, e)
+            return
         elseif IsShiftKeyDown() then
             QL.ToggleTrack(e.questID)
         else
@@ -155,40 +374,40 @@ local function NewRow(i)
     return r
 end
 
-local function VisibleRows()
-    return math.max(1, math.floor((frame.list:GetHeight() or 300) / RowH()))
-end
-
 local function DrawList()
-    local n = VisibleRows()
-    listOffset = math.max(0, math.min(listOffset, #entries - n))
-    for i = 1, math.max(n, #rows) do
-        local r = rows[i] or (i <= n and NewRow(i))
+    for i = 1, math.max(#entries, #rows) do
+        local e = entries[i]
+        local r = rows[i] or (e and NewRow(i))
         if r then
-            local e = i <= n and entries[listOffset + i]
             r.entry = e
             if e then
-                r:SetHeight(RowH())
                 r:ClearAllPoints()
-                r:SetPoint("TOPLEFT", frame.list, "TOPLEFT", 0, -(i - 1) * RowH())
-                r:SetPoint("TOPRIGHT", frame.list, "TOPRIGHT", 0, -(i - 1) * RowH())
-                Font(r.text)
-                Font(r.mark)
+                r:SetPoint("TOPLEFT", frame.listChild, "TOPLEFT", 0, -(i - 1) * ROW_H)
+                Font(r.text, "list")
+                Font(r.tag, "list")
                 if e.header then
-                    r.text:SetText((e.collapsed and "+ " or "- ") .. e.title)
-                    r.text:SetTextColor(A[1], A[2], A[3])
-                    r.mark:SetText("")
-                    r.sel:Hide()
+                    r.expand:SetTexture(e.collapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up")
+                    r.expand:Show()
+                    r.check:Hide()
+                    r.text:SetText(e.title)
+                    if e.custom then r.text:SetTextColor(0.55, 0.85, 1) else r.text:SetTextColor(1, 0.82, 0) end
+                    r.tag:SetText(e.collapsed and ("(" .. e.n .. ")") or "")
+                    r.tag:SetTextColor(0.6, 0.6, 0.6)
+                    r.hl:Hide()
                 else
                     local c = LevelColor(e.level)
+                    r.expand:Hide()
+                    r.check:SetShown(e.tracked)
                     local lvl = (S().levels and e.level and e.level > 0)
                         and ("[" .. e.level .. ((e.group and e.group > 1) and "+" or "") .. "] ") or ""
-                    local tail = e.failed and " |cffff4040(Failed)|r" or (e.complete and " |cff40ff40(Complete)|r" or "")
-                    if e.daily then tail = tail .. " |cff80c0ff(Daily)|r" end
-                    r.text:SetText("   " .. lvl .. e.title .. tail)
+                    r.text:SetText(lvl .. e.title)
                     r.text:SetTextColor(c.r, c.g, c.b)
-                    r.mark:SetText(e.tracked and "|cffffd200*|r" or "")
-                    r.sel:SetShown(e.questID == selected)
+                    local tag = e.failed and "(Failed)" or (e.complete and "(Complete)" or (e.daily and "(Daily)" or
+                        ((e.group and e.group > 1) and ("(" .. e.group .. ")") or "")))
+                    r.tag:SetText(tag)
+                    r.tag:SetTextColor(c.r, c.g, c.b)
+                    r.hl:SetVertexColor(c.r, c.g, c.b)
+                    r.hl:SetShown(e.questID == selected)
                 end
                 r:Show()
             else
@@ -196,17 +415,21 @@ local function DrawList()
             end
         end
     end
-    frame.count:SetText(("%d / %d"):format(QL.count or 0, MaxQuests()))
+    frame.listChild:SetHeight(math.max(1, #entries * ROW_H))
+    frame.count:SetText(("%d/%d"):format(QL.count or 0, MaxQuests()))
+    local all = true
+    for _, e in ipairs(entries) do if e.header and not e.collapsed then all = false break end end
+    frame.allIcon:SetTexture(all and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up")
 end
 
 ---------------------------------------------------------------------------
--- Details (scrolling text + rewards)
+-- The quest's text (on the parchment)
 ---------------------------------------------------------------------------
 local texts, items = {}, {}
 local function Text(i)
     local t = texts[i]
     if not t then
-        t = frame.content:CreateFontString(nil, "OVERLAY")
+        t = frame.detailChild:CreateFontString(nil, "OVERLAY")
         Font(t)
         t:SetJustifyH("LEFT")
         t:SetJustifyV("TOP")
@@ -218,21 +441,22 @@ end
 local function Item(i)
     local b = items[i]
     if not b then
-        b = CreateFrame("Button", nil, frame.content)
-        b:SetSize(150, 28)
+        b = CreateFrame("Button", nil, frame.detailChild)
+        b:SetSize(147, 41)
         b.icon = b:CreateTexture(nil, "ARTWORK")
-        b.icon:SetSize(26, 26)
-        b.icon:SetPoint("LEFT", 1, 0)
-        b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        ns.UI.Border(b, 0.25, 0.25, 0.27, 1)
+        b.icon:SetSize(39, 39)
+        b.icon:SetPoint("TOPLEFT", 0, 0)
+        b.nameFrame = b:CreateTexture(nil, "BACKGROUND")
+        b.nameFrame:SetTexture("Interface\\QuestFrame\\UI-QuestItemNameFrame")
+        b.nameFrame:SetSize(128, 64)
+        b.nameFrame:SetPoint("LEFT", b.icon, "RIGHT", -10, 0)
         b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-        b.count:SetPoint("BOTTOMRIGHT", b.icon, "BOTTOMRIGHT", 0, 1)
-        b.name = b:CreateFontString(nil, "OVERLAY")
-        Font(b.name)
-        b.name:SetPoint("LEFT", b.icon, "RIGHT", 4, 0)
-        b.name:SetPoint("RIGHT", -2, 0)
+        b.count:SetPoint("BOTTOMRIGHT", b.icon, "BOTTOMRIGHT", -2, 2)
+        b.name = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        b.name:SetPoint("LEFT", b.icon, "RIGHT", 8, 0)
+        b.name:SetWidth(90)
         b.name:SetJustifyH("LEFT")
-        b.name:SetWordWrap(false)
+        b.name:SetHeight(36)
         b:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             if not (GameTooltip.SetQuestLogItem and pcall(GameTooltip.SetQuestLogItem, GameTooltip, self.kind, self.idx, self.questID))
@@ -254,7 +478,7 @@ local function Item(i)
 end
 
 local function Money(c)
-    return ns.Bags and ns.Bags.Money and ns.Bags.Money(c) or GetCoinTextureString and GetCoinTextureString(c) or tostring(c)
+    return ns.Bags and ns.Bags.Money and ns.Bags.Money(c) or (GetCoinTextureString and GetCoinTextureString(c)) or tostring(c)
 end
 
 local function DrawDetails()
@@ -264,70 +488,56 @@ local function DrawDetails()
     local e
     for _, x in ipairs(entries) do if x.questID == id then e = x break end end
     local hasQuest = id and IndexOf(id) ~= nil
-    frame.abandon:SetEnabled(hasQuest)
-    frame.track:SetEnabled(hasQuest)
-    frame.mapBtn:SetEnabled(hasQuest)
+    frame.abandon:SetEnabled(hasQuest and true or false)
+    frame.mapBtn:SetEnabled(hasQuest and true or false)
     local push = hasQuest and (CQ.IsPushableQuest and Safe(CQ.IsPushableQuest, id)) and IsInGroup and IsInGroup()
     frame.share:SetEnabled(push and true or false)
-    frame.track.label:SetText(hasQuest and IsTracked(id) and "Untrack" or "Track")
-    if not hasQuest then
-        local t = Text(1)
-        Font(t)
-        t:SetWidth(frame.content:GetWidth())
+    frame.track:SetEnabled(hasQuest and true or false)
+    frame.track:SetChecked(hasQuest and IsTracked(id) or false)
+    local width = DETAIL_W - 8
+    local y, n = 0, 0
+    local function Line(text, kind, color, gap)
+        if not text or text == "" then return end
+        n = n + 1
+        local t = Text(n)
+        Font(t, kind)
+        t:SetWidth(width)
         t:ClearAllPoints()
-        t:SetPoint("TOPLEFT", 0, 0)
-        t:SetTextColor(0.6, 0.6, 0.6)
-        t:SetText((QL.count or 0) == 0 and "No quests." or "Pick a quest on the left.")
+        t:SetPoint("TOPLEFT", 4, -y)
+        t:SetTextColor(color[1], color[2], color[3])
+        t:SetText(text)
         t:Show()
-        frame.content:SetHeight(40)
+        y = y + (t:GetStringHeight() or 12) + (gap or 4)
+    end
+    if not hasQuest then
+        Line((QL.count or 0) == 0 and "No quests." or "Pick a quest above.", nil, INK_DONE, 0)
+        frame.detailChild:SetHeight(40)
         return
     end
     Select(id)
     local idx = IndexOf(id)
     local desc, objText = Safe(GetQuestLogQuestText, idx)
     if not desc then desc, objText = Safe(GetQuestLogQuestText) end
-    local width = frame.content:GetWidth()
-    local y, n = 0, 0
-    local s = S()
-    local function Line(text, size, r, g, b, gap)
-        if not text or text == "" then return end
-        n = n + 1
-        local t = Text(n)
-        Font(t, size)
-        t:SetWidth(width)
-        t:ClearAllPoints()
-        t:SetPoint("TOPLEFT", 0, -y)
-        t:SetTextColor(r, g, b)
-        t:SetText(text)
-        t:Show()
-        y = y + (t:GetStringHeight() or size) + (gap or 4)
-    end
-    local title = (e and e.title) or (CQ.GetTitleForQuestID and Safe(CQ.GetTitleForQuestID, id)) or "?"
-    Line(title, s.titleSize, A[1], A[2], A[3], 6)
-    Line(objText, nil, 0.95, 0.95, 0.95, 6)
-    -- objectives with progress
+    y = 4
+    Line((e and e.title) or TitleOf(id) or "?", "title", INK, 8)
+    Line(objText, nil, INK, 8)
     local objs = CQ.GetQuestObjectives and Safe(CQ.GetQuestObjectives, id)
     if type(objs) == "table" then
         for _, o in ipairs(objs) do
-            if o.text and o.text ~= "" then
-                if o.finished then Line("  - " .. o.text, nil, 0.55, 0.55, 0.55, 2)
-                else Line("  - " .. o.text, nil, 1, 0.82, 0, 2) end
-            end
+            if o.text and o.text ~= "" then Line(o.text, nil, o.finished and INK_DONE or INK, 2) end
         end
     end
-    if e and e.group and e.group > 1 then Line(("Suggested group: %d"):format(e.group), nil, 1, 0.5, 0.25, 2) end
-    y = y + 6
-    Line("Description", s.titleSize - 1, A[1], A[2], A[3], 4)
-    Line(desc, nil, 0.85, 0.85, 0.85, 8)
+    if e and e.group and e.group > 1 then Line(("Suggested Players [%d]"):format(e.group), nil, INK, 2) end
+    y = y + 10
+    Line(_G.QUEST_DESCRIPTION or "Description", "title", INK, 6)
+    Line(desc, nil, INK, 10)
 
-    -- rewards
     local numR = Safe(GetNumQuestLogRewards, id) or 0
     local numC = Safe(GetNumQuestLogChoices, id, true) or 0
     local money = Safe(GetQuestLogRewardMoney, id) or 0
     local xp = Safe(GetQuestLogRewardXP, id) or 0
     if numR + numC > 0 or money > 0 or xp > 0 then
-        y = y + 4
-        Line("Rewards", s.titleSize - 1, A[1], A[2], A[3], 4)
+        Line(_G.REWARDS or "Rewards", "title", INK, 6)
         local k = 0
         local function Items(kind, count, info)
             local col = 0
@@ -339,39 +549,37 @@ local function DrawDetails()
                     b.kind, b.idx, b.questID, b.itemID = kind, i, id, itemID
                     b.icon:SetTexture(tex)
                     b.count:SetText((num and num > 1) and num or "")
-                    Font(b.name)
                     b.name:SetText(name or "")
                     local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
                     if qc then b.name:SetTextColor(qc.r, qc.g, qc.b) else b.name:SetTextColor(1, 1, 1) end
-                    b:SetWidth(math.floor((width - 8) / 2))
                     b:ClearAllPoints()
-                    b:SetPoint("TOPLEFT", col * (math.floor((width - 8) / 2) + 8), -y)
+                    b:SetPoint("TOPLEFT", 4 + col * 150, -y)
                     b:Show()
                     col = col + 1
-                    if col == 2 then col = 0 y = y + 32 end
+                    if col == 2 then col = 0 y = y + 43 end
                 end
             end
-            if col > 0 then y = y + 32 end
+            if col > 0 then y = y + 43 end
         end
         if numC > 0 then
-            Line(numC > 1 and "Choose one of these:" or "You will receive:", nil, 0.85, 0.85, 0.85, 4)
+            Line(numC > 1 and (_G.REWARD_CHOICES or "You will be able to choose one of these rewards:")
+                or (_G.REWARD_ITEMS_ONLY or "You will receive:"), nil, INK, 4)
             Items("choice", numC, function(i) return Safe(GetQuestLogChoiceInfo, i) end)
         end
         if numR > 0 then
-            Line(numC > 0 and "You will also receive:" or "You will receive:", nil, 0.85, 0.85, 0.85, 4)
+            Line(numC > 0 and (_G.REWARD_ITEMS or "You will also receive:") or (_G.REWARD_ITEMS_ONLY or "You will receive:"), nil, INK, 4)
             Items("reward", numR, function(i) return Safe(GetQuestLogRewardInfo, i, id) end)
         end
-        if money > 0 then Line("Money: " .. Money(money), nil, 1, 1, 1, 2) end
-        if xp > 0 then Line(("Experience: %s"):format(BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp), nil, 1, 1, 1, 2) end
+        if money > 0 then Line(Money(money), nil, INK, 4) end
+        if xp > 0 then Line(("Experience: %s"):format(BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp), nil, INK, 4) end
     end
-    frame.content:SetHeight(math.max(y, 10))
-    frame.scroll:SetVerticalScroll(0)
+    frame.detailChild:SetHeight(math.max(y + 10, 10))
+    frame.detail:SetVerticalScroll(0)
 end
 
 function QL.Refresh()
     if not (frame and frame:IsShown()) then return end
     Collect()
-    -- keep a valid selection: the first quest when none
     local ok = false
     for _, e in ipairs(entries) do if e.questID and e.questID == selected then ok = true break end end
     if not ok then
@@ -382,42 +590,81 @@ function QL.Refresh()
     DrawDetails()
 end
 
+---------------------------------------------------------------------------
+-- Window
+---------------------------------------------------------------------------
 local function Look()
     if not frame then return end
     local s = S()
     frame:ClearAllPoints()
     frame:SetPoint(s.point[1], UIParent, s.point[2], s.point[3], s.point[4])
     frame:SetScale(s.scale)
-    frame.bg:SetColorTexture(s.bgColor.r, s.bgColor.g, s.bgColor.b, s.bgAlpha)
-    Font(frame.title, s.titleSize)
-    Font(frame.count)
 end
 QL.Look = Look
+
+-- a scroll frame with the game's scroll bar when the template is there, else the mouse wheel only
+local function Scroll(name, x, y, w, h)
+    local ok, sf = pcall(CreateFrame, "ScrollFrame", name, frame, "UIPanelScrollFrameTemplate")
+    if not ok or not sf then sf = CreateFrame("ScrollFrame", name, frame) end
+    sf:SetPoint("TOPLEFT", x, y)
+    sf:SetSize(w, h)
+    local child = CreateFrame("Frame", nil, sf)
+    child:SetSize(w, 10)
+    sf:SetScrollChild(child)
+    sf:EnableMouseWheel(true)
+    if not (ok and sf.ScrollBar) then
+        sf:SetScript("OnMouseWheel", function(self, d)
+            local max = math.max(0, (child:GetHeight() or 0) - (self:GetHeight() or 0))
+            self:SetVerticalScroll(math.max(0, math.min(max, self:GetVerticalScroll() - d * 2 * ROW_H)))
+        end)
+    end
+    return sf, child
+end
+
+local function PanelButton(text, w, onClick)
+    local ok, b = pcall(CreateFrame, "Button", nil, frame, "UIPanelButtonTemplate")
+    if not ok or not b then
+        b = ns.UI.Button(frame, w, text, onClick)
+        b:SetHeight(21)
+        return b
+    end
+    b:SetSize(w, 21)
+    b:SetText(text)
+    b:SetScript("OnClick", onClick)
+    return b
+end
 
 local function Build()
     if frame then return end
     frame = CreateFrame("Frame", "HUF_QuestLog", UIParent)
     QL.frame = frame
-    frame:SetSize(W, H)
+    frame:SetSize(FRAME_W, FRAME_H)
     frame:SetFrameStrata("MEDIUM")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
     frame:SetMovable(true)
     frame:EnableMouse(true)
+    frame:SetHitRectInsets(0, 30, 0, 70)        -- the art's see-through edges
     frame:Hide()
-    frame.bg = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
-    frame.bg:SetAllPoints()
-    ns.UI.Border(frame, A[1], A[2], A[3], 1)
     if UISpecialFrames then table.insert(UISpecialFrames, "HUF_QuestLog") end
 
-    local head = CreateFrame("Frame", nil, frame)
-    head:SetPoint("TOPLEFT")
-    head:SetPoint("TOPRIGHT")
-    head:SetHeight(HEAD_H)
-    head:EnableMouse(true)
-    head:RegisterForDrag("LeftButton")
-    head:SetScript("OnDragStart", function() frame.from = { frame:GetLeft(), frame:GetTop() } frame:StartMoving() end)
-    head:SetScript("OnDragStop", function()
+    -- the classic art: book icon under the four frame pieces
+    local book = frame:CreateTexture(nil, "BACKGROUND")
+    book:SetTexture("Interface\\QuestFrame\\UI-QuestLog-BookIcon")
+    book:SetSize(64, 64)
+    book:SetPoint("TOPLEFT", 7, -6)
+    for _, p in ipairs({ { "TopLeft", 256, "TOPLEFT" }, { "TopRight", 128, "TOPRIGHT" },
+        { "BotLeft", 256, "BOTTOMLEFT" }, { "BotRight", 128, "BOTTOMRIGHT" } }) do
+        local t = frame:CreateTexture(nil, "BORDER")
+        t:SetTexture("Interface\\QuestFrame\\UI-QuestLog-" .. p[1])
+        t:SetSize(p[2], 256)
+        t:SetPoint(p[3], 0, 0)
+    end
+
+    -- drag anywhere on the frame's own parts
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", function() frame.from = { frame:GetLeft(), frame:GetTop() } frame:StartMoving() end)
+    frame:SetScript("OnDragStop", function()
         frame:StopMovingOrSizing()
         if frame.SetUserPlaced then frame:SetUserPlaced(false) end
         local from = frame.from
@@ -428,80 +675,90 @@ local function Build()
         p[4] = math.floor(p[4] + (frame:GetTop() - from[2]) + 0.5)
         Look()
     end)
-    frame.title = head:CreateFontString(nil, "OVERLAY")
-    Font(frame.title, S().titleSize)
-    frame.title:SetPoint("LEFT", PAD, 0)
-    frame.title:SetText("Quest Log")
-    frame.count = head:CreateFontString(nil, "OVERLAY")
-    Font(frame.count)
-    frame.count:SetPoint("RIGHT", -30, 0)
-    frame.count:SetTextColor(0.7, 0.7, 0.7)
-    local close = CreateFrame("Button", nil, head)
-    close:SetSize(18, 18)
-    close:SetPoint("RIGHT", -4, 0)
-    local x = close:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    x:SetPoint("CENTER")
-    x:SetText("x")
-    close:SetScript("OnClick", function() frame:Hide() end)
-    local line = frame:CreateTexture(nil, "ARTWORK")
-    line:SetColorTexture(A[1], A[2], A[3], 0.5)
-    line:SetHeight(1)
-    line:SetPoint("TOPLEFT", 0, -HEAD_H)
-    line:SetPoint("TOPRIGHT", 0, -HEAD_H)
 
-    -- the quest list (mouse wheel scrolls)
-    frame.list = CreateFrame("Frame", nil, frame)
-    frame.list:SetPoint("TOPLEFT", PAD, -(HEAD_H + PAD))
-    frame.list:SetPoint("BOTTOMLEFT", PAD, FOOT_H + PAD)
-    frame.list:SetWidth(LIST_W)
-    frame.list:EnableMouseWheel(true)
-    frame.list:SetScript("OnMouseWheel", function(_, d)
-        listOffset = listOffset - d * 3
-        DrawList()
-    end)
-    local sep = frame:CreateTexture(nil, "ARTWORK")
-    sep:SetColorTexture(1, 1, 1, 0.08)
-    sep:SetWidth(1)
-    sep:SetPoint("TOPLEFT", frame.list, "TOPRIGHT", PAD / 2, 0)
-    sep:SetPoint("BOTTOMLEFT", frame.list, "BOTTOMRIGHT", PAD / 2, 0)
+    frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.title:SetPoint("TOP", 0, -17)
+    frame.title:SetText(_G.QUEST_LOG or "Quest Log")
+    local okC, close = pcall(CreateFrame, "Button", nil, frame, "UIPanelCloseButton")
+    if okC and close then
+        close:SetPoint("TOPRIGHT", -29, -8)
+        close:SetScript("OnClick", function() frame:Hide() end)
+    end
+    frame.count = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.count:SetPoint("TOPRIGHT", -54, -46)
 
-    -- the details (scrolling)
-    frame.scroll = CreateFrame("ScrollFrame", nil, frame)
-    frame.scroll:SetPoint("TOPLEFT", frame.list, "TOPRIGHT", PAD * 2, 0)
-    frame.scroll:SetPoint("BOTTOMRIGHT", -PAD * 2, FOOT_H + PAD)
-    frame.content = CreateFrame("Frame", nil, frame.scroll)
-    frame.content:SetSize(W - LIST_W - PAD * 5, 10)
-    frame.scroll:SetScrollChild(frame.content)
-    frame.scroll:EnableMouseWheel(true)
-    frame.scroll:SetScript("OnMouseWheel", function(self, d)
-        local max = math.max(0, (frame.content:GetHeight() or 0) - (self:GetHeight() or 0))
-        self:SetVerticalScroll(math.max(0, math.min(max, self:GetVerticalScroll() - d * 30)))
+    -- expand / collapse all
+    local all = CreateFrame("Button", nil, frame)
+    all:SetSize(54, 16)
+    all:SetPoint("TOPLEFT", 74, -44)
+    frame.allIcon = all:CreateTexture(nil, "ARTWORK")
+    frame.allIcon:SetSize(16, 16)
+    frame.allIcon:SetPoint("LEFT")
+    local allText = all:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    allText:SetPoint("LEFT", frame.allIcon, "RIGHT", 2, 0)
+    allText:SetText(_G.ALL or "All")
+    all:SetScript("OnClick", function()
+        local open = false
+        for _, e in ipairs(entries) do if e.header and not e.collapsed then open = true break end end
+        for _, s in ipairs(sections) do collapsed[s.title] = open or nil end
+        QL.Refresh()
     end)
 
-    -- buttons
-    frame.abandon = Btn(frame, "Abandon", 90, function()
+    -- track checkbox and the map button, left of the count
+    local okT, track = pcall(CreateFrame, "CheckButton", nil, frame, "UICheckButtonTemplate")
+    if not okT or not track then track = CreateFrame("CheckButton", nil, frame) end
+    track:SetSize(22, 22)
+    track:SetPoint("TOPRIGHT", -130, -41)
+    local trackText = track:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    trackText:SetPoint("LEFT", track, "RIGHT", 0, 1)
+    trackText:SetText(_G.TRACK_QUEST_ABBREV or "Track")
+    track:SetScript("OnClick", function() if selected then QL.ToggleTrack(selected) QL.Refresh() end end)
+    frame.track = track
+    local map = CreateFrame("Button", nil, frame)
+    map:SetSize(24, 24)
+    map:SetPoint("RIGHT", track, "LEFT", -6, 0)
+    map:SetNormalTexture("Interface\\QuestFrame\\UI-QuestMap_Button")
+    map:SetPushedTexture("Interface\\QuestFrame\\UI-QuestMap_Button")
+    local nt, pt = map:GetNormalTexture(), map:GetPushedTexture()
+    if nt then nt:SetTexCoord(0.125, 0.875, 0, 0.5) end
+    if pt then pt:SetTexCoord(0.125, 0.875, 0.5, 1) end
+    map:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    map:SetScript("OnClick", function() if selected then QL.OpenMap(selected) end end)
+    map:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_RIGHT") GameTooltip:SetText("Show on the map") GameTooltip:Show() end)
+    map:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    frame.mapBtn = map
+
+    -- the list and the quest's text
+    frame.list, frame.listChild = Scroll("HUF_QuestLogList", LIST_X, LIST_Y, DETAIL_W - 4, ROWS * ROW_H)
+    frame.detail, frame.detailChild = Scroll("HUF_QuestLogDetail", LIST_X, DETAIL_Y, DETAIL_W, DETAIL_H)
+
+    -- buttons at the bottom
+    frame.abandon = PanelButton(_G.ABANDON_QUEST_ABBREV and (_G.ABANDON_QUEST_ABBREV) or "Abandon", 117, function()
         local id = selected
         if not id then return end
-        local title = CQ.GetTitleForQuestID and Safe(CQ.GetTitleForQuestID, id) or "this quest"
-        ns.UI.Confirm(("Abandon \"%s\"?"):format(title), "Abandon", function()
+        ns.UI.Confirm(("Abandon \"%s\"?"):format(TitleOf(id) or "this quest"), "Abandon", function()
             Select(id)
             if CQ.SetAbandonQuest then Safe(CQ.SetAbandonQuest) elseif SetAbandonQuest then Safe(SetAbandonQuest) end
             if CQ.AbandonQuest then Safe(CQ.AbandonQuest) elseif AbandonQuest then Safe(AbandonQuest) end
         end)
     end)
-    frame.abandon:SetPoint("BOTTOMLEFT", PAD, PAD)
-    frame.share = Btn(frame, "Share", 90, function()
+    frame.abandon:SetPoint("BOTTOMLEFT", 18, 54)
+    frame.share = PanelButton(_G.SHARE_QUEST_ABBREV or "Share", 117, function()
         if not selected then return end
         Select(selected)
         if QuestLogPushQuest then Safe(QuestLogPushQuest) end
     end)
-    frame.share:SetPoint("LEFT", frame.abandon, "RIGHT", 6, 0)
-    frame.track = Btn(frame, "Track", 90, function() if selected then QL.ToggleTrack(selected) QL.Refresh() end end)
-    frame.track:SetPoint("LEFT", frame.share, "RIGHT", 6, 0)
-    frame.mapBtn = Btn(frame, "Show on map", 110, function() if selected then QL.OpenMap(selected) end end)
-    frame.mapBtn:SetPoint("BOTTOMRIGHT", -PAD, PAD)
+    frame.share:SetPoint("LEFT", frame.abandon, "RIGHT", 0, 0)
+    local exit = PanelButton(_G.EXIT or "Exit", 77, function() frame:Hide() end)
+    exit:SetPoint("BOTTOMRIGHT", -34, 54)
 
-    frame:SetScript("OnShow", function() QL.Refresh() end)
+    frame:SetScript("OnShow", function()
+        if PlaySound and SOUNDKIT and SOUNDKIT.IG_QUEST_LOG_OPEN then pcall(PlaySound, SOUNDKIT.IG_QUEST_LOG_OPEN) end
+        QL.Refresh()
+    end)
+    frame:SetScript("OnHide", function()
+        if PlaySound and SOUNDKIT and SOUNDKIT.IG_QUEST_LOG_CLOSE then pcall(PlaySound, SOUNDKIT.IG_QUEST_LOG_CLOSE) end
+    end)
     Look()
 end
 
@@ -520,7 +777,7 @@ end
 local O = {}       -- the game's own functions
 function QL.OpenMap(id)
     if O.openDetails then Safe(O.openDetails, id)
-    elseif O.toggle then Safe(O.toggle)
+    elseif QuestMapFrame_OpenToQuestDetails then Safe(QuestMapFrame_OpenToQuestDetails, id)
     elseif ToggleWorldMap then Safe(ToggleWorldMap) end
 end
 
@@ -528,12 +785,13 @@ function QL.Show(id)
     Build()
     if id then
         selected = id
-        local t = CQ.GetTitleForQuestID and Safe(CQ.GetTitleForQuestID, id)
-        -- open its header
+        local c = QL.GetCategory(id)
+        if c then collapsed[c] = nil end
+        local zone
         for i = 1, NumEntries() or 0 do
             local q = Info(i)
-            if q and q.isHeader then QL.lastHeader = q.title end
-            if q and q.questID == id and QL.lastHeader then collapsed[QL.lastHeader] = nil break end
+            if q and q.isHeader then zone = q.title end
+            if q and q.questID == id then if zone then collapsed[zone] = nil end break end
         end
     end
     if frame:IsShown() then QL.Refresh() else frame:Show() end
@@ -541,8 +799,9 @@ function QL.Show(id)
     if selected then
         for i, e in ipairs(entries) do
             if e.questID == selected then
-                local n = VisibleRows()
-                if i <= listOffset or i > listOffset + n then listOffset = i - 1 DrawList() end
+                local top = frame.list:GetVerticalScroll() or 0
+                local y = (i - 1) * ROW_H
+                if y < top or y > top + (ROWS - 1) * ROW_H then frame.list:SetVerticalScroll(math.max(0, y - ROW_H)) end
                 break
             end
         end
@@ -605,8 +864,19 @@ for _, ev in ipairs({ "QUEST_LOG_UPDATE", "QUEST_WATCH_LIST_CHANGED", "QUEST_ACC
     end)
 end
 
+-- a quest that left the log loses its category
+ns.On("QUEST_REMOVED", function(id)
+    if ns.db and type(id) == "number" and Cat().quests[id] then
+        Cat().quests[id] = nil
+        for _, fn in ipairs(listeners) do pcall(fn, "CATEGORIES_CHANGED") end
+    end
+end)
+
 function QL.Report(add)
-    add(("quest log: enabled=%s tracker=%s taken=%s shown=%s quests=%s selected=%s"):format(tostring(S().enabled),
-        tostring(S().tracker), tostring(taken or false), tostring(frame and frame:IsShown() or false),
-        tostring(QL.count), tostring(selected)))
+    local c = Cat()
+    local n = 0
+    for _ in pairs(c.quests) do n = n + 1 end
+    add(("quest log: enabled=%s tracker=%s taken=%s shown=%s quests=%s selected=%s categories=%d (%d quests in them) listeners=%d"):format(
+        tostring(S().enabled), tostring(S().tracker), tostring(taken or false), tostring(frame and frame:IsShown() or false),
+        tostring(QL.count), tostring(selected), #c.list, n, #listeners))
 end

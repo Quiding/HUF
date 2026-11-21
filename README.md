@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.13.
+Version 0.5.14.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -89,10 +89,15 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   defensives, cancelable), crowd control first, hide Sated / Exhaustion, 9 places inside the frame
   or above / below, debuff edges in their type colour. Optionally hides Blizzard's buff and debuff
   icons.
-- **Classic quest log** (Frames > Quest log, off by default): quest list left (headers fold, levels
-  in difficulty colours, complete / failed / daily, Shift + click tracks), the quest's objectives
-  with progress, description and rewards right; Abandon, Share, Track, Show on map. While on, the
-  quest log key and clicks on quests in the tracker open it instead of the map + quest window.
+- **Classic quest log** (Frames > Quest log, off by default): the original game's quest log window,
+  drawn from the game's own classic art (six quest rows over the quest's text on parchment, the
+  game's quest fonts): levels in difficulty colours, complete / failed / daily, tracked check,
+  objectives with progress, description, rewards; Abandon, Share, Exit, Track, Show on map.
+  **Own categories**: right-click a quest to put it into a category of your own (shown above the
+  zones); right-click a category to rename, move or delete it. While on, the quest log key and
+  clicks on quests in the tracker open it instead of the map + quest window. For addon authors
+  (MMT's quest tracker): `HUF.QuestLog` API 1 - GetCategories, GetCategory, SetCategory,
+  GetSections, Listen.
 - **The game's windows can be moved** (General > Windows, on): character, spellbook, professions,
   quests, map, mail, merchant, bank, friends, guild and more; drag an empty part (optionally only
   with Shift). Places are remembered; Shift + right-click puts one back, or reset them all. Every
