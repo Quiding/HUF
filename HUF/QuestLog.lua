@@ -559,7 +559,8 @@ local function DrawDetails()
             end
             local x = 0
             if xp > 0 then
-                Part("|cff7a3fc4XP:|r " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp), 0)
+                -- the game's own XP colour (the floating "XP: 144" text): deep magenta, label and amount
+                Part("|cff8e1a8eXP: " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(xp) or xp) .. "|r", 0)
                 x = half
             end
             if money > 0 then Part((_G.MONEY and (_G.MONEY .. ": ") or "Money: ") .. Money(money), x) end
