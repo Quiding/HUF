@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.24.
+Version 0.5.25.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -87,7 +87,10 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   where addons may not read auras: party, nameplates, combat), on their own Debuffs and Buffs
   tabs: filters (all, important, ones I can dispel, ones my group can dispel, crowd control;
   defensives, cancelable), crowd control first, hide Sated / Exhaustion, 9 places inside the frame
-  or above / below, debuff edges in their type colour. Optionally hides Blizzard's buff and debuff
+  or above / below, debuff edges in their type colour; buff filters for what can be purged or
+  stolen (by you or your group), removable buffs marked with an edge or a golden glow (optionally
+  bigger), an edge round the frame for a debuff you / your group can dispel (on for the party),
+  tooltips on nameplate auras. Optionally hides Blizzard's buff and debuff
   icons.
 - **Classic quest log** (Frames > Quest log, off by default): two sides (the quest list on black
   left, the quest's text on parchment right, in the game's window frame) or the original one-column
