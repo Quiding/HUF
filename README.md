@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.11.
+Version 0.5.12.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -91,7 +91,10 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   icons.
 - **The game's windows can be moved** (General > Windows, on): character, spellbook, professions,
   quests, map, mail, merchant, bank, friends, guild and more; drag an empty part (optionally only
-  with Shift). Places are remembered; Shift + right-click puts one back, or reset them all.
+  with Shift). Places are remembered; Shift + right-click puts one back, or reset them all. Every
+  window that opens through the game's panel system is taken, and inner panels covering a window
+  drag it too (way learned from ForeverMove, MIT). With ForeverMove enabled, HUF leaves the
+  windows to it.
 - Blizzard's player, target, target of target, pet and party frames are hidden while HUF's are on,
   and Blizzard's raid / party manager on the left edge (General: can be shown again).
 

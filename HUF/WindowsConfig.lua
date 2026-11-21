@@ -9,6 +9,9 @@ local function S() return ns.db.windows end
 ns.RegisterPage("windows", "Windows", "general", function(page)
     local L = UI.Column(page, 0, 0, COL_W)
     L:Header("The game's windows")
+    if ns.Windows.Other() then
+        L:Note("|cffffd200ForeverMove is enabled: it moves the windows, so HUF leaves them alone. Turn ForeverMove off to use HUF's instead.|r")
+    end
     L:Check("Move them by dragging", function() return S().enabled end, function(v)
         S().enabled = v
         if v then ns.Windows.Apply() else ns.Print("The windows stay where they are until /reload.") end
@@ -25,4 +28,5 @@ ns.RegisterPage("windows", "Windows", "general", function(page)
     R:Header("Notes")
     R:Note("Windows the game protects (some open in combat) can't be moved during a fight; they go to their place when it ends.")
     R:Note("The places are part of the profile (and of a profile export).")
+    R:Note("Hold Ctrl + Shift to click through a window without dragging it.")
 end, function() return ns.db.windows.enabled end)
