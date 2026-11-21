@@ -289,9 +289,12 @@ local function AuraPage(f)
         { value = "PURGE", text = "Only ones that can be dispelled or stolen" },
         { value = "IMPORTANT_PURGE", text = "Important ones and dispellable ones" },
     }, Opt("buffFilter"))
-    local ge, se = Opt("buffTypeEdge")
-    L:Check("Edge in the buff's type colour", ge, se, "Magic blue, so a buff you can purge stands out.")
-    L:Note("Dispellable: by anyone, whatever your class (purges, enrages, spell steal). The game checks it itself, so it works in every fight.")
+    L:Cycle("Mark buffs by type", {
+        { value = "OFF", text = "No" },
+        { value = "EDGE", text = "Edge in the type's colour" },
+        { value = "GLOW", text = "Glow in the type's colour" },
+    }, Opt("buffMark"))
+    L:Note("Magic blue, enrage red: a buff you can purge stands out. Dispellable: by anyone, whatever your class (purges, enrages, spell steal). The game checks it itself, so it works in every fight.")
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Size")
     R:Slider("Icon size", 6, 30, 1, Opt("auraSize"))

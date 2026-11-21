@@ -255,7 +255,12 @@ local function TeamEmpty(cfg)
 end
 
 -- a debuff's border in its type's colour (magic blue, curse purple, ...)
-local function WantDispel(cfg) return cfg.dispelBorder and true or false end
+-- false, "EDGE" (a ring in the type's colour) or "GLOW" (a soft pulsing glow)
+local function WantDispel(cfg)
+    local v = cfg.dispelBorder
+    if not v then return false end
+    return v == "GLOW" and "GLOW" or "EDGE"
+end
 local function BorderSize(cfg) return math.max(0, cfg.borderSize or 1) end
 local DISPEL_COLORS = {
     Magic = { 0.2, 0.6, 1 }, Curse = { 0.6, 0, 1 }, Disease = { 0.6, 0.4, 0 },
@@ -341,6 +346,33 @@ local function StyleTimer(cd, cfg)
     end
 end
 
+-- the glow sits outside the icon (the art's soft part is ~ 1.7 x the icon)
+local function GlowPoints(d, size)
+    local pad = math.floor((size or 20) * 0.38 + 0.5)
+    d.glow:ClearAllPoints()
+    d.glow:SetPoint("TOPLEFT", -pad, pad)
+    d.glow:SetPoint("BOTTOMRIGHT", pad, -pad)
+end
+
+-- the type look for scan and preview icons (no game button to tint them)
+local function ShowType(d, look, col)
+    if col and look == "GLOW" then
+        d.ring:Hide()
+        d.glow:SetVertexColor(col[1], col[2], col[3], 1)
+        d.glow:Show()
+        if not d.pulse:IsPlaying() then d.pulse:Play() end
+    elseif col then
+        d.glow:Hide()
+        d.pulse:Stop()
+        d.ring:SetColorTexture(col[1], col[2], col[3], 1)
+        d.ring:Show()
+    else
+        d.ring:Hide()
+        d.glow:Hide()
+        d.pulse:Stop()
+    end
+end
+
 -- icon look shared by engine buttons and scan icons
 local function Dress(b, cfg, top)
     local bg = b:CreateTexture(nil, "BACKGROUND")
@@ -351,6 +383,17 @@ local function Dress(b, cfg, top)
     ring:SetAllPoints()
     ring:SetColorTexture(1, 1, 1, 1)
     ring:Hide()
+    -- or a glow round the icon, in the type's colour, pulsing
+    local glow = b:CreateTexture(nil, "OVERLAY")
+    glow:SetTexture("Interface\Buttons\UI-ActionButton-Border")
+    glow:SetBlendMode("ADD")
+    glow:Hide()
+    local pulse = glow:CreateAnimationGroup()
+    local fade = pulse:CreateAnimation("Alpha")
+    fade:SetFromAlpha(1)
+    fade:SetToAlpha(0.35)
+    fade:SetDuration(0.6)
+    pulse:SetLooping("BOUNCE")
     local icon = b:CreateTexture(nil, "ARTWORK")
     local bs = BorderSize(cfg)
     icon:SetPoint("TOPLEFT", bs, -bs)
@@ -370,8 +413,10 @@ local function Dress(b, cfg, top)
     ns.ApplyFont(count, "GLOBAL", cfg.countSize or 9, "OUTLINE")   -- a font before any text
     count:SetPoint("BOTTOMRIGHT", 1, 0)
     count:SetJustifyH("RIGHT")
-    return { icon = icon, cd = cd, count = count, ring = ring, border = bs,
+    local d = { icon = icon, cd = cd, count = count, ring = ring, glow = glow, pulse = pulse, border = bs,
              timerText = cfg.timerText, timerSize = TimerSize(cfg) }
+    GlowPoints(d, cfg.size)
+    return d
 end
 
 local function Inset(d, bs)
@@ -380,7 +425,8 @@ local function Inset(d, bs)
     d.icon:SetPoint("BOTTOMRIGHT", -bs, bs)
 end
 
--- registers (or drops) the ring with the game's button; false: denied now
+-- registers (or drops) the ring or the glow with the game's button (it
+-- shows and tints it by the aura's type); false: denied now
 local function SetDispel(b, d, on)
     if d.dispelWant == on then return true end
     local add = b.AddDispelTypeTexture or b.SetAuraBorder
@@ -389,15 +435,20 @@ local function SetDispel(b, d, on)
         if not (clear and pcall(clear, b)) then return false end
         d.dispelReg = nil
         d.ring:Hide()
+        d.glow:Hide()
+        d.pulse:Stop()
     end
     local opts = DispelOpts()
     if on and add and opts then
-        if not pcall(add, b, d.ring, opts) then
+        local tex = on == "GLOW" and d.glow or d.ring
+        if not pcall(add, b, tex, opts) then
             if clear then pcall(clear, b) end
             d.ring:Hide()
+            d.glow:Hide()
             return false
         end
         d.dispelReg = true
+        if on == "GLOW" then d.pulse:Play() end
     end
     d.dispelWant = on
     return true
@@ -484,7 +535,7 @@ function Row:Resize()
     for _, b in ipairs(self.buttons) do
         local d = self.bdata[b]
         if d.size ~= cfg.size then
-            if pcall(b.SetSize, b, cfg.size, cfg.size) then d.size = cfg.size
+            if pcall(b.SetSize, b, cfg.size, cfg.size) and pcall(GlowPoints, d, cfg.size) then d.size = cfg.size
             else self.pendingResize = true end
         end
         if d.countSize ~= cfg.countSize then
@@ -572,6 +623,7 @@ function Row:Icon(i)
     end
     local cfg = self.cfg
     b:SetSize(cfg.size, cfg.size)
+    GlowPoints(b.d, cfg.size)
     if b.d.border ~= BorderSize(cfg) then
         Inset(b.d, BorderSize(cfg))
         b.d.border = BorderSize(cfg)
@@ -653,12 +705,7 @@ function Row:Scan()
             self:Place(b, n)
             local dn = ring and a.dispelName
             local col = dn and not ns.IsSecret(dn) and DISPEL_COLORS[dn]
-            if col then
-                b.d.ring:SetColorTexture(col[1], col[2], col[3], 1)
-                b.d.ring:Show()
-            else
-                b.d.ring:Hide()
-            end
+            ShowType(b.d, ring, col)
             pcall(b.d.icon.SetTexture, b.d.icon, a.icon)
             local cnt = a.applications
             if ns.IsSecret(cnt) or type(cnt) ~= "number" or cnt < 2 then b.d.count:SetText("")
@@ -766,12 +813,7 @@ function Row:Preview(cfg, n)
         b.d.count:SetText(i == 2 and "3" or "")
         b.d.cd:Hide()
         local col = WantDispel(cfg) and DISPEL_COLORS[SAMPLE_TYPES[(i - 1) % #SAMPLE_TYPES + 1]]
-        if col then
-            b.d.ring:SetColorTexture(col[1], col[2], col[3], 1)
-            b.d.ring:Show()
-        else
-            b.d.ring:Hide()
-        end
+        ShowType(b.d, WantDispel(cfg), col)
         b:Show()
     end
     self:FitHolder(n)

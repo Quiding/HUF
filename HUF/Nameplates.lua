@@ -145,6 +145,20 @@ end
 ---------------------------------------------------------------------------
 -- Layout (whenever settings change or a plate gets a unit)
 ---------------------------------------------------------------------------
+-- debuffs (from the left) and buffs (from the right) would meet: the
+-- rows' full width together is more than the room above the plate
+local function AurasStacked(s, room)
+    if not (s.showDebuffs and s.showBuffs) then return false end
+    local row = (s.auraMax or 5) * (s.auraSize + s.auraGap) - s.auraGap
+    return 2 * row + s.auraGap > room
+end
+
+-- how a buff's type shows: false, "EDGE" or "GLOW"
+local function BuffMark(s)
+    local m = s.buffMark
+    return (m == "EDGE" or m == "GLOW") and m or false
+end
+
 local function Layout(p)
     local s = S()
     local mode = ModeFor(p.unit)
@@ -248,7 +262,10 @@ local function Layout(p)
         a:SetPoint("BOTTOMRIGHT", p, "TOPRIGHT", 0, s.auraGap + bs)
     end
     a:SetHeight(s.auraSize)
-    -- debuffs from the left, buffs from the right, more rows go up
+    local room = (showName and not inside and showBar) and (s.width + 40) or s.width
+    -- debuffs from the left, buffs from the right, more rows go up. When
+    -- both rows together are wider than the plate they'd meet in the
+    -- middle: then the buffs get their own row(s) above the debuffs.
     local common = { size = s.auraSize, gap = s.auraGap, perRow = s.auraMax, rows = s.auraRows or 1,
                      countSize = math.max(6, math.floor(s.auraSize * 0.6)), timer = true, growV = "UP",
                      timerText = s.auraTimer, timerSize = s.auraTimerSize }
@@ -257,8 +274,11 @@ local function Layout(p)
     d.enabled, d.kind, d.mine = s.showDebuffs, "HARMFUL", s.debuffsMine
     d.anchor, d.growH, d.point = "BOTTOMLEFT", "RIGHT", { "BOTTOMLEFT", a, "BOTTOMLEFT", 0, 0 }
     bf.enabled, bf.kind, bf.mine = s.showBuffs, "HELPFUL", false
-    bf.filter, bf.dispelBorder = s.buffFilter or "ALL", s.buffTypeEdge and true or false
+    bf.filter, bf.dispelBorder = s.buffFilter or "ALL", BuffMark(s)
     bf.anchor, bf.growH, bf.point = "BOTTOMRIGHT", "LEFT", { "BOTTOMRIGHT", a, "BOTTOMRIGHT", 0, 0 }
+    if AurasStacked(s, room) then
+        bf.point[5] = (s.auraRows or 1) * (s.auraSize + s.auraGap)
+    end
     p.auraRows.debuffs:Configure(d)
     p.auraRows.buffs:Configure(bf)
 
@@ -278,7 +298,8 @@ local function Layout(p)
         -- so a plate's icons don't sit on the plate above
         local sh = s.height + ((showName and not inside) and (s.fontSize + s.nameGap) or 0)
         if s.showDebuffs or s.showBuffs then
-            sh = sh + bs + s.auraGap + s.auraSize * (s.auraRows or 1)
+            local lines = (s.auraRows or 1) * (AurasStacked(s, room) and 2 or 1)
+            sh = sh + bs + s.auraGap + s.auraSize * lines + s.auraGap * (lines - 1)
         end
         sb:ClearAllPoints()
         sb:SetPoint("BOTTOM", np, "CENTER", 0, s.yOffset - s.height / 2)

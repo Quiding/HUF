@@ -561,7 +561,7 @@ local function ConvertNameplates(s, n, notes)
     n.showBuffs = (s.buffSlot or "left") ~= "none"
     local bm = s.npEnemyBuffFilter or "showall"
     n.buffFilter = (bm == "dispellable" and "PURGE") or (bm == "important" and "IMPORTANT_PURGE") or "ALL"
-    n.buffTypeEdge = s.dispelGlow == true
+    n.buffMark = s.dispelGlow == true and "GLOW" or "OFF"
     -- threat colours on the bar (Ellesmere's default on WoW Forever: always)
     local tmode = s.threatColorMode or "always"
     if s.threatColorHealth == false or tmode == "never" then n.threatBar = "OFF"
