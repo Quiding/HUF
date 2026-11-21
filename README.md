@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.25.
+Version 0.5.26.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -59,7 +59,8 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   configurable (Frames > Minimap > Data bar). Free data bars anywhere (Frames > Data bars), each
   with its own place, size, look and blocks: FPS, latency, clock, gold, audio, durability,
   combat, friends, guild.
-- **Chat**: font, size, outline, window background and opacity; short channel names at the start of
+- **Chat**: the game's look or a panel like EllesmereUI's (one panel, flat tabs, button strip, flat
+  input line); font, size, outline, window background and opacity; short channel names at the start of
   a line ([1], [2], [S], [Y], [P], [PL], [G], [GO], [R], [RL], [RW], [W], [I], each editable);
   names in class colours; web addresses as links (click: copy box); tooltips over item / spell /
   quest links; chat kept over /reload and logout (up to 2000 lines a window); buttons beside the
@@ -146,7 +147,8 @@ damage number settings (not the kept chat lines).
 With EllesmereUI installed: **Import from EllesmereUI** (its current settings or a `!EUI_` string)
 brings over the look of its player, target, target of target, pet and group frames, nameplates
 (including their stacking and threat colours), party debuffs, the minimap, its data bars and the
-damage meter's hover setting.
+damage meter's hover setting, the chat and the data bars. Every import goes into a new profile
+(a copy of the active one with only the ticked parts replaced).
 
 ## For addon authors
 `_G.HUF`: `HUF.API_VERSION` (1), `HUF.RegisterNameProvider(id, fn)` (`fn(unit, first, last)`
@@ -156,7 +158,11 @@ returns the name to show or nil), `HUF.RefreshNames()`, `HUF.Refresh()`, `HUF.To
 ## Help and debugging
 `/huf help`: debug log (also a full report to copy), data recorder (`/huf rec on|off|now`) that
 shows what the game hides (secret values) about names, values and auras, and the command list.
-Unlock frames (`/huf unlock`) shows made-up characters to place and preview the frames.
+Unlock frames (`/huf unlock`) shows made-up characters to place and preview the frames. Frames snap
+to each other, the screen's middle and an optional grid while dragged (Alt: freely), with guide
+lines and distances; a small unlock bar offers Lock, Settings, snapping and the grid. Chat, bags,
+quest log and meter windows have boxes too; right-click a box for its settings. Other addons add
+their windows with `HUF.RegisterMover(id, spec)` (MMT does).
 
 ## Licence
 HUF is released under the GNU General Public License v3.0 (see [LICENSE](LICENSE)).
