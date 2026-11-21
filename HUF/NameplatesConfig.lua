@@ -310,6 +310,8 @@ local function AuraPage(f)
     R:Slider("Space", 0, 6, 1, Opt("auraGap"))
     local gt, st = Opt("auraTimer")
     R:Check("Time left as numbers", gt, st)
+    local gh, sh = Opt("auraTooltips")
+    R:Check("Tooltip on hover", gh, sh, "Hover a debuff or buff icon to see what it is. Clicks still go through to the plate.")
     R:Slider("Time size (0: automatic)", 0, 20, 1, Opt("auraTimerSize"))
     R:Note("Debuffs start at the left, buffs at the right. Shown by the game's own aura display, so they also work where addons may not read auras.")
 end

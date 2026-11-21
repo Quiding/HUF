@@ -562,6 +562,7 @@ local function ConvertNameplates(s, n, notes)
     local bm = s.npEnemyBuffFilter or "showall"
     n.buffFilter = (bm == "dispellable" and "PURGE") or (bm == "important" and "IMPORTANT_PURGE") or "ALL"
     n.buffMark = s.dispelGlow == true and "GLOW" or "OFF"
+    n.auraTooltips = s.showAuraTooltips == true
     -- threat colours on the bar (Ellesmere's default on WoW Forever: always)
     local tmode = s.threatColorMode or "always"
     if s.threatColorHealth == false or tmode == "never" then n.threatBar = "OFF"
@@ -836,6 +837,10 @@ local function ConvertGroup(rf, g, notes)
         d.rows = math.min(6, math.ceil(cap / d.perRow))
         d.borderSize = math.max(0, math.floor(Num(G("debuffBorderSize"), 1) + 0.5))
         d.dispelBorder = true
+        -- Ellesmere's dispel border round the frame (size 0: off)
+        local db = math.floor(Num(G("dispelBorderSize"), 0) + 0.5)
+        d.dispelEdge = db > 0 and "MINE" or "OFF"
+        if db > 0 then d.dispelEdgeSize = math.min(6, db) end
         d.countSize = math.max(6, math.floor(Num(G("debuffStacksTextSize"), 8) + 0.5))
         d.timer = G("debuffShowSwipe", true) ~= false
         d.timerText = G("debuffShowDurText", false) == true

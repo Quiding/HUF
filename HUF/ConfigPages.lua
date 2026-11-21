@@ -756,6 +756,14 @@ local function AuraPage(f, key, which)
         L:Check("Crowd control first", gc, sc, "Stuns, fears and the like lead the row.")
         local gs, ss = Opt(T, "hideSated")
         L:Check("Hide Sated and Exhaustion", gs, ss, "The debuffs Bloodlust and Heroism leave behind.")
+        L:Header("Edge round the frame")
+        L:Cycle("When the unit has a debuff", {
+            { value = "OFF", text = "No edge" },
+            { value = "MINE", text = "That I can dispel" },
+            { value = "TEAM", text = "That my group can dispel" },
+        }, Opt(T, "dispelEdge"))
+        L:Slider("Edge size", 1, 6, 1, Opt(T, "dispelEdgeSize"))
+        L:Note("In the debuff type's colour: magic blue, curse purple, disease brown, poison green. The game colours it, so it works in every fight.")
     end
     L:Header("Look")
     L:Slider("Icon size", 8, 40, 1, Opt(T, "size"))

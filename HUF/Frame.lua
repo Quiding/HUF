@@ -290,6 +290,7 @@ function Frame.Build(f, key, secure)
     f.auraRows = {
         debuffs = ns.Auras.NewRow(f, key .. " debuffs"),
         buffs = ns.Auras.NewRow(f, key .. " buffs"),
+        edge = ns.Auras.NewRow(f, key .. " debuff edge"),
     }
 
     Frame.LayoutInner(f)
@@ -651,14 +652,35 @@ local function AuraCfg(f, which)
     }
 end
 
+-- an edge round the whole frame in the colour of a debuff's type (magic
+-- blue, curse purple, ...) while the unit has one that can be removed: one
+-- invisible aura button the size of the frame plus the edge, whose four
+-- sides the game shows and tints (works while auras are hidden)
+local function EdgeCfg(f)
+    local a = f.s.debuffs
+    local mode = a.dispelEdge or "OFF"
+    local e = math.max(1, a.dispelEdgeSize or 2)
+    local w, h = f.s.width + 2 * e, f.s.height + 2 * e
+    return {
+        enabled = mode ~= "OFF" and f.s.enabled, highlight = true,
+        kind = "HARMFUL", filter = mode == "MINE" and "DISPELLABLE" or "TEAM", mine = false,
+        size = w, width = w, height = h, edge = e, gap = 0, perRow = 1, rows = 1,
+        countSize = 9, timer = false, timerText = false, timerSize = 0,
+        borderSize = 0, dispelBorder = true,
+        anchor = "CENTER", growH = "RIGHT", growV = "DOWN",
+        point = { "CENTER", f, "CENTER", 0, 0 },
+        level = f.textLayer and (f.textLayer:GetFrameLevel() + 1) or nil,
+    }
+end
+
 function Frame.LayoutAuras(f)
     if not f.auraRows then return end
     for which, row in pairs(f.auraRows) do
-        local cfg = AuraCfg(f, which)
+        local cfg = which == "edge" and EdgeCfg(f) or AuraCfg(f, which)
         if f.secure then
             row:Configure(cfg)
         else
-            row:Preview(cfg, which == "debuffs" and 3 or 4)     -- unlock mode
+            row:Preview(cfg, (which == "edge" and 0) or (which == "debuffs" and 3) or 4)     -- unlock mode
         end
     end
 end

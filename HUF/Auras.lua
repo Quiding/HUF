@@ -344,6 +344,12 @@ local function SlotSize(cfg, key)
     if not Removable(cfg, key) then return cfg.size end
     return math.floor(cfg.size * (cfg.purgeSize or 100) / 100 + 0.5)
 end
+-- a button's width and height (cfg.highlight: one button round the frame)
+local function ButtonWH(cfg, key)
+    if cfg.highlight then return cfg.width, cfg.height end
+    local s = SlotSize(cfg, key)
+    return s, s
+end
 local function BorderSize(cfg) return math.max(0, cfg.borderSize or 1) end
 local DISPEL_COLORS = {
     Magic = { 0.2, 0.6, 1 }, Curse = { 0.6, 0, 1 }, Disease = { 0.6, 0.4, 0 },
@@ -520,19 +526,49 @@ local function Dress(b, cfg, top)
     ns.ApplyFont(count, "GLOBAL", cfg.countSize or 9, "OUTLINE")   -- a font before any text
     count:SetPoint("BOTTOMRIGHT", 1, 0)
     count:SetJustifyH("RIGHT")
+    -- frame edge (cfg.highlight): no icon, four edges the game colours by
+    -- the debuff's type
+    local edges
+    if cfg.highlight then
+        bg:Hide()
+        icon:SetAlpha(0)
+        if cd.SetDrawBling then cd:SetDrawBling(false) end
+        cd:SetAlpha(0)
+        edges = {}
+        for i = 1, 4 do
+            edges[i] = b:CreateTexture(nil, "OVERLAY")
+            edges[i]:SetColorTexture(1, 1, 1, 1)
+            edges[i]:Hide()
+        end
+    end
     -- the golden glow, above the icon and its timer
-    local okP, proc, procAnim = pcall(MakeProc, b)
+    local okP, proc, procAnim
+    if not cfg.highlight then okP, proc, procAnim = pcall(MakeProc, b) end
     if okP then
         pcall(proc.SetFrameLevel, proc, over:GetFrameLevel() + 1)
     else
-        A.glowErr = tostring(proc)
+        if proc then A.glowErr = tostring(proc) end
         proc, procAnim = nil, nil
     end
     local d = { icon = icon, cd = cd, count = count, ring = ring, border = bs,
-                proc = proc, procAnim = procAnim,
+                proc = proc, procAnim = procAnim, edges = edges,
                 timerText = cfg.timerText, timerSize = TimerSize(cfg) }
     ProcSize(d, cfg.size)
     return d
+end
+
+-- the frame edge's four sides, e thick, inside the button (which is the
+-- frame plus e all round)
+local function EdgePoints(d, e)
+    local t = d.edges
+    if not t then return end
+    e = math.max(1, e or 2)
+    for i = 1, 4 do t[i]:ClearAllPoints() end
+    t[1]:SetPoint("TOPLEFT") t[1]:SetPoint("TOPRIGHT") t[1]:SetHeight(e)
+    t[2]:SetPoint("BOTTOMLEFT") t[2]:SetPoint("BOTTOMRIGHT") t[2]:SetHeight(e)
+    t[3]:SetPoint("TOPLEFT", 0, -e) t[3]:SetPoint("BOTTOMLEFT", 0, e) t[3]:SetWidth(e)
+    t[4]:SetPoint("TOPRIGHT", 0, -e) t[4]:SetPoint("BOTTOMRIGHT", 0, e) t[4]:SetWidth(e)
+    d.edgeSize = e
 end
 
 local function Inset(d, bs)
@@ -576,10 +612,12 @@ local function SetDispel(b, d, on)
     end
     local opts = DispelOpts()
     if on and add and opts then
-        if not pcall(add, b, d.ring, opts) then
-            if clear then pcall(clear, b) end
-            d.ring:Hide()
-            return false
+        for _, t in ipairs(d.edges or { d.ring }) do
+            if not pcall(add, b, t, opts) then
+                if clear then pcall(clear, b) end
+                d.ring:Hide()
+                return false
+            end
         end
         d.dispelReg = true
     end
@@ -591,27 +629,45 @@ end
 -- Engine rows
 ---------------------------------------------------------------------------
 local function GroupLayout(cfg, key)
-    local s = SlotSize(cfg, key)
-    return { elementWidth = s, elementHeight = s,
+    local w, h = ButtonWH(cfg, key)
+    return { elementWidth = w, elementHeight = h,
              elementSpacing = cfg.gap, lineSpacing = cfg.gap }
+end
+
+-- nameplate icons: the game's own tooltip on hover (cfg.tooltips), clicks
+-- still go through to the plate; otherwise no mouse at all
+local function PlateMouse(b, d, cfg)
+    local want = cfg.tooltips and true or false
+    if d.tips == want then return true end
+    local ok
+    if want then
+        ok = pcall(b.SetMouseClickEnabled, b, false) and pcall(b.SetMouseMotionEnabled, b, true)
+    else
+        ok = pcall(b.EnableMouse, b, false)
+    end
+    if ok then d.tips = want end
+    return ok
 end
 
 function Row:InitButton(b, key)
     local cfg = self.cfg
     local size = SlotSize(cfg, key)
+    local w, h = ButtonWH(cfg, key)
     -- everything is made and given a font first: registering runs the
     -- button's own update, which writes into these right away
     local d = Dress(b, cfg)
     d.slot = key
-    b:SetSize(size, size)
+    b:SetSize(w, h)
+    EdgePoints(d, cfg.edge)
     d.glowScale = cfg.glowSize or 140
     ProcSize(d, size)
     pcall(b.SetMouseClickEnabled, b, false)
-    if self.plate then pcall(b.EnableMouse, b, false) end
+    if self.plate then PlateMouse(b, d, cfg) end
+    if cfg.highlight then pcall(b.EnableMouse, b, false) end   -- clicks and hovers reach the frame
     b:SetIcon(d.icon)
     b:SetDurationCooldown(d.cd)
     b:SetApplicationCount(d.count, {})
-    d.size, d.countSize = size, cfg.countSize
+    d.size, d.w, d.h, d.countSize = size, w, h, cfg.countSize
     self.bdata[b] = d
     self.buttons[#self.buttons + 1] = b
     local okD, set = pcall(SetDispel, b, d, WantDispel(cfg, key))
@@ -673,11 +729,15 @@ function Row:Resize()
     for _, b in ipairs(self.buttons) do
         local d = self.bdata[b]
         local size = SlotSize(cfg, d.slot)
-        if d.size ~= size or d.glowScale ~= (cfg.glowSize or 140) then
-            if pcall(b.SetSize, b, size, size) then
-                d.size, d.glowScale = size, cfg.glowSize or 140
+        local w, h = ButtonWH(cfg, d.slot)
+        if d.w ~= w or d.h ~= h or d.glowScale ~= (cfg.glowSize or 140) then
+            if pcall(b.SetSize, b, w, h) then
+                d.size, d.w, d.h, d.glowScale = size, w, h, cfg.glowSize or 140
                 ProcSize(d, size)
             else self.pendingResize = true end
+        end
+        if d.edges and d.edgeSize ~= math.max(1, cfg.edge or 2) then
+            if not pcall(EdgePoints, d, cfg.edge) then self.pendingResize = true end
         end
         if d.countSize ~= cfg.countSize then
             if pcall(ns.ApplyFont, d.count, "GLOBAL", cfg.countSize, "OUTLINE") then d.countSize = cfg.countSize
@@ -696,6 +756,7 @@ function Row:Resize()
             else self.pendingResize = true end
         end
         if not SetDispel(b, d, WantDispel(cfg, d.slot)) then self.pendingResize = true end
+        if self.plate and not PlateMouse(b, d, cfg) then self.pendingResize = true end
     end
 end
 
@@ -891,6 +952,10 @@ function Row:Configure(cfg)
             self.c = nil
             self.noEngine = true       -- this row scans from now on
         end
+    end
+    if cfg.highlight and not self.c then
+        self:Disable()          -- the frame edge needs the game's aura display
+        return
     end
     if self.c then
         if self.level then pcall(self.c.SetFrameLevel, self.c, self.level) end
