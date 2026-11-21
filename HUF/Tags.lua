@@ -155,6 +155,8 @@ local function LevelColor(level)
     return G("TRIVIAL_DIFFICULTY_COLOR", DIFF.grey)
 end
 
+ns.LevelColor = LevelColor     -- the vanilla difficulty colour (also the quest log)
+
 local function Hex(c)
     return fmt("|cff%02x%02x%02x", math.floor(c.r * 255 + 0.5), math.floor(c.g * 255 + 0.5), math.floor(c.b * 255 + 0.5))
 end

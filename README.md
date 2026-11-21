@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.12.
+Version 0.5.13.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -89,6 +89,10 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   defensives, cancelable), crowd control first, hide Sated / Exhaustion, 9 places inside the frame
   or above / below, debuff edges in their type colour. Optionally hides Blizzard's buff and debuff
   icons.
+- **Classic quest log** (Frames > Quest log, off by default): quest list left (headers fold, levels
+  in difficulty colours, complete / failed / daily, Shift + click tracks), the quest's objectives
+  with progress, description and rewards right; Abandon, Share, Track, Show on map. While on, the
+  quest log key and clicks on quests in the tracker open it instead of the map + quest window.
 - **The game's windows can be moved** (General > Windows, on): character, spellbook, professions,
   quests, map, mail, merchant, bank, friends, guild and more; drag an empty part (optionally only
   with Shift). Places are remembered; Shift + right-click puts one back, or reset them all. Every

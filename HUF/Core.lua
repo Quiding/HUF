@@ -502,6 +502,13 @@ local function BuildDefaults()
         -- search, counts in tooltips (snapshots: HUFDB.inventory, not here)
         -- the game's own windows: drag to move, places remembered (Windows.lua)
         windows = { enabled = true, shift = false, positions = {} },
+        -- HUF's classic quest log instead of the map + quest window (QuestLog.lua)
+        questLog = {
+            enabled = false, tracker = true, levels = true,
+            point = { "CENTER", "CENTER", 0, 40 }, scale = 1,
+            font = "GLOBAL", fontSize = 12, titleSize = 14, outline = "GLOBAL",
+            bgColor = C(0.04, 0.04, 0.05), bgAlpha = 0.94,
+        },
         bags = {
             enabled = true,
             oneBag = true,              -- the game's "combined bags" option
