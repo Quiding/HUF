@@ -314,7 +314,11 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         local l = {}
         for _, n in ipairs(ns.ProfileNames()) do l[#l + 1] = { value = n, text = n } end
         return l
-    end, function() return ns.CurrentProfileName() end, function(v) ns.SetProfile(v) end)
+    end, function() return ns.CurrentProfileName() end, function(v)
+        if v == ns.CurrentProfileName() then return end
+        ns.SetProfile(v)
+        ns.AskReload(("Profile \"%s\" is active. "):format(v) .. "Some parts (the quest log, the bag window, the minimap, ...) only switch over fully after a reload.")
+    end)
 
     local status = UI.Label(page, "")
     local box = UI.EditBox(page, COL_W - 90, "new profile name", function(text, self)
@@ -324,6 +328,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         self:SetText("")
         self:ClearFocus()
         status:SetText(("Profile \"%s\" is active."):format(text))
+        ns.AskReload(("Profile \"%s\" is active. "):format(text) .. "Some parts (the quest log, the bag window, the minimap, ...) only switch over fully after a reload.")
     end)
     L:Add(box, 0)
     local create = UI.Button(page, 84, "Create", function()
@@ -333,6 +338,7 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
         box:SetText("")
         box:ClearFocus()
         status:SetText(("Profile \"%s\" is active."):format(text))
+        ns.AskReload(("Profile \"%s\" is active. "):format(text) .. "Some parts (the quest log, the bag window, the minimap, ...) only switch over fully after a reload.")
     end)
     create:SetPoint("TOPLEFT", box, "TOPRIGHT", 6, 0)
     L:Space(UI.ROW + 4)
@@ -543,6 +549,9 @@ ns.RegisterPage("profiles", "Profiles", "general", function(page)
                 ns.RunOOC("reload", function()
                     UI.Confirm("Reload now to finish turning the EllesmereUI module off?", "Reload", ReloadUI, "Later")
                 end)
+            elseif not reload then
+                -- everything drawn and switched on as imported (the quest log, the bag window, ...)
+                ns.AskReload(("Imported into the new profile \"%s\". Everything is fully in place after a reload."):format(newName))
             end
         end
         f:Show()
