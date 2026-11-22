@@ -77,6 +77,30 @@ local function IsFailed(q)
     if CQ.IsFailed then return Safe(CQ.IsFailed, q.questID) end
     return q.hufComplete == -1
 end
+-- elite, as the game's own quest list marks it with "+": the quest's tag info
+-- (isElite, or an "Elite" tag), cached per quest
+local eliteCache = {}
+local function IsElite(id)
+    if not id then return false end
+    local c = eliteCache[id]
+    if c ~= nil then return c end
+    local elite = false
+    if CQ.GetQuestTagInfo then
+        local info = Safe(CQ.GetQuestTagInfo, id)
+        if type(info) == "table" then
+            elite = info.isElite == true
+                or (_G.ELITE and info.tagName == _G.ELITE)
+                or (type(info.tagName) == "string" and info.tagName:lower() == "elite")
+        end
+    elseif GetQuestTagInfo then
+        local _, tagName = Safe(GetQuestTagInfo, id)
+        elite = (_G.ELITE and tagName == _G.ELITE) or (type(tagName) == "string" and tagName:lower() == "elite")
+    end
+    eliteCache[id] = elite and true or false
+    return eliteCache[id]
+end
+QL.IsElite = IsElite
+
 local function IndexOf(id)
     if CQ.GetLogIndexForQuestID then return Safe(CQ.GetLogIndexForQuestID, id) end
 end
@@ -197,6 +221,7 @@ local function Collect()
             local e = {
                 questID = q.questID, index = q.questLogIndex or i, title = q.title or "?", level = q.level,
                 group = q.suggestedGroup, daily = Enum and Enum.QuestFrequency and q.frequency == Enum.QuestFrequency.Daily,
+                elite = IsElite(q.questID),
                 complete = IsComplete(q), failed = IsFailed(q), tracked = IsTracked(q.questID),
             }
             local c = QL.GetCategory(q.questID)
@@ -412,7 +437,7 @@ local function DrawList()
                     r.expand:Hide()
                     r.check:SetShown(e.tracked)
                     local lvl = (S().levels and e.level and e.level > 0)
-                        and ("[" .. e.level .. ((e.group and e.group > 1) and "+" or "") .. "] ") or ""
+                        and ("[" .. e.level .. ((e.elite or (e.group and e.group > 1)) and "+" or "") .. "] ") or ""
                     r.text:SetText(lvl .. e.title)
                     r.text:SetTextColor(c.r, c.g, c.b)
                     local tag = e.failed and "(Failed)" or (e.complete and "(Complete)" or (e.daily and "(Daily)" or
@@ -1148,4 +1173,15 @@ function QL.Report(add)
     add(("quest log: enabled=%s tracker=%s taken=%s shown=%s quests=%s selected=%s categories=%d (%d quests in them) listeners=%d"):format(
         tostring(S().enabled), tostring(S().tracker), tostring(taken or false), tostring(frame and frame:IsShown() or false),
         tostring(QL.count), tostring(selected), #c.list, n, #listeners))
+    -- each quest: level, group size, the game's tag info (what the elite "+" reads)
+    for i = 1, NumEntries() or 0 do
+        local q = Info(i)
+        if q and q.questID and not q.isHeader then
+            local tag = CQ.GetQuestTagInfo and Safe(CQ.GetQuestTagInfo, q.questID)
+            local t = type(tag) == "table" and ("tagID=%s tagName=%s isElite=%s"):format(tostring(tag.tagID),
+                tostring(tag.tagName), tostring(tag.isElite)) or "no tag"
+            add(("  quest %d [%s] %s: group=%s %s -> elite=%s"):format(q.questID, tostring(q.level), tostring(q.title),
+                tostring(q.suggestedGroup), t, tostring(IsElite(q.questID))))
+        end
+    end
 end
