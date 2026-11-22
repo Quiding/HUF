@@ -1,4 +1,4 @@
--- HUF: settings page for the bags (FRAMES > Bags).
+-- HUF: settings page for the bags (GENERAL > Utility Frames > Bags).
 
 local _, ns = ...
 local UI = ns.UI
@@ -13,7 +13,7 @@ local function Fonts()
     return l
 end
 
-ns.RegisterPage("bags", "Bags", "frames", function(page)
+ns.RegisterPage("bags", "Bags", "utility", function(page)
     local L = UI.Column(page, 0, 0, COL_W)
     L:Header("Bags")
     local ge, se = Opt("enabled")

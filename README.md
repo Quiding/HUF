@@ -2,7 +2,7 @@
 
 Dark, minimalist unit frames for World of Warcraft: Forever (interface 16001), made for
 multiboxing teams and built to work with [MMT - Manage My Team](https://github.com/bnetworking/MMT).
-Version 0.5.30.
+Version 0.5.31.
 
 ## Install
 Download the repository (Code > Download ZIP) and copy the `HUF` folder into
@@ -56,7 +56,7 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   Blizzard after /reload.
 - **Data bars**: the minimap data bar, a strip as wide as the map under (or over) it with friends
   and guild members online (click: friends list / guild window); icon colour, size and place
-  configurable (Frames > Minimap > Data bar). Free data bars anywhere (Frames > Data bars), each
+  configurable (Utility Frames > Minimap > Data bar). Free data bars anywhere (its Advanced Settings), each
   with its own place, size, look and blocks: FPS, latency, clock, gold, audio, durability,
   combat, friends, guild.
 - **Chat**: the game's look or a panel like EllesmereUI's (one panel, flat tabs, button strip, flat
@@ -93,7 +93,7 @@ full game restart (not just /reload). Type `/huf` in game for the settings.
   bigger), an edge round the frame for a debuff you / your group can dispel (on for the party),
   tooltips on nameplate auras. Optionally hides Blizzard's buff and debuff
   icons.
-- **Classic quest log** (Frames > Quest log, off by default): two sides (the quest list on black
+- **Classic quest log** (Utility Frames > Quest Log, off by default): two sides (the quest list on black
   left, the quest's text on parchment right, in the game's window frame) or the original one-column
   window drawn from the game's own classic art; the game's quest fonts: levels in difficulty colours, complete / failed / daily, tracked check,
   objectives with progress, description, rewards; Abandon, Share, Exit, Track, Show on map.
@@ -128,7 +128,10 @@ The settings close when a fight starts and come back after it. The General page 
 that puts every unit frame text back on the global font, short numbers, status texts, avoiding
 overlapping texts), **Frames & Features** (hiding Blizzard's frames and raid manager, moving the
 game's windows with a reset list) and **Addon Support** (MMT interaction, MMT's privacy names or
-HUF's own name setting, click-casting addons). A setting that needs a reload asks for one.
+HUF's own name setting, click-casting addons). A setting that needs a reload asks for one. **Utility Frames** (General) holds Bags, Chat,
+Minimap, Quest Log and the De-/Buff Bar as tabs; **Primary Frames** lists Player, Target, Target of
+Target, Pet, Focus Target and Raid (both still to come), Party, Nameplates and the Damage Meter.
+Options of a feature that is off are greyed out (quest log, data bars).
 
 ## Click-cast
 General > Click-cast: pick a spell (typed or from the spellbook), press a key or mouse button

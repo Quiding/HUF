@@ -1,4 +1,4 @@
--- HUF: settings page for nameplates (FRAMES > Nameplates).
+-- HUF: settings page for nameplates (PRIMARY FRAMES > Nameplates).
 
 local _, ns = ...
 local UI = ns.UI

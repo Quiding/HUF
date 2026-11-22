@@ -1,4 +1,4 @@
--- HUF: settings page for the damage meter (FRAMES > Damage meter).
+-- HUF: settings page for the damage meter (PRIMARY FRAMES > Damage meter).
 
 local _, ns = ...
 local UI = ns.UI

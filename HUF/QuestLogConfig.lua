@@ -1,4 +1,4 @@
--- HUF: settings page for the classic quest log (FRAMES > Quest log).
+-- HUF: settings page for the classic quest log (GENERAL > Utility Frames > Quest Log).
 
 local _, ns = ...
 local UI = ns.UI
@@ -18,10 +18,10 @@ local OUTLINES = {
     { value = "OUTLINE", text = "Thin" }, { value = "THICKOUTLINE", text = "Thick" },
 }
 
-ns.RegisterPage("questlog", "Quest log", "frames", function(page)
+ns.RegisterPage("questlog", "Quest Log", "utility", function(page)
     local L = UI.Column(page, 0, 0, COL_W)
-    L:Header("Quest log")
-    L:Check("Use HUF's classic quest log", function() return Q().enabled end, function(v)
+    L:Header("Quest log").hufNoGate = true
+    local master = L:Check("Use HUF's classic quest log", function() return Q().enabled end, function(v)
         Q().enabled = v
         if v then ns.QuestLog.Apply() else ns.AskReload("The game's quest window comes back after a reload.") end
     end, "The quest log as in the original game: the quest list over the quest's text, objectives and rewards. The quest log key opens it instead of the map + quest window; the map key still opens the map.")
@@ -49,4 +49,6 @@ ns.RegisterPage("questlog", "Quest log", "frames", function(page)
     end)
     R:Header("For addon authors")
     R:Note("HUF.QuestLog (API 1): GetCategories(), GetCategory(questID), SetCategory(questID, name), GetSections(), Listen(fn) - see QuestLog.lua.")
+    -- everything else waits for the switch
+    UI.Gate(page, master, function() return Q().enabled end)
 end, function() return ns.db.questLog.enabled end)

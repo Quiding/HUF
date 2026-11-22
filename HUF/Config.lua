@@ -17,11 +17,36 @@ local pages, order = {}, {}
 local current
 ns.configPages, ns.ConfigOrder = pages, order     -- the settings search reads them (Search.lua)
 
--- section: "general" or "frames"; isOn(): nil = no on/off state
+-- section: "general", "frames" (PRIMARY FRAMES), "utility" (a tab of the Utility
+-- Frames page, not in the list) or "hidden" (built elsewhere, e.g. a window);
+-- isOn(): nil = no on/off state
+local TITLES = { targettarget = "Target of Target", damagemeter = "Damage Meter" }
 function ns.RegisterPage(key, title, section, build, isOn)
-    pages[key] = { key = key, title = title, section = section, build = build, isOn = isOn }
+    pages[key] = { key = key, title = TITLES[key] or title, section = section, build = build, isOn = isOn }
     order[#order + 1] = key
 end
+
+-- the order in the list (others after these, in the order they were registered)
+local NAV_ORDER = {
+    general = { "general", "utility", "clickcast", "profiles", "help" },
+    frames = { "player", "target", "targettarget", "pet", "focus", "party", "raid", "nameplates", "damagemeter" },
+}
+local function Ordered(section)
+    local out, seen = {}, {}
+    for _, k in ipairs(NAV_ORDER[section] or {}) do
+        if pages[k] and pages[k].section == section then out[#out + 1] = k seen[k] = true end
+    end
+    for _, k in ipairs(order) do
+        if pages[k].section == section and not seen[k] then out[#out + 1] = k end
+    end
+    return out
+end
+
+-- the Utility Frames tabs, in this order; their old page keys still open them
+local UTILITY = { { "bags", "Bags" }, { "chat", "Chat" }, { "minimap", "Minimap" }, { "questlog", "Quest Log" }, { "aurabars", "De-/Buff Bar" } }
+local UTIL_OF = {}
+for _, t in ipairs(UTILITY) do UTIL_OF[t[1]] = true end
+local UTIL_TOP = 28
 
 local function RefreshPage(page)
     if not page or not page.frame then return end
@@ -48,6 +73,12 @@ ns.Listen("PROFILE_CHANGED", function() ns.RefreshConfig() end)
 -- a page's frame (built the first time it is needed; hidden until selected)
 local function BuildPage(page)
     if page.frame then return page.frame end
+    -- a Utility Frames tab lives in that page; a hidden one is built elsewhere
+    if page.section == "utility" then
+        if pages.utility then BuildPage(pages.utility) end
+        return page.frame
+    end
+    if page.section == "hidden" then return nil end
     local frame = CreateFrame("Frame", nil, window)
     frame:SetPoint("TOPLEFT", NAV + 16, -44)
     frame:SetSize(ns.PAGE_W, ns.PAGE_H)
@@ -64,9 +95,11 @@ local function Select(key)
     current = key
     ns.Log("config", "page %s", key)
     for k, page in pairs(pages) do
-        local selected = (k == key)
-        if selected and not page.frame then BuildPage(page) end
-        if page.frame then page.frame:SetShown(selected) end
+        if page.section ~= "utility" and page.section ~= "hidden" then
+            local selected = (k == key)
+            if selected and not page.frame then BuildPage(page) end
+            if page.frame then page.frame:SetShown(selected) end
+        end
     end
     window.pageTitle:SetText(pages[key].title)
     RefreshPage(pages[key])
@@ -171,11 +204,11 @@ local function Build()
 
     -- page list: as many entries as fit, the mouse wheel scrolls (as MMT's window)
     local items = {}
-    for si, section in ipairs({ { "general", "GENERAL" }, { "frames", "FRAMES" } }) do
+    for si, section in ipairs({ { "general", "GENERAL" }, { "frames", "PRIMARY FRAMES" } }) do
         items[#items + 1] = { kind = "head", frame = Header(nav, section[2]), height = NAV_HEAD + (si > 1 and 6 or 0) }
-        for _, key in ipairs(order) do
+        for _, key in ipairs(Ordered(section[1])) do
             local page = pages[key]
-            if page.section == section[1] then
+            do
                 local tab = Tab(nav, page)
                 tab.target = key
                 w.tabs[#w.tabs + 1] = tab
@@ -351,14 +384,26 @@ local reopen   -- page to open when combat ends (false: none)
 function ns.ConfigShown() return window and window:IsShown() or false end
 function ns.HideConfig() if window then window:Hide() end end
 
--- a page opened on one of its tabs (a page that offers page.OpenTab)
+-- a page opened on one of its tabs (a page that offers page.OpenTab); the
+-- Utility Frames tabs answer to their old page keys
 function ns.OpenConfigTab(key, tab)
+    if UTIL_OF[key] then
+        ns.ToggleConfig("utility", true)
+        local p = pages.utility
+        if p and p.frame and p.frame.OpenTab then pcall(p.frame.OpenTab, key, tab) end
+        return
+    end
     ns.ToggleConfig(key, true)
     local p = pages[key]
     if tab and p and p.frame and p.frame.OpenTab then pcall(p.frame.OpenTab, tab) end
 end
 
 function ns.ToggleConfig(key, open)
+    if key and UTIL_OF[key] then
+        if InCombatLockdown() then return ns.ToggleConfig("utility", open) end
+        ns.OpenConfigTab(key)
+        return
+    end
     if InCombatLockdown() then
         if not (window and window:IsShown()) then
             reopen = key or current or "general"
@@ -476,3 +521,55 @@ SlashCmdList.HUF = function(msg)
         ns.Print("/huf rec [on|off|now] - data recorder (names, values, hidden values)")
     end
 end
+
+---------------------------------------------------------------------------
+-- Utility Frames: Bags, Chat, Minimap, Quest Log, De-/Buff Bar as tabs
+---------------------------------------------------------------------------
+ns.RegisterPage("utility", "Utility Frames", "general", function(page)
+    local tabs, subs, strip = {}, {}, nil
+    for _, t in ipairs(UTILITY) do if pages[t[1]] then tabs[#tabs + 1] = t end end
+    local function Show(k)
+        for n, f in pairs(subs) do f:SetShown(n == k) end
+        strip:Select(k)
+        page.tab = k
+    end
+    strip = UI.SubTabs(page, tabs, Show)
+    strip:SetPoint("TOPLEFT", 0, 4)
+    strip:SetPoint("TOPRIGHT", 0, 4)
+    -- each tab is the old page, built into a frame under the strip (all at once,
+    -- so the settings search finds them)
+    local fullH = ns.PAGE_H
+    for _, t in ipairs(tabs) do
+        local f = CreateFrame("Frame", nil, page)
+        f:SetPoint("TOPLEFT", 0, -UTIL_TOP)
+        f:SetSize(ns.PAGE_W, fullH - UTIL_TOP)
+        ns.PAGE_H = fullH - UTIL_TOP
+        local ok, err = pcall(pages[t[1]].build, f)
+        ns.PAGE_H = fullH
+        if not ok then ns.Log("config", "utility tab %s: %s", t[1], tostring(err)) end
+        pages[t[1]].frame = f
+        f:Hide()
+        subs[t[1]] = f
+    end
+    if strip.Bind then strip:Bind(subs, Show) end
+    page.OnRefresh = function()
+        for _, f in pairs(subs) do if f.OnRefresh then pcall(f.OnRefresh) end end
+    end
+    page.OpenTab = function(k, inner)
+        if not subs[k] then return end
+        Show(k)
+        if inner and subs[k].OpenTab then pcall(subs[k].OpenTab, inner) end
+    end
+    if tabs[1] then Show(tabs[1][1]) end
+end)
+
+-- not built yet
+local function Later(key, title, text)
+    ns.RegisterPage(key, title, "frames", function(page)
+        local l = UI.Label(page, text, "GameFontNormal")
+        l:SetPoint("TOPLEFT", 0, -4)
+        l:SetTextColor(0.6, 0.6, 0.6)
+    end)
+end
+Later("focus", "Focus Target", "The focus target frame comes in a later version.")
+Later("raid", "Raid", "Raid frames come in a later version.")

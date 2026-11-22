@@ -1,4 +1,4 @@
--- HUF: settings page for the minimap (FRAMES > Minimap).
+-- HUF: settings page for the minimap (GENERAL > Utility Frames > Minimap).
 -- Tabs: Map (shape, size, look), Texts, Icons (the game's), Addon buttons.
 
 local _, ns = ...
@@ -225,7 +225,7 @@ local function ButtonsPage(f, page)
     f:HookScript("OnShow", list.Refresh)
 end
 
-ns.RegisterPage("minimap", "Minimap", "frames", function(page)
+ns.RegisterPage("minimap", "Minimap", "utility", function(page)
     local on = UI.Check(page, 260, "Use HUF's minimap", function() return M().enabled end,
         function(v) M().enabled = v end, "Shape, size, look, texts and icons of the minimap. Off: Blizzard's minimap after /reload.")
     on:SetPoint("TOPLEFT", 0, 4)

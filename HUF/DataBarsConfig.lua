@@ -1,6 +1,6 @@
 -- HUF: settings for the data bars. The minimap data bar is a tab of the
--- Minimap page (FRAMES > Minimap > Data bar); the free bars and the blocks
--- on them have their own page (FRAMES > Data bars).
+-- Minimap page (Utility Frames > Minimap > Data bar); the free bars and the blocks
+-- on them are in its Advanced Settings window.
 
 local _, ns = ...
 local UI = ns.UI
@@ -113,6 +113,11 @@ function ns.DataBarsTab(f)
     R:Slider("Text size", 8, 20, 1, Opt("fontSize"))
     R:Slider("Space between them", 0, 40, 1, Opt("spacing"))
     R:Note("The tracking button sits on the bar's left end when Minimap > Icons > Tracking is at \"Below, left\".")
+    R:Space(6)
+    R:Button("Advanced Settings", function() if ns.ShowDataBarsWindow then ns.ShowDataBarsWindow() end end)
+    R:Note("All data bars: free bars anywhere on the screen and their blocks (FPS, latency, clock, gold, durability, friends, guild, ...).")
+    -- everything here waits for the data bar switch
+    UI.Gate(f, on, function() return D().enabled end)
 end
 
 ---------------------------------------------------------------------------
@@ -310,7 +315,8 @@ local function BlocksPage(f)
     end
 end
 
-ns.RegisterPage("databars", "Data bars", "frames", function(page)
+-- built in its own window (Minimap > Data bar > Advanced Settings), not in the list
+ns.RegisterPage("databars", "Data bars", "hidden", function(page)
     local tabs = { { "bars", "Bars" }, { "blocks", "Blocks" } }
     local subs, strip = {}, nil
     local function Show(k)
@@ -330,3 +336,52 @@ end, function()
     for _, b in ipairs(ns.db.dataBars.bars) do if b.enabled then return true end end
     return false
 end)
+
+---------------------------------------------------------------------------
+-- The Advanced Settings window (Minimap > Data bar)
+---------------------------------------------------------------------------
+local win
+function ns.ShowDataBarsWindow()
+    if not win then
+        local A = UI.ACCENT
+        win = CreateFrame("Frame", "HUF_DataBarsSettings", UIParent)
+        win:SetSize(ns.PAGE_W + 24, ns.PAGE_H + 44)
+        win:SetPoint("CENTER", 0, 10)
+        win:SetFrameStrata("DIALOG")
+        win:SetToplevel(true)
+        win:SetClampedToScreen(true)
+        win:EnableMouse(true)
+        win:SetMovable(true)
+        win:RegisterForDrag("LeftButton")
+        win:SetScript("OnDragStart", win.StartMoving)
+        win:SetScript("OnDragStop", win.StopMovingOrSizing)
+        UI.Fill(win, 0.05, 0.05, 0.06, 0.97)
+        UI.Border(win, A[1], A[2], A[3], 0.9)
+        local title = UI.Label(win, "Data bars - Advanced Settings", "GameFontNormalLarge")
+        title:SetPoint("TOPLEFT", 12, -10)
+        title:SetTextColor(A[1], A[2], A[3])
+        local close = UI.Button(win, 22, "x", function() win:Hide() end)
+        close:SetPoint("TOPRIGHT", -6, -6)
+        local body = CreateFrame("Frame", nil, win)
+        body:SetPoint("TOPLEFT", 12, -38)
+        body:SetSize(ns.PAGE_W, ns.PAGE_H)
+        body.widgets = {}
+        local page = ns.configPages and ns.configPages.databars
+        if page then
+            local ok, err = pcall(page.build, body)
+            if not ok then ns.Log("config", "data bars window: %s", tostring(err)) end
+        end
+        -- greyed while the minimap data bar is off
+        UI.Gate(body, nil, function() return D().enabled end)
+        win.Refresh = function()
+            if body.OnRefresh then pcall(body.OnRefresh) end
+            for _, w in ipairs(body.widgets) do pcall(w.Refresh) end
+        end
+        win:SetScript("OnShow", win.Refresh)
+        ns.OnRefresh(function() if win:IsShown() then win.Refresh() end end)
+        UI.CloseOnEscape(win)
+        win:Hide()
+    end
+    win:Show()
+    win.Refresh()
+end

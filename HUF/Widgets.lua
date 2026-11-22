@@ -767,8 +767,42 @@ function ns.AskReload(text)
 end
 
 -- greys a settings widget out (and takes its mouse) or brings it back
+-- (its inner parts too: a slider's bar, an edit box; their own mouse state comes back)
+local function Mouse(f, on)
+    if f.EnableMouse and f.IsMouseEnabled then
+        if not on then
+            if f.hufMouse == nil then f.hufMouse = f:IsMouseEnabled() and true or false end
+            f:EnableMouse(false)
+        elseif f.hufMouse ~= nil then
+            f:EnableMouse(f.hufMouse)
+            f.hufMouse = nil
+        end
+    end
+    if f.GetChildren then
+        for _, c in ipairs({ f:GetChildren() }) do Mouse(c, on) end
+    end
+end
 function UI.SetActive(w, on)
     if not w then return end
     w:SetAlpha(on and 1 or 0.35)
-    if w.EnableMouse then w:EnableMouse(on and true or false) end
+    Mouse(w, on and true or false)
+end
+
+-- every option in `panel` greyed out while isOn() is false, except `master`
+-- (the switch that turns the feature on); follows each settings refresh
+function UI.Gate(panel, master, isOn)
+    local function Apply()
+        local on = isOn() and true or false
+        for _, c in ipairs({ panel:GetChildren() }) do
+            if c ~= master and not c.hufNoGate then UI.SetActive(c, on) end
+        end
+        for _, r in ipairs({ panel:GetRegions() }) do
+            if r.GetObjectType and r:GetObjectType() == "FontString" and not r.hufNoGate then r:SetAlpha(on and 1 or 0.35) end
+        end
+    end
+    local p = panel
+    while p and not p.widgets do p = p:GetParent() end
+    if p then table.insert(p.widgets, { Refresh = Apply }) end
+    Apply()
+    return Apply
 end

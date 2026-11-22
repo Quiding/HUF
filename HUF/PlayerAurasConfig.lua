@@ -1,4 +1,4 @@
--- HUF: settings page for the buff and debuff bars (FRAMES > Buff bars).
+-- HUF: settings page for the buff and debuff bars (GENERAL > Utility Frames > De-/Buff Bar).
 
 local _, ns = ...
 local UI = ns.UI
@@ -83,7 +83,7 @@ local function BarPage(f, kind)
     R:Slider("Time size", 6, 20, 1, Opt("timerSize"))
 end
 
-ns.RegisterPage("aurabars", "Buff bars", "frames", function(page)
+ns.RegisterPage("aurabars", "De-/Buff Bar", "utility", function(page)
     local tabs = { { "buffs", "Buffs" }, { "debuffs", "Debuffs" } }
     local subs, strip = {}, nil
     local function Show(k)

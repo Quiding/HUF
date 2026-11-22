@@ -1,4 +1,4 @@
--- HUF: settings page for the chat window (FRAMES > Chat).
+-- HUF: settings page for the chat window (GENERAL > Utility Frames > Chat).
 -- Tabs: Look, Lines (short channel names, links, history), Buttons, Game
 -- settings (the game's own chat options and colours, saved by the game).
 
@@ -146,12 +146,14 @@ local function PanelPage(f)
     L:Slider("Active tab's background", 0, 1, 0.05, gba, sba, "%.2f")
     local gae, sae = Opt(C, "tabActiveEdge")
     L:Check("Edge round the active tab", gae, sae)
-    local gu, su = Opt(C, "tabUnderline")
-    L:Check("Line under the active tab", gu, su)
-    local ga, sa = Opt(C, "tabUnderlineAccent")
-    L:Check("Line in the accent colour", ga, sa)
-    L:Color("Line colour (accent off)", Opt(C, "tabUnderlineColor"))
     local R = UI.Column(f, COL2_X, 0, COL_W)
+    -- the active tab's line on the right (the left column ran past the page in Utility Frames)
+    R:Header("Active tab's line")
+    local gu, su = Opt(C, "tabUnderline")
+    R:Check("Line under the active tab", gu, su)
+    local ga, sa = Opt(C, "tabUnderlineAccent")
+    R:Check("Line in the accent colour", ga, sa)
+    R:Color("Line colour (accent off)", Opt(C, "tabUnderlineColor"))
     R:Header("Button strip")
     local gj, sj = Opt(C, "stripJoined")
     R:Check("Joined to the panel", gj, sj, "Off: a gap between the strip and the panel.")
@@ -269,7 +271,7 @@ local function GamePage(f)
     end
 end
 
-ns.RegisterPage("chat", "Chat", "frames", function(page)
+ns.RegisterPage("chat", "Chat", "utility", function(page)
     local on = UI.Check(page, 260, "Use HUF's chat changes", function() return C().enabled end,
         function(v)
             C().enabled = v
