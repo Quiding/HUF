@@ -553,7 +553,11 @@ ns.RegisterPage("utility", "Utility Frames", "general", function(page)
     end
     if strip.Bind then strip:Bind(subs, Show) end
     page.OnRefresh = function()
-        for _, f in pairs(subs) do if f.OnRefresh then pcall(f.OnRefresh) end end
+        for _, f in pairs(subs) do
+            if f.OnRefresh then pcall(f.OnRefresh) end
+            -- a tab that keeps its own widget list (the Minimap page does)
+            if f.widgets then for _, w in ipairs(f.widgets) do pcall(w.Refresh) end end
+        end
     end
     page.OpenTab = function(k, inner)
         if not subs[k] then return end
