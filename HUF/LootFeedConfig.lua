@@ -7,6 +7,10 @@ local A = UI.ACCENT
 
 local function C() return ns.db.lootFeed end
 local function Opt(k) return function() return C()[k] end, function(v) C()[k] = v end end
+-- getter and setter as two single values (Opt's pair is cut to one value when
+-- it is not the last argument of a call)
+local function G(k) return function() return C()[k] end end
+local function S(k) return function(v) C()[k] = v end end
 
 local QUALITIES = {
     { value = 0, text = "|cff9d9d9dPoor|r" },
@@ -16,6 +20,21 @@ local QUALITIES = {
     { value = 4, text = "|cffa335eeEpic|r" },
     { value = 5, text = "|cffff8000Legendary|r" },
 }
+
+-- a tooltip on a widget (and on its slider / edit box, which take the mouse)
+local function Tip(w, title, text)
+    if not w then return w end
+    if not w:IsMouseEnabled() then w:EnableMouse(true) end
+    UI.Tooltip(w, title, text)
+    for _, ch in ipairs({ w:GetChildren() }) do
+        local t = ch.GetObjectType and ch:GetObjectType()
+        if t == "Slider" or t == "EditBox" then
+            ch:SetScript("OnEnter", w:GetScript("OnEnter"))
+            ch:SetScript("OnLeave", w:GetScript("OnLeave"))
+        end
+    end
+    return w
+end
 
 local function Track(parent, w)
     local p = parent
@@ -49,7 +68,7 @@ local function NumBox(parent, width, label, key, min, max, tip)
     e:HookScript("OnEditFocusLost", Commit)
     e:SetScript("OnEscapePressed", function(self) self:SetText(tostring(C()[key])) self:ClearFocus() end)
     f.Refresh = function() if not e:HasFocus() then e:SetText(tostring(C()[key])) end end
-    if tip then UI.Tooltip(e, label, tip) end
+    if tip then Tip(f, label, tip .. ("\n|cff9d9d9d%d - %d, Enter to apply.|r"):format(min, max)) end
     Track(parent, f)
     return f
 end
@@ -77,23 +96,24 @@ function ns.BuildLootFeedTile(page, x, y, w, h)
     local gated = {}
     local function Gated(wd) gated[#gated + 1] = wd return wd end
 
-    L:Check("Faster Looting", Opt("fastLoot"),
+    L:Check("Faster Looting", G("fastLoot"), S("fastLoot"),
         "Takes every item the moment the loot window opens. Hold Shift while looting to get the normal loot window.")
-    L:Check("Show Loot Feed", Opt("enabled"),
+    L:Check("Show Loot Feed", G("enabled"), S("enabled"),
         "A short list of what you gain (items, money, reputation, currencies, skill ups); each row fades out after a few seconds. Move it in unlock mode.")
-    Gated(L:Cycle("Minimum Quality", QUALITIES, Opt("minQuality"), "Items below this quality are not shown."))
-    Gated(L:Check("Show Vendor Price", Opt("vendorPrice"), "Items a vendor buys show what they sell for."))
+    Gated(L:Cycle("Minimum Quality", QUALITIES, G("minQuality"), S("minQuality"), "Items below this quality are not shown."))
+    Gated(L:Check("Show Vendor Price", G("vendorPrice"), S("vendorPrice"), "Items a vendor buys show what they sell for."))
     local ahTip = "Shows the price of Auctionator's last scan (when the Auctionator addon is installed)."
-    local ah = Gated(L:Check("Show Auctionator Price", Opt("auctionPrice"), ahTip))
+    local ah = Gated(L:Check("Show Auctionator Price", G("auctionPrice"), S("auctionPrice"), ahTip))
     local inner = (L.width - 16) / 2
-    Gated(Pair(L, tile, NumBox(tile, inner, "Width", "width", 100, 800),
-        NumBox(tile, inner, "Height", "height", 14, 80)))
-    Gated(Pair(L, tile, NumBox(tile, inner, "Max Rows", "maxRows", 1, 20),
+    Gated(Pair(L, tile, NumBox(tile, inner, "Width", "width", 100, 800, "Width of a row in pixels."),
+        NumBox(tile, inner, "Height", "height", 14, 80, "Height of a row in pixels; the icon follows it.")))
+    Gated(Pair(L, tile, NumBox(tile, inner, "Max Rows", "maxRows", 1, 20, "How many rows show at once; a new one pushes the oldest out."),
         NumBox(tile, inner, "Duration (sec)", "duration", 1, 60, "How long a row stays before it fades out.")))
     L:Space(4)
     local ex = UI.Button(tile, inner, "Show Examples", function() if LF then LF.ShowExamples() end end)
     UI.Tooltip(ex, "Show Examples", "A few made-up rows (items of each quality, money, reputation, a skill up, a currency) to look at the style.")
     local adv = UI.Button(tile, inner, "Advanced Options", function() ns.ShowLootFeedWindow() end)
+    UI.Tooltip(adv, "Advanced Options", "Opens a window with more options: text font and size, accent colour and position, which gains are shown, grow direction, spacing and background.")
     Gated(Pair(L, tile, ex, adv))
 
     table.insert(page.widgets, { Refresh = function()
@@ -111,9 +131,9 @@ ns.RegisterPage("lootfeed", "Loot Feed", "hidden", function(page)
     local W = 300
     local L = UI.Column(page, 0, 0, W)
     L:Header("Text")
-    L:Cycle("Text Font", function() return ns.FontChoices(true) end, Opt("font"))
-    L:Slider("Text Size", 6, 24, 1, Opt("fontSize"))
-    L:Cycle("Text Outline", ns.OUTLINES_G, Opt("outline"))
+    L:Cycle("Text Font", function() return ns.FontChoices(true) end, G("font"), S("font"), "The font of the rows. \"HUF Global Font\" follows the General page.")
+    Tip(L:Slider("Text Size", 6, 24, 1, Opt("fontSize")), "Text Size", "Size of the item name; prices are one point smaller.")
+    L:Cycle("Text Outline", ns.OUTLINES_G, G("outline"), S("outline"), "Outline around the text. \"HUF Global Outline\" follows the General page.")
     L:Header("Accent")
     local gq, sq = Opt("accentQuality")
     local colorBtn
@@ -121,34 +141,36 @@ ns.RegisterPage("lootfeed", "Loot Feed", "hidden", function(page)
         sq(v)
         UI.SetActive(colorBtn, not v)
     end, "Items take their quality colour (grey, white, green, blue, ...); money is gold, reputation green, skill ups blue.")
-    colorBtn = L:Color("Accent colour", Opt("accentColor"))
+    colorBtn = Tip(L:Color("Accent colour", Opt("accentColor")), "Accent colour", "The colour of every accent while \"from the item quality\" is off.")
     L:Cycle("Accent Position", {
         { value = "LEFT", text = "Left" },
         { value = "RIGHT", text = "Right" },
         { value = "TOP", text = "Top" },
         { value = "BOTTOM", text = "Bottom" },
-    }, Opt("accentPos"))
-    L:Slider("Accent Thickness", 1, 8, 1, Opt("accentSize"))
+    }, G("accentPos"), S("accentPos"), "Which edge of a row carries the accent line.")
+    Tip(L:Slider("Accent Thickness", 1, 8, 1, Opt("accentSize")), "Accent Thickness", "Width (left / right) or height (top / bottom) of the accent line in pixels.")
     table.insert(page.widgets, { Refresh = function() UI.SetActive(colorBtn, not C().accentQuality) end })
 
     local R = UI.Column(page, W + 30, 0, W)
     R:Header("Item Sources")
-    local function Src(k) return function() return C().sources[k] ~= false end, function(v) C().sources[k] = v end end
-    R:Check("Items", Src("items"))
-    R:Check("Money", Src("money"))
-    R:Check("Reputation", Src("reputation"))
-    R:Check("Currency", Src("currency"))
-    R:Check("Skill Ups", Src("skills"))
+    local function SG(k) return function() return C().sources[k] ~= false end end
+    local function SS(k) return function(v) C().sources[k] = v end end
+    R:Check("Items", SG("items"), SS("items"), "Items you loot, get pushed (quest rewards, purchases) or create.")
+    R:Check("Money", SG("money"), SS("money"), "Coins you loot, including your share of group loot.")
+    R:Check("Reputation", SG("reputation"), SS("reputation"), "Reputation gained or lost with a faction.")
+    R:Check("Currency", SG("currency"), SS("currency"), "Currencies you receive (tokens, marks, ...).")
+    R:Check("Skill Ups", SG("skills"), SS("skills"), "A skill (profession, weapon) going up.")
     R:Header("Layout")
     R:Cycle("Grow Direction", {
         { value = "UP", text = "Up (newest at the bottom)" },
         { value = "DOWN", text = "Down (newest at the top)" },
-    }, Opt("grow"))
-    R:Slider("Space between rows", 0, 10, 1, Opt("spacing"))
+    }, G("grow"), S("grow"), "Up: new rows appear at the bottom and older ones move up. Down: new rows at the top.")
+    Tip(R:Slider("Space between rows", 0, 10, 1, Opt("spacing")), "Space between rows", "Gap between two rows in pixels.")
     local ga, sa = Opt("bgAlpha")
-    R:Slider("Background opacity", 0, 1, 0.05, ga, sa, "%.2f")
+    Tip(R:Slider("Background opacity", 0, 1, 0.05, ga, sa, "%.2f"), "Background opacity", "How dark the row background is (0 = none).")
     R:Space(4)
-    R:Button("Show Examples", function() if ns.LootFeed then ns.LootFeed.ShowExamples() end end)
+    Tip(R:Button("Show Examples", function() if ns.LootFeed then ns.LootFeed.ShowExamples() end end), "Show Examples",
+        "A few made-up rows to look at the style.")
 end)
 
 local win
