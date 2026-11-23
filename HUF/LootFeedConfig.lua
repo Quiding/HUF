@@ -96,10 +96,12 @@ function ns.BuildLootFeedTile(page, x, y, w, h)
     local gated = {}
     local function Gated(wd) gated[#gated + 1] = wd return wd end
 
-    L:Check("Faster Looting", G("fastLoot"), S("fastLoot"),
-        "Takes every item the moment the loot window opens. Hold Shift while looting to get the normal loot window.")
-    L:Check("Show Loot Feed", G("enabled"), S("enabled"),
-        "A short list of what you gain (items, money, reputation, currencies, skill ups); each row fades out after a few seconds. Move it in unlock mode.")
+    -- two checks a row where the labels are short (the tile is as tall as the page)
+    local inner = (L.width - 16) / 2
+    Pair(L, tile, UI.Check(tile, inner, "Faster Looting", G("fastLoot"), S("fastLoot"),
+        "Takes every item the moment the loot window opens. Hold Shift while looting to get the normal loot window."),
+        UI.Check(tile, inner, "Show Loot Feed", G("enabled"), S("enabled"),
+        "A short list of what you gain (items, money, reputation, currencies, skill ups); each row fades out after a few seconds. Move it in unlock mode."))
     -- "My MMT team" only with MMT loaded (then also the default)
     local whoList = { { value = "SELF", text = "Only me" } }
     if LF.HasMMT() then whoList[#whoList + 1] = { value = "TEAM", text = "My MMT team" } end
@@ -107,12 +109,12 @@ function ns.BuildLootFeedTile(page, x, y, w, h)
     Gated(L:Cycle("Show loot of", whoList, function() return LF.Who() end, S("who"),
         "Others' rows start with who got it (MMT's privacy name for your team). Outside instances from the chat lines; in instances the game hides others' lines, but MMT passes on what your team's clients loot."))
     Gated(L:Cycle("Minimum Quality", QUALITIES, G("minQuality"), S("minQuality"), "Items below this quality are not shown."))
-    Gated(L:Check("Show Vendor Price", G("vendorPrice"), S("vendorPrice"), "Items a vendor buys show what they sell for."))
-    local ahTip = "Shows the price of Auctionator's last scan (when the Auctionator addon is installed)."
-    local ah = Gated(L:Check("Show Auctionator Price", G("auctionPrice"), S("auctionPrice"), ahTip))
+    local vendor = Gated(UI.Check(tile, inner, "Vendor Price", G("vendorPrice"), S("vendorPrice"), "Items a vendor buys show what they sell for."))
+    local ahTip = "Shows the price of Auctionator's last scan (when the Auctionator addon is installed). Not on grey items."
+    local ah = Gated(UI.Check(tile, inner, "Auctionator Price", G("auctionPrice"), S("auctionPrice"), ahTip))
+    Pair(L, tile, vendor, ah)
     Gated(L:Check("Item Tooltips", G("tooltips"), S("tooltips"),
         "Item and currency rows show their tooltip on hover; a click pins it (as an item link in chat), shift-click links it in chat, ctrl-click opens the dressing room, and a hovered row doesn't fade. Off: the rows let clicks through to the game."))
-    local inner = (L.width - 16) / 2
     Gated(Pair(L, tile, NumBox(tile, inner, "Width", "width", 100, 800, "Width of a row in pixels."),
         NumBox(tile, inner, "Height", "height", 14, 80, "Height of a row in pixels; the icon follows it.")))
     Gated(Pair(L, tile, NumBox(tile, inner, "Max Rows", "maxRows", 1, 20, "How many rows show at once; a new one pushes the oldest out."),
