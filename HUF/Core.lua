@@ -459,6 +459,7 @@ local function BuildDefaults()
             statusText = true,         -- "Dead", "Ghost", "Offline" instead of health values
             hideBlizzard = true,
             hideRaidManager = true,    -- Blizzard's raid / party manager on the left edge
+            hideReminders = { talents = true, legacy = true, other = false }, -- the menu bar's yellow reminder boxes
             snap = true, snapDistance = 8, snapGap = 0,   -- unlock mode: frames snap to each other (Alt: not)
             snapMiddle = true,                            -- unlock mode: lines through the screen's middle
             grid = false, gridSize = 32, gridAlpha = 0.12, -- unlock mode: a grid of squares (frames snap to it), its opacity

@@ -224,7 +224,7 @@ ns.RegisterPage("general", "General", "general", function(page)
     ns.BuildLootFeedTile(page, 0, LOOT_Y, TILE_W, H + LOOT_Y)
 
     -- Frames & Features -----------------------------------------------------
-    local FF_H = 168
+    local FF_H = 200
     local ff, F = Tile(page, X2, 0, TILE_W, FF_H, "Frames & Features", "Interface\\Icons\\INV_Misc_Gear_01")
     local gh, sh = Opt(G, "hideBlizzard")
     F:Check("Hide Blizzard's frames HUF replaces", gh, function(v)
@@ -252,6 +252,27 @@ ns.RegisterPage("general", "General", "general", function(page)
     local reset = UI.Button(ff, 104, "Reset frames", ResetWindows)
     reset:SetPoint("TOPRIGHT", move, "TOPRIGHT", 112, -10)
     table.insert(page.widgets, { Refresh = function() UI.SetActive(shiftBox, Win().enabled) end })
+    -- the menu bar's reminder boxes (Reminders.lua)
+    F:Space(4)
+    local remLabel = UI.Label(ff, "Hide the menu bar's reminders:")
+    F:Add(remLabel, 18)
+    local Rem = function() return G().hideReminders end
+    local remRow = CreateFrame("Frame", nil, ff)
+    remRow:SetSize(F.width, UI.ROW)
+    local REM = {
+        { "talents", "Talents", "\"You have unspent Talent points.\" at the talents button." },
+        { "legacy", "Legacy", "The unspent Legacy points box at the Legacy button." },
+        { "other", "Everything else", "Every other box at a menu bar button (new mounts / pets / toys, tips, ...)." },
+    }
+    local cw = { 84, 84, F.width - 168 }
+    local rx = 16
+    for i, r in ipairs(REM) do
+        local cb = UI.Check(remRow, cw[i], r[2], function() return Rem()[r[1]] end, function(v) Rem()[r[1]] = v end,
+            r[3] .. " The box is closed as soon as the game shows it; the game itself is not changed.")
+        cb:SetPoint("LEFT", remRow, "LEFT", rx - 16, 0)
+        rx = rx + cw[i]
+    end
+    F:Add(remRow, UI.ROW, 16)
 
     -- Addon Support ---------------------------------------------------------
     local AS_Y = -(FF_H + TILE_GAP)
