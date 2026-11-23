@@ -130,6 +130,20 @@ local function StyleRow(row)
     row.text:SetPoint("RIGHT", row.value, "LEFT", -6, 0)
     local r, g, b = Accent(row.r or 1, row.g or 1, row.b or 1)
     bar:SetColorTexture(r, g, b, 1)
+    -- option qualityBorder: OFF | ICON | ROW, in the quality colour (money gold, ...)
+    local mode, t = c.qualityBorder or "OFF", math.max(1, c.qualityBorderSize or 1)
+    local e = row.edges
+    for _, tex in ipairs(e) do tex:ClearAllPoints() tex:SetShown(mode ~= "OFF") end
+    if mode ~= "OFF" then
+        local target = mode == "ICON" and row.icon or row
+        local o = mode == "ICON" and t or 0       -- the icon's border sits outside it, the row's inside
+        e[1]:SetPoint("TOPLEFT", target, "TOPLEFT", -o, o) e[1]:SetPoint("TOPRIGHT", target, "TOPRIGHT", o, o) e[1]:SetHeight(t)
+        e[2]:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -o, -o) e[2]:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", o, -o) e[2]:SetHeight(t)
+        e[3]:SetPoint("TOPLEFT", e[1], "BOTTOMLEFT") e[3]:SetPoint("BOTTOMLEFT", e[2], "TOPLEFT") e[3]:SetWidth(t)
+        e[4]:SetPoint("TOPRIGHT", e[1], "BOTTOMRIGHT") e[4]:SetPoint("BOTTOMRIGHT", e[2], "TOPRIGHT") e[4]:SetWidth(t)
+        local qr, qg, qb = row.r or 1, row.g or 1, row.b or 1
+        for _, tex in ipairs(e) do tex:SetColorTexture(qr, qg, qb, 1) end
+    end
 end
 
 local function NewRow()
@@ -142,6 +156,11 @@ local function NewRow()
     row.bar = row:CreateTexture(nil, "ARTWORK")
     row.icon = row:CreateTexture(nil, "ARTWORK")
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    row.edges = {}
+    for k = 1, 4 do
+        row.edges[k] = row:CreateTexture(nil, "OVERLAY", nil, 7)
+        row.edges[k]:Hide()
+    end
     row.text = row:CreateFontString(nil, "OVERLAY")
     row.text:SetJustifyH("LEFT")
     row.text:SetWordWrap(false)

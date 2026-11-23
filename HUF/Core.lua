@@ -537,6 +537,7 @@ local function BuildDefaults()
             font = "GLOBAL", fontSize = 12, outline = "GLOBAL",
             accentQuality = true, accentColor = C(0.31, 0.70, 1.00),
             accentPos = "LEFT", accentSize = 3, bgAlpha = 0.6,
+            qualityBorder = "OFF", qualityBorderSize = 1,   -- OFF | ICON | ROW, in the quality colour
             sources = { items = true, money = true, reputation = true, currency = true, skills = true },
             -- who: loot of SELF | TEAM (MMT team) | GROUP; not set: TEAM with MMT loaded, else SELF (LootFeed.Who)
             classColors = true,         -- others' names in their class colour

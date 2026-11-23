@@ -161,7 +161,17 @@ ns.RegisterPage("lootfeed", "Loot Feed", "hidden", function(page)
         { value = "BOTTOM", text = "Bottom" },
     }, G("accentPos"), S("accentPos"), "Which edge of a row carries the accent line.")
     Tip(L:Slider("Accent Thickness", 1, 8, 1, Opt("accentSize")), "Accent Thickness", "Width (left / right) or height (top / bottom) of the accent line in pixels.")
-    table.insert(page.widgets, { Refresh = function() UI.SetActive(colorBtn, not C().accentQuality) end })
+    L:Header("Quality Border")
+    L:Cycle("Quality Border", {
+        { value = "OFF", text = "Off" },
+        { value = "ICON", text = "Around the icon" },
+        { value = "ROW", text = "Around the row" },
+    }, G("qualityBorder"), S("qualityBorder"), "A border in the item's quality colour (grey, white, green, blue, ...); money gold, reputation green, skill ups blue.")
+    local bsz = Tip(L:Slider("Border Thickness", 1, 4, 1, Opt("qualityBorderSize")), "Border Thickness", "Width of the quality border in pixels.")
+    table.insert(page.widgets, { Refresh = function()
+        UI.SetActive(colorBtn, not C().accentQuality)
+        UI.SetActive(bsz, (C().qualityBorder or "OFF") ~= "OFF")
+    end })
 
     local R = UI.Column(page, W + 30, 0, W)
     R:Header("Item Sources")
