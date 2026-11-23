@@ -754,13 +754,22 @@ ns.DEFAULTS = BuildDefaults()
 -- "First Last-Realm": characters on WoW: Forever share first names
 local charKey
 local function CharKey()
-    if charKey then return charKey end
+    if charKey then return charKey, true end
     local name, last = UnitName("player")
     if type(name) ~= "string" then return "?-" .. (GetRealmName and GetRealmName() or "") end
-    if type(last) == "string" and last ~= "" then name = name .. " " .. last end
+    local complete = type(last) == "string" and last ~= ""
+    if complete then name = name .. " " .. last end
     local realm = GetRealmName and GetRealmName() or ""
-    charKey = name .. "-" .. realm
-    return charKey
+    -- kept only once the last name is known: right after login the game can
+    -- give the first name alone, and a "First-Realm" key would make a second
+    -- entry for the same character (bags tooltip showed it twice)
+    if complete then charKey = name .. "-" .. realm end
+    return name .. "-" .. realm, complete
+end
+-- the key without the last name (the short form an early call could give)
+function ns.CharKeyShort()
+    local name = UnitName("player")
+    return type(name) == "string" and (name .. "-" .. (GetRealmName and GetRealmName() or "")) or nil
 end
 
 ns.CharKey = CharKey

@@ -91,9 +91,18 @@ local function Store()
     return HUFDB.inventory
 end
 
+local scratch = {}
 local function Me()
     local st = Store()
-    local k = ns.CharKey()
+    local k, complete = ns.CharKey()
+    -- last name not known yet: nothing is stored under a short key
+    if not complete then return scratch end
+    -- an older short-key copy of this character ("First-Realm") goes away
+    local short = ns.CharKeyShort()
+    if short and short ~= k and st[short] then
+        st[short] = nil
+        ns.Log("bags", "removed the old entry %s (same character as %s)", short, k)
+    end
     st[k] = st[k] or {}
     return st[k]
 end
