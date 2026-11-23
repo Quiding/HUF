@@ -131,7 +131,7 @@ local function StyleRow(row)
     local r, g, b = Accent(row.r or 1, row.g or 1, row.b or 1)
     bar:SetColorTexture(r, g, b, 1)
     -- option qualityBorder: OFF | ICON | ROW, in the quality colour (money gold, ...)
-    local mode, t = c.qualityBorder or "OFF", math.max(1, c.qualityBorderSize or 1)
+    local mode, t = c.qualityBorder or "OFF", math.max(0.1, tonumber(c.qualityBorderSize) or 1)
     local e = row.edges
     for _, tex in ipairs(e) do tex:ClearAllPoints() tex:SetShown(mode ~= "OFF") end
     if mode ~= "OFF" then
@@ -160,6 +160,9 @@ local function NewRow()
     for k = 1, 4 do
         row.edges[k] = row:CreateTexture(nil, "OVERLAY", nil, 7)
         row.edges[k]:Hide()
+        -- thicknesses under a pixel: no snapping to the pixel grid (it would drop them)
+        if row.edges[k].SetSnapToPixelGrid then row.edges[k]:SetSnapToPixelGrid(false) end
+        if row.edges[k].SetTexelSnappingBias then row.edges[k]:SetTexelSnappingBias(0) end
     end
     row.text = row:CreateFontString(nil, "OVERLAY")
     row.text:SetJustifyH("LEFT")
