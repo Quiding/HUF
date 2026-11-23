@@ -148,6 +148,43 @@ local function NewRow()
     row.value = row:CreateFontString(nil, "OVERLAY")
     row.value:SetJustifyH("RIGHT")
     row.value:SetSpacing(1)
+    -- option tooltips; items / currencies (data.link): their tooltip on hover; a click pins
+    -- it (as a chat link click does), shift-click links it in chat,
+    -- ctrl-click the dressing room; a row under the mouse doesn't fade
+    row:SetScript("OnEnter", function(self)
+        local link = self.data and self.data.link
+        if not link then return end
+        self.hover = true
+        self:SetAlpha(1)
+        GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+        pcall(GameTooltip.SetHyperlink, GameTooltip, link)
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function(self)
+        self.hover = nil
+        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+    row:SetScript("OnMouseUp", function(self, button)
+        local link = self.data and self.data.link
+        if not link then return end
+        local full = link
+        if link:find("^item:") and GetItemInfo then
+            local _, l = GetItemInfo(link)
+            full = l or full
+        elseif link:find("^currency:") and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyLink then
+            local ok, l = pcall(C_CurrencyInfo.GetCurrencyLink, tonumber(link:match("%d+")), 1)
+            full = ok and l or full
+        end
+        local handled = false
+        if IsModifiedClick() and HandleModifiedItemClick then
+            local ok, r = pcall(HandleModifiedItemClick, full)
+            handled = ok and r
+        end
+        if not handled and SetItemRef then
+            if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+            pcall(SetItemRef, link, full, button or "LeftButton")
+        end
+    end)
     return row
 end
 
@@ -168,7 +205,9 @@ end
 local function Release(i)
     local row = table.remove(active, i)
     row:Hide()
-    row.key, row.data = nil, nil
+    if row.hover and GameTooltip:IsOwned(row) then GameTooltip:Hide() end
+    row.key, row.data, row.hover = nil, nil, nil
+    row:EnableMouse(false)
     pool[#pool + 1] = row
 end
 
@@ -185,8 +224,11 @@ local function OnUpdate()
     local now, removed = GetTime(), false
     for i = #active, 1, -1 do
         local row = active[i]
+        if row.hover then row.expire = math.max(row.expire, now + 1) end
         local left = row.expire - now
-        if left <= 0 then
+        if row.hover then
+            row:SetAlpha(1)
+        elseif left <= 0 then
             local a = 1 + left / FADE_OUT
             if a <= 0 then Release(i) removed = true else row:SetAlpha(a) end
         else
@@ -216,6 +258,7 @@ local function Push(key, data)
     while #active >= math.max(1, c.maxRows) do Release(#active) end
     local row = NewRow()
     row.key, row.data = key, data
+    row:EnableMouse(data.link and Cfg().tooltips and true or false)
     row.r, row.g, row.b = data.r, data.g, data.b
     StyleRow(row)
     Draw(row)
@@ -230,13 +273,15 @@ end
 ---------------------------------------------------------------------------
 -- Sources
 ---------------------------------------------------------------------------
-local function ShowItem(link, count, retried)
+-- who: the looter's shown name for someone else's loot (nil: your own);
+-- class: their class (the name in its colour, option classColors)
+local function ShowItem(link, count, retried, who, class)
     if not GetItemInfo then return end
     local name, _, quality, _, _, _, _, _, _, icon, sellPrice = GetItemInfo(link)
     if not name then
         -- not cached yet: once more when the client has it
         if not retried and Item and Item.CreateFromItemLink then
-            Item:CreateFromItemLink(link):ContinueOnItemLoad(function() ShowItem(link, count, true) end)
+            Item:CreateFromItemLink(link):ContinueOnItemLoad(function() ShowItem(link, count, true, who, class) end)
         end
         return
     end
@@ -244,12 +289,19 @@ local function ShowItem(link, count, retried)
     if (quality or 0) < (c.minQuality or 0) then return end
     local r, g, b = QualityColor(quality)
     local hex = ("|cff%02x%02x%02x"):format(r * 255, g * 255, b * 255)
-    Push("item:" .. name, {
-        icon = icon, text = hex .. name .. "|r", r = r, g = g, b = b, count = count,
+    local text = hex .. name .. "|r"
+    if who then
+        local cc = c.classColors ~= false and class and ns.ClassColor(class)
+        local nameHex = cc and ("|cff%02x%02x%02x"):format(cc.r * 255, cc.g * 255, cc.b * 255) or "|cffaaaaaa"
+        text = nameHex .. who .. ":|r " .. text
+    end
+    Push("item:" .. name .. (who and ("@" .. who) or ""), {
+        icon = icon, text = text, r = r, g = g, b = b, count = count, link = link,
         value = function(n)
             local lines = {}
             if c.vendorPrice and (sellPrice or 0) > 0 then lines[#lines + 1] = Money(sellPrice * n) end
-            if c.auctionPrice then
+            -- grey (poor) items: the vendor price only
+            if c.auctionPrice and (quality or 0) > 0 then
                 local ah = AuctionPrice(link)
                 if ah then lines[#lines + 1] = "|cff9d9d9dAH|r " .. Money(ah * n) end
             end
@@ -266,7 +318,144 @@ local ITEM_KEYS = {
     "LOOT_ITEM_BONUS_ROLL_SELF_MULTIPLE", "LOOT_ITEM_BONUS_ROLL_SELF",
     "LOOT_ITEM_CREATED_SELF_MULTIPLE", "LOOT_ITEM_CREATED_SELF",
 }
-local function OnLoot(text)
+---------------------------------------------------------------------------
+-- Other people's loot (option "Show loot of": SELF / TEAM / GROUP)
+-- Their chat lines ("Name receives loot: ...") are read outside instances
+-- (inside, the game makes them secret); for the MMT team MMT also passes
+-- each client's own loot on (MMT.OnTeamLoot), which works in instances too.
+-- The same item from both ways within a few seconds shows once.
+---------------------------------------------------------------------------
+local OTHER_KEYS = {
+    "LOOT_ITEM_MULTIPLE", "LOOT_ITEM",
+    "LOOT_ITEM_PUSHED_MULTIPLE", "LOOT_ITEM_PUSHED",
+    "LOOT_ITEM_BONUS_ROLL_MULTIPLE", "LOOT_ITEM_BONUS_ROLL",
+}
+-- every capture of a format, in the format's argument order (%1$s, %2$s ...)
+local allCompiled = {}
+local function MatchAll(key, text)
+    local c = allCompiled[key]
+    if c == nil then
+        local fmt = _G[key]
+        if type(fmt) == "string" and fmt ~= "" then
+            local parts, order, i, n = {}, {}, 1, 0
+            while true do
+                local s, e, pos, kind = fmt:find("%%(%d?)%$?([sd])", i)
+                parts[#parts + 1] = (fmt:sub(i, s and s - 1):gsub("[%^%$%(%)%.%[%]%*%+%-%?%%]", "%%%0"))
+                if not s then break end
+                n = n + 1
+                order[n] = tonumber(pos) or n
+                parts[#parts + 1] = kind == "d" and "(%d+)" or "(.-)"
+                i = e + 1
+            end
+            c = { pat = "^" .. table.concat(parts) .. "$", order = order }
+        else
+            c = false
+        end
+        allCompiled[key] = c
+    end
+    if not c then return nil end
+    local caps = { text:match(c.pat) }
+    if #caps == 0 then return nil end
+    local out = {}
+    for k, at in ipairs(c.order) do out[at] = caps[k] end
+    return out
+end
+-- the looter as shown (MMT's privacy name for a team member), or nil when
+-- the setting leaves this person out
+local function Looter(name)
+    local who = LF.Who()
+    if who == "SELF" or type(name) ~= "string" or name == "" or ns.IsSecret(name) then return nil end
+    local M = _G.MMT
+    local key = type(M) == "table" and type(M.Resolve) == "function" and M.Resolve(name) or nil
+    if who == "TEAM" and not key then return nil end
+    if key and type(M.ShownName) == "function" then
+        local ok, shown = pcall(M.ShownName, key)
+        if ok and type(shown) == "string" and shown ~= "" then return shown end
+    end
+    return (name:gsub("%-.*$", ""))
+end
+local recent = {}
+
+-- a looter's class: MMT's team list (key), else the group member of that name
+local function ClassOf(name, key)
+    local M = _G.MMT
+    if key and type(M) == "table" and type(M.db) == "table" and type(M.db.team) == "table" then
+        local m = M.db.team[key]
+        if type(m) == "table" and type(m.class) == "string" and m.class ~= "" then return m.class end
+    end
+    local want = type(name) == "string" and name:gsub("%-.*$", "") or nil
+    if not want then return nil end
+    local units = { "player", "party1", "party2", "party3", "party4" }
+    if IsInRaid() then for i = 1, GetNumGroupMembers() do units[#units + 1] = "raid" .. i end end
+    for _, unit in ipairs(units) do
+        local ok, n = pcall(UnitName, unit)
+        if ok and type(n) == "string" and not ns.IsSecret(n) and n == want then
+            local okC, _, class = pcall(UnitClass, unit)
+            if okC and type(class) == "string" and not ns.IsSecret(class) then return class end
+        end
+    end
+    return nil
+end
+
+-- whose loot: the setting; not set: the MMT team when MMT is loaded, else
+-- only you; "team" without MMT: only you
+function LF.HasMMT()
+    local M = _G.MMT
+    return type(M) == "table" and type(M.Resolve) == "function"
+end
+function LF.Who()
+    local w = Cfg().who
+    if w == nil then w = LF.HasMMT() and "TEAM" or "SELF" end
+    if w == "TEAM" and not LF.HasMMT() then w = "SELF" end
+    return w
+end
+local function Fresh(who, link)
+    local id = who .. "|" .. (link:match("item:(%d+)") or link)
+    local now = GetTime()
+    if recent[id] and now - recent[id] < 4 then return false end
+    recent[id] = now
+    return true
+end
+local function OnOtherLoot(text, sender)
+    for _, key in ipairs(OTHER_KEYS) do
+        local caps = MatchAll(key, text)
+        if caps then
+            local name, item, count = caps[1], caps[2], caps[3]
+            if type(sender) == "string" and sender ~= "" and not ns.IsSecret(sender) then name = sender end
+            local who = Looter(name)
+            if not who then return end
+            local M = _G.MMT
+            local key = type(M) == "table" and type(M.Resolve) == "function" and M.Resolve(name) or nil
+            local link = type(item) == "string" and item:match("|H(item:[^|]+)|h")
+            if link and Fresh(who, link) then ShowItem(link, tonumber(count) or 1, nil, who, ClassOf(name, key)) end
+            return
+        end
+    end
+end
+-- MMT: a team member's own loot, sent by their client
+function LF.TeamLoot(key, link, count)
+    local c = Cfg()
+    local w = LF.Who()
+    if not (c.enabled and (w == "TEAM" or w == "GROUP")) then return end
+    local M = _G.MMT
+    local who
+    if type(M) == "table" and type(M.ShownName) == "function" then
+        local ok, shown = pcall(M.ShownName, key)
+        who = ok and shown or nil
+    end
+    who = type(who) == "string" and who ~= "" and who or tostring(key):gsub("%-.*$", "")
+    if type(link) == "string" and Fresh(who, link) then
+        ShowItem(link, tonumber(count) or 1, nil, who, ClassOf(tostring(key), key))
+    end
+end
+ns.OnLogin(function()
+    local M = _G.MMT
+    if type(M) == "table" and type(M.OnTeamLoot) == "function" then
+        pcall(M.OnTeamLoot, function(key, link, count) pcall(LF.TeamLoot, key, link, count) end)
+    end
+end)
+
+local function OnLoot(text, sender)
     for _, key in ipairs(ITEM_KEYS) do
         local item, count = Match(key, text)
         if item then
@@ -281,6 +470,7 @@ local function OnLoot(text)
             return
         end
     end
+    if LF.Who() ~= "SELF" then OnOtherLoot(text, sender) end
 end
 
 local COIN_KEYS = { GOLD_AMOUNT = 10000, SILVER_AMOUNT = 100, COPPER_AMOUNT = 1 }
@@ -355,7 +545,8 @@ local function OnCurrency(text)
             if not name then return end
             local r, g, b = 1, 1, 1
             if quality then r, g, b = QualityColor(quality) end
-            Push("cur:" .. name, { icon = icon, text = name, r = r, g = g, b = b, count = tonumber(count) or 1 })
+            Push("cur:" .. name, { icon = icon, text = name, r = r, g = g, b = b, count = tonumber(count) or 1,
+                link = id and ("currency:" .. id) or nil })
             return
         end
     end
@@ -430,14 +621,14 @@ end
 -- Setup
 ---------------------------------------------------------------------------
 local events = CreateFrame("Frame")
-events:SetScript("OnEvent", function(_, event, text)
+events:SetScript("OnEvent", function(_, event, text, sender)
     if event == "LOOT_READY" then
         FastLoot()
         return
     end
     local h = CHAT[event]
     if h and type(text) == "string" and not ns.IsSecret(text) then
-        local ok, err = pcall(h[2], text)
+        local ok, err = pcall(h[2], text, sender)
         if not ok then ns.LogError("lootfeed", err) end
     end
 end)
@@ -504,7 +695,7 @@ function LF.ShowExamples()
                     value = function(n)
                         local lines = {}
                         if c.vendorPrice and s.sell then lines[#lines + 1] = Money(s.sell * n) end
-                        if c.auctionPrice and s.ah then lines[#lines + 1] = "|cff9d9d9dAH|r " .. Money(s.ah * n) end
+                        if c.auctionPrice and s.ah and s.q > 0 then lines[#lines + 1] = "|cff9d9d9dAH|r " .. Money(s.ah * n) end
                         return table.concat(lines, "\n")
                     end })
             elseif s.key == "money" then
