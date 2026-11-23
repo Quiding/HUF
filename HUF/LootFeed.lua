@@ -132,6 +132,16 @@ local function StyleRow(row)
     bar:SetColorTexture(r, g, b, 1)
     -- option qualityBorder: OFF | ICON | ROW, in the quality colour (money gold, ...)
     local mode, t = c.qualityBorder or "OFF", math.max(0.1, tonumber(c.qualityBorderSize) or 1)
+    -- the game draws nothing under about half a screen pixel: thinner than
+    -- one pixel becomes one pixel, fainter by as much
+    local px = 1
+    if PixelUtil and PixelUtil.GetPixelToUIUnitFactor then
+        local ok, f = pcall(PixelUtil.GetPixelToUIUnitFactor)
+        local s = row:GetEffectiveScale()
+        if ok and f and s and s > 0 then px = f / s end
+    end
+    local alpha = 1
+    if t < px then alpha, t = t / px, px end
     local e = row.edges
     for _, tex in ipairs(e) do tex:ClearAllPoints() tex:SetShown(mode ~= "OFF") end
     if mode ~= "OFF" then
@@ -142,7 +152,7 @@ local function StyleRow(row)
         e[3]:SetPoint("TOPLEFT", e[1], "BOTTOMLEFT") e[3]:SetPoint("BOTTOMLEFT", e[2], "TOPLEFT") e[3]:SetWidth(t)
         e[4]:SetPoint("TOPRIGHT", e[1], "BOTTOMRIGHT") e[4]:SetPoint("BOTTOMRIGHT", e[2], "TOPRIGHT") e[4]:SetWidth(t)
         local qr, qg, qb = row.r or 1, row.g or 1, row.b or 1
-        for _, tex in ipairs(e) do tex:SetColorTexture(qr, qg, qb, 1) end
+        for _, tex in ipairs(e) do tex:SetColorTexture(qr, qg, qb, alpha) end
     end
 end
 
@@ -160,9 +170,6 @@ local function NewRow()
     for k = 1, 4 do
         row.edges[k] = row:CreateTexture(nil, "OVERLAY", nil, 7)
         row.edges[k]:Hide()
-        -- thicknesses under a pixel: no snapping to the pixel grid (it would drop them)
-        if row.edges[k].SetSnapToPixelGrid then row.edges[k]:SetSnapToPixelGrid(false) end
-        if row.edges[k].SetTexelSnappingBias then row.edges[k]:SetTexelSnappingBias(0) end
     end
     row.text = row:CreateFontString(nil, "OVERLAY")
     row.text:SetJustifyH("LEFT")

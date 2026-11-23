@@ -168,7 +168,7 @@ ns.RegisterPage("lootfeed", "Loot Feed", "hidden", function(page)
         { value = "ROW", text = "Around the row" },
     }, G("qualityBorder"), S("qualityBorder"), "A border in the item's quality colour (grey, white, green, blue, ...); money gold, reputation green, skill ups blue.")
     local bg, bs = Opt("qualityBorderSize")
-    local bsz = Tip(L:Slider("Border Thickness", 0.1, 4, 0.1, bg, bs, "%.1f"), "Border Thickness", "Width of the quality border in pixels (0.1 - 4; under 1 a fine, fainter line).")
+    local bsz = Tip(L:Slider("Border Thickness", 0.1, 4, 0.1, bg, bs, "%.1f"), "Border Thickness", "Width of the quality border in pixels (0.1 - 4). Thinner than one screen pixel shows as a one-pixel line, fainter the lower the value.")
     table.insert(page.widgets, { Refresh = function()
         UI.SetActive(colorBtn, not C().accentQuality)
         UI.SetActive(bsz, (C().qualityBorder or "OFF") ~= "OFF")
