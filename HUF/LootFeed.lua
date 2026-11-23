@@ -390,15 +390,39 @@ local CHAT = {
 -- Faster Looting
 ---------------------------------------------------------------------------
 local lastLoot = 0
+-- master loot: is it on (any looter); taking such a slot as the master looter
+-- opens the game's assign / roll menu, so those slots stay in the window
+local function MasterLoot()
+    local m
+    if C_PartyInfo and C_PartyInfo.GetLootMethod then
+        local ok, v = pcall(C_PartyInfo.GetLootMethod)
+        if ok then m = v end
+        if Enum and Enum.LootMethod and m ~= nil then
+            return m == (Enum.LootMethod.Masterlooter or Enum.LootMethod.MasterLooter)
+        end
+    end
+    if GetLootMethod then
+        local ok, v = pcall(GetLootMethod)
+        if ok then return v == "master" end
+    end
+    return false
+end
+
 local function FastLoot()
     if IsShiftKeyDown() then return end
     local now = GetTime()
     if now - lastLoot < 0.3 then return end
     lastLoot = now
+    local master = MasterLoot()
+    local threshold = master and GetLootThreshold and GetLootThreshold() or nil
     local n = GetNumLootItems() or 0
     for i = n, 1, -1 do
-        local locked = select(6, GetLootSlotInfo(i))
-        if not locked then LootSlot(i) end
+        local _, _, _, _, quality, locked = GetLootSlotInfo(i)
+        -- under master loot, items at or above the threshold wait for the
+        -- master looter's choice (unknown quality counts as "wait")
+        local held = master and (type(quality) ~= "number" or not threshold or quality >= threshold)
+        local coin = GetLootSlotType and Enum and Enum.LootSlotType and GetLootSlotType(i) == Enum.LootSlotType.Money
+        if not locked and (coin or not held) then LootSlot(i) end
     end
 end
 
