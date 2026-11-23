@@ -58,6 +58,7 @@ local OUTLINES = {
 }
 local OUTLINES_G = { { value = "GLOBAL", text = "HUF Global Outline" } }
 for _, o in ipairs(OUTLINES) do OUTLINES_G[#OUTLINES_G + 1] = o end
+ns.FontChoices, ns.OUTLINES_G = FontChoices, OUTLINES_G
 
 ---------------------------------------------------------------------------
 -- GENERAL: three tiles (as MMT's settings): Look and Feel, Frames & Features,
@@ -190,7 +191,8 @@ ns.RegisterPage("general", "General", "general", function(page)
     local X2 = TILE_W + TILE_GAP
 
     -- Look and Feel ---------------------------------------------------------
-    local _, L = Tile(page, 0, 0, TILE_W, H, "Look and Feel", "Interface\\Icons\\INV_Misc_Ribbon_01")
+    local LOOK_H = 296
+    local _, L = Tile(page, 0, 0, TILE_W, LOOK_H, "Look and Feel", "Interface\\Icons\\INV_Misc_Ribbon_01")
     L:Cycle("Accent colour", ns.ACCENTS, function() return G().accent end, function(v)
         G().accent = v
         ns.ApplyAccent()
@@ -216,6 +218,10 @@ ns.RegisterPage("general", "General", "general", function(page)
     local gx, sx = Opt(G, "shortenTexts")
     L:Check("Avoid overlapping texts", gx, sx,
         "When an object, like the player health bar, has a text set on the left side (like the name) and one on the right side (like %HP) it may happen that they clip into each other. Enabling this option will avoid this by truncating texts if necessary.")
+
+    -- Loot Feed (LootFeedConfig.lua) -----------------------------------------
+    local LOOT_Y = -(LOOK_H + TILE_GAP)
+    ns.BuildLootFeedTile(page, 0, LOOT_Y, TILE_W, H + LOOT_Y)
 
     -- Frames & Features -----------------------------------------------------
     local FF_H = 168

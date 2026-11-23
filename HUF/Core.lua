@@ -525,6 +525,18 @@ local function BuildDefaults()
             font = "CLASSIC", fontSize = 13, outline = "GLOBAL",   -- CLASSIC = the game's quest fonts
             categories = { list = {}, quests = {} },               -- own quest categories (HUF.QuestLog API)
         },
+        -- loot feed (General > Loot Feed): rows for what you gain, fading out
+        lootFeed = {
+            fastLoot = true,            -- take every slot when the loot window opens (Shift: the normal window)
+            enabled = true,
+            minQuality = 0, vendorPrice = true, auctionPrice = true,
+            width = 275, height = 30, maxRows = 6, duration = 5, spacing = 2, grow = "UP",
+            point = { "BOTTOMRIGHT", "BOTTOMRIGHT", -320, 260 },
+            font = "GLOBAL", fontSize = 12, outline = "GLOBAL",
+            accentQuality = true, accentColor = C(0.31, 0.70, 1.00),
+            accentPos = "LEFT", accentSize = 3, bgAlpha = 0.6,
+            sources = { items = true, money = true, reputation = true, currency = true, skills = true },
+        },
         bags = {
             enabled = true,
             oneBag = true,              -- the game's "combined bags" option

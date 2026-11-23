@@ -561,6 +561,17 @@ local function BoxSpecs()
             point = function() return q().point end, size = function() return 700, 450 end,
             scale = function() return q().scale or 1 end, apply = QL.Look }
     end
+    local LF = ns.LootFeed
+    if LF and ns.db.lootFeed then
+        local c = function() return ns.db.lootFeed end
+        list.lootfeed = { label = "Loot feed", page = "general", on = function() return c().enabled end, frame = LF.Frame,
+            point = function() return c().point end,
+            size = function()
+                local n = math.max(1, c().maxRows)
+                return c().width, n * c().height + (n - 1) * (c().spacing or 2)
+            end,
+            apply = LF.Place }
+    end
     local DM = ns.DamageMeter
     if DM and DM.Windows and ns.db.damageMeter then
         for i, w in ipairs(DM.Windows()) do
