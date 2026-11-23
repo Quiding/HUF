@@ -151,6 +151,7 @@ end
 --   cvars      the game's own settings HUF's pages change (chat, damage numbers)
 --   chatColors the game's chat colours
 --   configScale the settings window's size
+--   places     other addons' windows HUF moves (HUF.RegisterMover with get / set, e.g. MMT's)
 -- Not exported: kept chat lines, debug log, internal state.
 local GAME_CVARS = { "chatBubbles", "chatBubblesParty", "showTimestamps", "chatStyle", "whisperMode",
     "profanityFilter", "chatMouseScroll", "WorldTextScale_v2", "WorldTextGravity_v2" }
@@ -187,6 +188,14 @@ local function Extra()
         if next(cc) then x.chatColors = cc end
     end
     if HUFDB and tonumber(HUFDB.configScale) then x.configScale = tonumber(HUFDB.configScale) end
+    local places = {}
+    for id, sp in pairs(ns.Movers and ns.Movers.external or {}) do
+        if type(sp.get) == "function" then
+            local ok, v = pcall(sp.get)
+            if ok and v ~= nil then places[id] = type(v) == "table" and ns.CopyTable(v) or v end
+        end
+    end
+    if next(places) then x.places = places end
     return next(x) and x or nil
 end
 
@@ -213,6 +222,19 @@ local function ApplyExtra(x)
         end
     end
     if tonumber(x.configScale) and HUFDB then HUFDB.configScale = tonumber(x.configScale) end
+    -- other addons' window places: now, or once the window registers (its addon loads later)
+    if type(x.places) == "table" then
+        for id, v in pairs(x.places) do
+            local sp = ns.Movers and ns.Movers.external[id]
+            if sp and type(sp.set) == "function" then
+                local ok, err = pcall(sp.set, v)
+                if not ok then ns.Print("Placing %s from the import: %s", tostring(sp.label), tostring(err)) end
+            elseif HUFDB then
+                HUFDB.pendingPlaces = HUFDB.pendingPlaces or {}
+                HUFDB.pendingPlaces[id] = v
+            end
+        end
+    end
 end
 ns.ShareExtra, ns.ShareApplyExtra = Extra, ApplyExtra
 
@@ -283,6 +305,9 @@ function ns.ProfileParts(t)
     if type(x.cvars) == "table" or type(x.chatColors) == "table" then
         parts[#parts + 1] = { title = "The game's chat settings and colours", tbl = x, on = true, extra = "game" }
     end
+    if type(x.places) == "table" and next(x.places) then
+        parts[#parts + 1] = { title = "Other addons' window places (MMT and others)", tbl = x.places, on = true, extra = "places" }
+    end
     return parts
 end
 function ns.MergeParts(_, parts, chosen)
@@ -300,6 +325,8 @@ function ns.MergeParts(_, parts, chosen)
                 t[part.path[#part.path]] = ns.CopyTable(part.tbl)
             elseif part.extra == "clickcast" then
                 extra.clickcast = ns.CopyTable(part.tbl)
+            elseif part.extra == "places" then
+                extra.places = ns.CopyTable(part.tbl)
             elseif part.extra == "game" then
                 extra.cvars = part.tbl.cvars and ns.CopyTable(part.tbl.cvars) or nil
                 extra.chatColors = part.tbl.chatColors and ns.CopyTable(part.tbl.chatColors) or nil

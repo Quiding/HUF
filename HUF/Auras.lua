@@ -738,6 +738,18 @@ function Row:InitButton(b, key)
     if not okD then self:Fail("type mark", set) elseif not set then self.pendingResize = true end
 end
 
+-- a member the game can't see now (another zone, far away, offline): its
+-- buff / debuff icons out of sight. For such a unit the game's aura display
+-- drops the row's filter and lists every aura it knows of.
+function Row:SetMuted(muted)
+    muted = muted and true or false
+    if self.muted == muted then return end
+    self.muted = muted
+    local a = muted and 0 or 1
+    if self.c then pcall(self.c.SetAlpha, self.c, a) end
+    self.holder:SetAlpha(a)
+end
+
 function Row:BuildEngine()
     local c = spare
     spare = nil

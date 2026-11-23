@@ -18,7 +18,9 @@
 --   HUF.RegisterNameProvider(id, fn)     fn(unit, first, last) -> shown name or nil
 --   HUF.RegisterMover(id, spec)          a window of yours in HUF's unlock mode (box, snapping,
 --                                        guide lines, grid): spec = { label, frame, save(frame),
---                                        shown(), settings() } (Movers.lua); HUF.UnregisterMover(id)
+--                                        shown(), settings(), get(), set(place) } (Movers.lua); with
+--                                        get / set the place goes along in HUF's profile export / import;
+--                                        HUF.UnregisterMover(id)
 --   HUF.RefreshNames()                   redraw every name on HUF's frames
 --   HUF.Refresh()                        re-apply all HUF settings
 --   HUF.ToggleConfig([page])             open the settings (/huf)
