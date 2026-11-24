@@ -32,7 +32,12 @@ ns.RegisterPage("questlog", "Quest Log", "utility", function(page)
     L:Button("Open the quest log", function() ns.QuestLog.Show() end)
     L:Header("Own categories")
     L:Note("Right-click a quest: move it into a category of your own (or a new one), or back to its zone. Your categories show above the zones, in light blue. Right-click a category: rename, move up / down, delete.")
-    L:Note("Shift + click a quest tracks it.")
+    L:Note("Shift + click a quest tracks it; while you type in chat it links the quest instead (also in the right-click menu).")
+    -- works without HUF's quest log too: not greyed by the switch
+    L:Header("Chat").hufNoGate = true
+    local links = L:Check("Clickable Quest-Links in Chat", function() return Q().chatLinks ~= false end, function(v) Q().chatLinks = v end,
+        "Quest links in chat get the difficulty colour, the level and a quest icon, and a click opens a small window with the quest's details. Also understands Questie's quest links, so Questie users' links work too. With Questie installed (General > Addon Support) the window shows Questie's data: who starts and ends the quest, and where.")
+    links.hufNoGate = true
 
     local R = UI.Column(page, COL2_X, 0, COL_W)
     R:Header("Look")

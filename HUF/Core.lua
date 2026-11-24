@@ -466,6 +466,7 @@ local function BuildDefaults()
             menuMode = "PROXY",        -- right-click menu: PROXY (secure proxy, 12.x) | DIRECT
             clickCast = true,
             mmt = true,                -- allow MMT interaction (names, team, MMT's windows in unlock mode)
+            questie = true,            -- use Questie's quest data (quest window) when Questie is loaded
             configBg = "None",         -- background of the settings window
             powerColors = "GAME",      -- power bars by type: GAME (the game's colours) | CUSTOM (below)
             customPower = {            -- softer than the game's (mana 0, 0.55, 1: EllesmereUI's)
@@ -525,6 +526,7 @@ local function BuildDefaults()
             point = { "CENTER", "CENTER", 0, 40 }, scale = 1,
             font = "CLASSIC", fontSize = 13, outline = "GLOBAL",   -- CLASSIC = the game's quest fonts
             categories = { list = {}, quests = {} },               -- own quest categories (HUF.QuestLog API)
+            chatLinks = true,                                      -- quest links in chat: coloured, a click opens HUF's quest window
         },
         -- loot feed (General > Loot Feed): rows for what you gain, fading out
         lootFeed = {

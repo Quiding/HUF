@@ -338,6 +338,7 @@ local function QuestMenu(row, e)
     items[#items + 1] = { value = "new", text = "New category..." }
     if cur then items[#items + 1] = { value = "zone", text = "Back to its zone" } end
     items[#items + 1] = { value = "track", text = e.tracked and "Untrack" or "Track" }
+    if ns.QuestLinks then items[#items + 1] = { value = "link", text = "Link in chat" } end
     ns.UI.OpenList(row, items, nil, function(v)
         if v == "new" then
             Prompt("Name of the new category:", "", function(name)
@@ -345,6 +346,7 @@ local function QuestMenu(row, e)
             end)
         elseif v == "zone" then QL.SetCategory(e.questID, nil)
         elseif v == "track" then QL.ToggleTrack(e.questID) QL.Refresh()
+        elseif v == "link" then ns.QuestLinks.Insert(e.questID, e.title, e.level)
         elseif type(v) == "string" and v:sub(1, 4) == "cat:" then QL.SetCategory(e.questID, v:sub(5)) end
     end)
 end
@@ -399,6 +401,9 @@ local function NewRow(i)
             collapsed[e.title] = not collapsed[e.title] or nil
         elseif button == "RightButton" then
             QuestMenu(self, e)
+            return
+        elseif IsShiftKeyDown() and ns.QuestLinks and ns.QuestLinks.Typing() then
+            ns.QuestLinks.Insert(e.questID, e.title, e.level)   -- typing in chat: link it
             return
         elseif IsShiftKeyDown() then
             QL.ToggleTrack(e.questID)
