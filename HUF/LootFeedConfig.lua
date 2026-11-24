@@ -96,15 +96,25 @@ function ns.BuildLootFeedTile(page, x, y, w, h)
     local gated = {}
     local function Gated(wd) gated[#gated + 1] = wd return wd end
 
-    L:Check("Faster Looting", G("fastLoot"), S("fastLoot"),
-        "Takes every item the moment the loot window opens. Hold Shift while looting to get the normal loot window.")
-    L:Check("Show Loot Feed", G("enabled"), S("enabled"),
-        "A short list of what you gain (items, money, reputation, currencies, skill ups); each row fades out after a few seconds. Move it in unlock mode.")
-    Gated(L:Cycle("Minimum Quality", QUALITIES, G("minQuality"), S("minQuality"), "Items below this quality are not shown."))
-    Gated(L:Check("Show Vendor Price", G("vendorPrice"), S("vendorPrice"), "Items a vendor buys show what they sell for."))
-    local ahTip = "Shows the price of Auctionator's last scan (when the Auctionator addon is installed)."
-    local ah = Gated(L:Check("Show Auctionator Price", G("auctionPrice"), S("auctionPrice"), ahTip))
+    -- two checks a row where the labels are short (the tile is as tall as the page)
     local inner = (L.width - 16) / 2
+    Pair(L, tile, UI.Check(tile, inner, "Faster Looting", G("fastLoot"), S("fastLoot"),
+        "Takes every item the moment the loot window opens. Hold Shift while looting to get the normal loot window."),
+        UI.Check(tile, inner, "Show Loot Feed", G("enabled"), S("enabled"),
+        "A short list of what you gain (items, money, reputation, currencies, skill ups); each row fades out after a few seconds. Move it in unlock mode."))
+    -- "My MMT team" only with MMT loaded (then also the default)
+    local whoList = { { value = "SELF", text = "Only me" } }
+    if LF.HasMMT() then whoList[#whoList + 1] = { value = "TEAM", text = "My MMT team" } end
+    whoList[#whoList + 1] = { value = "GROUP", text = "Everyone in the group" }
+    Gated(L:Cycle("Show loot of", whoList, function() return LF.Who() end, S("who"),
+        "Others' rows start with who got it (MMT's privacy name for your team). Outside instances from the chat lines; in instances the game hides others' lines, but MMT passes on what your team's clients loot."))
+    Gated(L:Cycle("Minimum Quality", QUALITIES, G("minQuality"), S("minQuality"), "Items below this quality are not shown."))
+    local vendor = Gated(UI.Check(tile, inner, "Vendor Price", G("vendorPrice"), S("vendorPrice"), "Items a vendor buys show what they sell for."))
+    local ahTip = "Shows the price of Auctionator's last scan (when the Auctionator addon is installed). Not on grey items."
+    local ah = Gated(UI.Check(tile, inner, "Auctionator Price", G("auctionPrice"), S("auctionPrice"), ahTip))
+    Pair(L, tile, vendor, ah)
+    Gated(L:Check("Item Tooltips", G("tooltips"), S("tooltips"),
+        "Item and currency rows show their tooltip on hover; a click pins it (as an item link in chat), shift-click links it in chat, ctrl-click opens the dressing room, and a hovered row doesn't fade. Off: the rows let clicks through to the game."))
     Gated(Pair(L, tile, NumBox(tile, inner, "Width", "width", 100, 800, "Width of a row in pixels."),
         NumBox(tile, inner, "Height", "height", 14, 80, "Height of a row in pixels; the icon follows it.")))
     Gated(Pair(L, tile, NumBox(tile, inner, "Max Rows", "maxRows", 1, 20, "How many rows show at once; a new one pushes the oldest out."),
@@ -134,6 +144,8 @@ ns.RegisterPage("lootfeed", "Loot Feed", "hidden", function(page)
     L:Cycle("Text Font", function() return ns.FontChoices(true) end, G("font"), S("font"), "The font of the rows. \"HUF Global Font\" follows the General page.")
     Tip(L:Slider("Text Size", 6, 24, 1, Opt("fontSize")), "Text Size", "Size of the item name; prices are one point smaller.")
     L:Cycle("Text Outline", ns.OUTLINES_G, G("outline"), S("outline"), "Outline around the text. \"HUF Global Outline\" follows the General page.")
+    L:Check("Class coloured names", G("classColors"), S("classColors"),
+        "Others' loot (Show loot of: my team / everyone): the looter's name in their class colour. Off: grey.")
     L:Header("Accent")
     local gq, sq = Opt("accentQuality")
     local colorBtn
@@ -149,7 +161,18 @@ ns.RegisterPage("lootfeed", "Loot Feed", "hidden", function(page)
         { value = "BOTTOM", text = "Bottom" },
     }, G("accentPos"), S("accentPos"), "Which edge of a row carries the accent line.")
     Tip(L:Slider("Accent Thickness", 1, 8, 1, Opt("accentSize")), "Accent Thickness", "Width (left / right) or height (top / bottom) of the accent line in pixels.")
-    table.insert(page.widgets, { Refresh = function() UI.SetActive(colorBtn, not C().accentQuality) end })
+    L:Header("Quality Border")
+    L:Cycle("Quality Border", {
+        { value = "OFF", text = "Off" },
+        { value = "ICON", text = "Around the icon" },
+        { value = "ROW", text = "Around the row" },
+    }, G("qualityBorder"), S("qualityBorder"), "A border in the item's quality colour (grey, white, green, blue, ...); money gold, reputation green, skill ups blue.")
+    local bg, bs = Opt("qualityBorderSize")
+    local bsz = Tip(L:Slider("Border Thickness", 0.1, 4, 0.1, bg, bs, "%.1f"), "Border Thickness", "Width of the quality border in pixels (0.1 - 4). Thinner than one screen pixel shows as a one-pixel line, fainter the lower the value.")
+    table.insert(page.widgets, { Refresh = function()
+        UI.SetActive(colorBtn, not C().accentQuality)
+        UI.SetActive(bsz, (C().qualityBorder or "OFF") ~= "OFF")
+    end })
 
     local R = UI.Column(page, W + 30, 0, W)
     R:Header("Item Sources")
