@@ -1121,6 +1121,25 @@ function Frame.Update(f)
     local cb = f.s.castBar
     if not f.fake and cb and cb.enabled and f.cast then ns.Cast.Start(f.cast, f.hunit) end
     Frame.UpdateRange(f)
+    pcall(Frame.UpdateAuraSight, f)
+end
+
+-- a group member the game can't see (another zone, far away, offline): no
+-- buff / debuff icons (the game shows every aura of such a unit, unfiltered);
+-- the debuff edge round the frame stays
+function Frame.UpdateAuraSight(f)
+    local rows = f.auraRows
+    if not rows then return end
+    local unit, seen = f.hunit, true
+    if unit and not f.fake and f.s and f.s.group then
+        local okV, vis = pcall(UnitIsVisible, unit)
+        if okV and not ns.IsSecret(vis) and not vis then seen = false end
+        local okC, conn = pcall(UnitIsConnected, unit)
+        if okC and not ns.IsSecret(conn) and conn == false then seen = false end
+    end
+    for which, row in pairs(rows) do
+        if which ~= "edge" and row.SetMuted then row:SetMuted(not seen) end
+    end
 end
 
 -- a once-a-second look as well (the range event isn't on every client)
@@ -1128,6 +1147,7 @@ C_Timer.NewTicker(1, function()
     if not ns.db then return end
     for _, f in ipairs(ns.allFrames) do
         if f.s and f.s.group and f.s.group.range and f:IsVisible() then pcall(Frame.UpdateRange, f) end
+        if f.s and f.s.group and f:IsVisible() then pcall(Frame.UpdateAuraSight, f) end
     end
 end)
 

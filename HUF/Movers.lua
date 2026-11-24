@@ -437,6 +437,8 @@ local boxes = {}
 --                                    -- dropped (BOTTOMLEFT to UIParent); store its place your way
 --       shown = function() return true end,  -- optional: a box only while true (default: frame:IsShown())
 --       settings = function() end,           -- optional: right-click on the box
+--       get = function() return place end,   -- optional, with set: the window's place (any table),
+--       set = function(place) end,           -- carried in HUF's profile export / import
 --   })
 --   HUF.UnregisterMover(id)
 Movers.external = {}
@@ -450,6 +452,7 @@ function ns.RegisterMover(id, spec)
     local getFrame = type(fr) == "function" and fr or function() return fr end
     Movers.external[id] = {
         external = true, label = tostring(spec.label or id), save = spec.save, settings = spec.settings,
+        get = spec.get, set = spec.set,
         frame = getFrame,
         on = function()
             local f = getFrame()
@@ -459,6 +462,14 @@ function ns.RegisterMover(id, spec)
         end,
         point = function() return { "CENTER", "CENTER", 0, 0 } end, size = function() return 100, 100 end,
     }
+    -- a place from an imported HUF profile that waited for this window
+    local wait = HUFDB and HUFDB.pendingPlaces
+    if wait and wait[id] ~= nil and type(spec.set) == "function" then
+        local v = wait[id]
+        wait[id] = nil
+        local ok, err = pcall(spec.set, v)
+        if not ok then ns.Print("Placing %s from the import: %s", tostring(spec.label or id), tostring(err)) end
+    end
     if ns.unlocked and Movers.LayoutAll then Movers.LayoutAll() end
     return true
 end

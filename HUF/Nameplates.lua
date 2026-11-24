@@ -294,6 +294,8 @@ local function Layout(p)
     bf.enabled, bf.kind, bf.mine = s.showBuffs, "HELPFUL", false
     bf.filter, bf.dispelBorder = s.buffFilter or "ALL", BuffMark(s)
     bf.purge = bf.filter == "PURGE" or bf.filter == "TEAM_PURGE" or bf.filter == "IMPORTANT_PURGE" or bf.filter == "AUTO_PURGE"
+    -- purging is for enemies: a friendly plate shows no buffs with the purge filters
+    if bf.purge and p.friendly then bf.enabled = false end
     bf.purgeSize, bf.glowSize = s.buffPurgeSize, s.buffGlowSize
     bf.anchor, bf.growH, bf.point = "BOTTOMRIGHT", "LEFT", { "BOTTOMRIGHT", a, "BOTTOMRIGHT", 0, 0 }
     if AurasStacked(s, room) then

@@ -389,7 +389,15 @@ function Chat.Copy()
     -- at the newest line (once the text is laid out)
     local sc = e and e:GetParent()
     if sc and sc.SetVerticalScroll then
-        C_Timer.After(0.05, function() sc:SetVerticalScroll(sc:GetVerticalScrollRange()) end)
+        -- the text's height minus what shows, never past the range (scrolling
+        -- past the text left the window empty); again once it is laid out
+        local function Bottom()
+            local want = math.max(0, (e:GetHeight() or 0) - (sc:GetHeight() or 0))
+            local range = sc:GetVerticalScrollRange() or 0
+            sc:SetVerticalScroll(math.max(0, math.min(want, range)))
+        end
+        C_Timer.After(0, Bottom)
+        C_Timer.After(0.2, Bottom)
     end
 end
 

@@ -302,7 +302,7 @@ local function AuraPage(f)
         { value = "SAME", text = "On the debuffs' row" },
         { value = "ABOVE", text = "Always a row above the debuffs" },
     }, Opt("buffRow"))
-    L:Note("My group: a shaman from 12 (Purge), a priest from 18 (Dispel Magic), a warlock with a Felhunter, a hunter from 60 (enrages), a mage from 70 (Spellsteal); you by your spellbook. Magic blue, enrage red: a buff you can purge stands out. Dispellable: by anyone, whatever your class (purges, enrages, spell steal). The game checks it itself, so it works in every fight.")
+    L:Note("My group: a shaman from 12 (Purge), a priest from 18 (Dispel Magic), a warlock with a Felhunter, a hunter from 60 (enrages), a mage from 70 (Spellsteal); you by your spellbook. Magic blue, enrage red: a buff you can purge stands out. The purge filters show buffs on enemy plates only. Dispellable: by anyone, whatever your class (purges, enrages, spell steal). The game checks it itself, so it works in every fight.")
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Size")
     R:Slider("Icon size", 6, 30, 1, Opt("auraSize"))
