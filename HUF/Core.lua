@@ -478,6 +478,7 @@ local function BuildDefaults()
         r.layout = {
             growth = "DOWN",        -- members in a group: DOWN | UP | RIGHT | LEFT (also decides how groups stack)
             padX = 7, padY = 15,    -- space between groups
+            gap = 2,                -- space between the members of a group (X or Y by the growth direction)
             anchors = {},           -- [G1..G8 / MT / PET] = { to = "SCREEN" | key, x, y } once changed by hand; else automatic
         }
         return r

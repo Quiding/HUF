@@ -92,7 +92,7 @@ local function MainTab(f, page, H)
     local function Gate(w, isOn) gated[#gated + 1] = { w, isOn } return w end
 
     -- Size & Position ------------------------------------------------------
-    local SP_H = 222
+    local SP_H = 260
     local sp, S = ns.ConfigTile(f, 0, 0, TILE_W, SP_H, "Size & Position", "Interface\\Icons\\INV_Misc_Spyglass_03")
     local ex = S:Button("Show Example Bars", function() RD().ShowExamples() ns.RefreshConfig() end)
     UI.Tooltip(ex, "Show Example Bars", "Shows all groups, main tanks and pets with made-up members and the current settings (also in unlock mode, where each group can be dragged). Click again to hide them.")
@@ -106,6 +106,10 @@ local function MainTab(f, page, H)
     Pair(S, sp,
         UI.Slider(sp, half, "Horizontal Padding", 0, 40, 1, function() return L().padX end, function(v) L().padX = v end).EnableInput(),
         UI.Slider(sp, half, "Vertical Padding", 0, 40, 1, function() return L().padY end, function(v) L().padY = v end).EnableInput())
+    local gapS = S:Slider("Padding between frames of same group", 0, 20, 1, function() return L().gap or 0 end, function(v) L().gap = v end)
+    gapS.EnableInput()
+    gapS:EnableMouse(true)
+    UI.Tooltip(gapS, "Padding between frames of same group", "Space between the members of one group: up / down for Top > Bottom and Bottom > Top, left / right for Left > Right and Right > Left. The automatic offsets between the groups take it into account.")
 
     -- Frame Anchoring ------------------------------------------------------
     local FA_Y = -(SP_H + GAP)

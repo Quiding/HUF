@@ -56,12 +56,12 @@ local function Vertical() local g = L().growth return g ~= "RIGHT" and g ~= "LEF
 -- where a header goes when nobody set it by hand: to, x, y
 function R.Auto(key)
     local s, l = P(), L()
-    local w, h, px, py = s.width, s.height, l.padX or 0, l.padY or 0
+    local w, h, px, py, gap = s.width, s.height, l.padX or 0, l.padY or 0, l.gap or 0
     if key == "G1" then return "SCREEN", s.point[3] or 0, s.point[4] or 0 end
     local n = tonumber(key:match("^G(%d)$"))
     if Vertical() then
         local sign = l.growth == "UP" and 1 or -1
-        local groupH = MEMBERS * h + py
+        local groupH = MEMBERS * h + (MEMBERS - 1) * gap + py
         if n then
             if n == 5 then return "G1", 0, sign * groupH end
             return "G" .. (n - 1), w + px, 0
@@ -99,8 +99,9 @@ end
 function R.GroupSize(key)
     local s = P()
     local n = key == "MT" and 2 or MEMBERS
-    if Vertical() then return s.width, n * s.height end
-    return n * s.width, s.height
+    local gap = L().gap or 0
+    if Vertical() then return s.width, n * s.height + (n - 1) * gap end
+    return n * s.width + (n - 1) * gap, s.height
 end
 
 -- put `frame` (a header or its preview) where `key` belongs; lookup(k)
