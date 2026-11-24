@@ -50,6 +50,7 @@ ChatConfig.lua
 BagsConfig.lua
 QuestLogConfig.lua
 LootFeedConfig.lua
+RaidConfig.lua
 DataBarBlocks.lua
 DataBars.lua
 DataBarsConfig.lua
