@@ -32,6 +32,13 @@ R.PROFILES = { { value = "BASIC", text = "Basic" }, { value = "HEALER", text = "
 R.headers, R.labels, R.buttons = {}, {}, {}
 
 local VISIBILITY = "[group:raid] show; hide"
+
+-- the settings key of a header's buttons: groups "raid", main tanks
+-- "raidmt", pets "raidpet" (own texts, everything else the profile's)
+function R.FrameKey(key)
+    if key == "MT" then return "raidmt" elseif key == "PET" then return "raidpet" end
+    return "raid"
+end
 local MEMBERS = 5          -- a group's size (also the column height of main tanks / pets)
 
 local function DB() return ns.db.raid end
@@ -208,7 +215,7 @@ local function InitButton(header, name)
     b.hufBuilt = true
     local n = #R.buttons + 1
     b.hufLabel = "raid " .. (header.hufKey or "?") .. " " .. n
-    local ok, err = pcall(Frame.Build, b, "raid", true)
+    local ok, err = pcall(Frame.Build, b, R.FrameKey(header.hufKey), true)
     if not ok then ns.LogError("raid button " .. n, err) return end
     Extras(b)
     b:HookScript("OnShow", function(self) Frame.Update(self) R.UpdateExtras(self) end)
@@ -292,17 +299,12 @@ local function Label(key)
     return lab
 end
 
--- a label above a group (or its preview): left above, or right above for Right > Left
+-- a label above a group (or its preview), centred
 local function PlaceLabel(lab, target)
     lab:ClearAllPoints()
     lab.text:ClearAllPoints()
-    if L().growth == "LEFT" then
-        lab:SetPoint("BOTTOMRIGHT", target, "TOPRIGHT", 0, 1)
-        lab.text:SetPoint("BOTTOMRIGHT")
-    else
-        lab:SetPoint("BOTTOMLEFT", target, "TOPLEFT", 0, 1)
-        lab.text:SetPoint("BOTTOMLEFT")
-    end
+    lab:SetPoint("BOTTOM", target, "TOP", 0, 1)
+    lab.text:SetPoint("BOTTOM")
 end
 
 local function Create()
@@ -402,7 +404,7 @@ local function BuildPreview()
         for m = 1, n do
             idx = idx + 1
             local f = CreateFrame("Frame", nil, box)
-            Frame.Build(f, "raid", false)
+            Frame.Build(f, R.FrameKey(key), false)
             Extras(f)
             f.fake = Fake(key == "MT" and m or (key == "PET" and 40 + m or idx), key)
             f:EnableMouse(false)
@@ -424,10 +426,10 @@ local function LayoutPreview()
         box:SetScale(s.scale or 1)
         R.Place(box, key, PreviewFrame)
         box.label:ClearAllPoints()
-        if L().growth == "LEFT" then box.label:SetPoint("BOTTOMRIGHT", box, "TOPRIGHT", 0, 1)
-        else box.label:SetPoint("BOTTOMLEFT", box, "TOPLEFT", 0, 1) end
+        box.label:SetPoint("BOTTOM", box, "TOP", 0, 1)
+        local ks = ns.UnitSettings(R.FrameKey(key))
         for m, f in ipairs(box.members) do
-            f.s = s
+            f.s = ks
             f:ClearAllPoints()
             local o = m - 1
             if g.dy ~= 0 then
@@ -506,7 +508,7 @@ function R.Apply()
                 ctl:Execute(APPLY)
             end
         end
-        for _, b in ipairs(R.buttons) do b.s = s Frame.LayoutSecure(b) end
+        for _, b in ipairs(R.buttons) do b.s = ns.UnitSettings(b.key) Frame.LayoutSecure(b) end
         for _, key in ipairs(R.KEYS) do
             local h = R.headers[key]
             if h then
@@ -523,7 +525,7 @@ function R.Apply()
         ns.Log("frame", "apply raid: profile=%s growth=%s size=%sx%s pad=%s/%s", DB().profile, L().growth, s.width, s.height, L().padX, L().padY)
     end)
     for _, b in ipairs(R.buttons) do
-        b.s = s
+        b.s = ns.UnitSettings(b.key)
         ns.Try("layout raid", Frame.LayoutInner, b)
         ns.Try("update raid", Frame.Update, b)
         R.UpdateExtras(b)

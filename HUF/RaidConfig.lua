@@ -10,6 +10,7 @@ local function DB() return ns.db.raid end
 local function P() return ns.UnitSettings("raid") end
 local function L() return P().layout end
 local function RD() return ns.Raid end
+local TextsTab
 
 local TILE_W, GAP = 344, 10
 local TOP_H = 58               -- master switch row + tab strip
@@ -168,7 +169,8 @@ local function MainTab(f, page, H)
     local lf, R = ns.ConfigTile(f, TILE_W + GAP, 0, TILE_W, H, "Look and Features", "Interface\\Icons\\INV_Misc_Gem_Variety_01")
     local function HP(k) return function() return P().health[k] end, function(v) P().health[k] = v end end
     local function Mode(m) return function() return P().health.colorMode == m end end
-    R:Cycle("Bar Texture", ns.TextureChoices, HP("texture"))
+    R:Cycle("Bar Texture", ns.TextureChoices, function() return P().health.texture end,
+        function(v) P().health.texture = v P().power.texture = v end, "The texture of the health and resource bars.")
     local gm, sm = HP("colorMode")
     R:Cycle("Bar Colour", COLOR_MODES, gm, sm, "By class: the member's class colour. By status: green / amber / red by health left. Static: one colour.")
     Gate(R:Color("Static Colour", HP("color")), Mode("STATIC"))
@@ -206,6 +208,27 @@ local function MainTab(f, page, H)
         for _, g in ipairs(gated) do UI.SetActive(g[1], DB().enabled and g[2]() and true or false) end
         if classes.Refresh then classes.Refresh() end
     end })
+end
+
+---------------------------------------------------------------------------
+-- Texts tab: the unit frames' text editor, for Groups / Main Tanks / Pets
+---------------------------------------------------------------------------
+local TEXT_SETS = { { value = "texts", text = "Groups" }, { value = "textsMT", text = "Main Tanks" }, { value = "textsPet", text = "Pets" } }
+TextsTab = function(f, page)
+    local which = "texts"
+    local sel = UI.Dropdown(f, 330, "Texts of", TEXT_SETS, function() return which end, function(v)
+        which = v
+        ns.RefreshConfig()
+    end, "Groups 1-8, the main tanks and the pets each have their own texts.")
+    sel:SetPoint("TOPLEFT", 0, 0)
+    table.insert(page.widgets, sel)
+    local body = CreateFrame("Frame", nil, f)
+    body:SetPoint("TOPLEFT", 0, -32)
+    body:SetPoint("BOTTOMRIGHT", 0, 0)
+    ns.TextsPage(body, "raid", page, function()
+        local p = P()
+        return p[which] or p.texts
+    end)
 end
 
 local function Later(f, text)
@@ -267,7 +290,7 @@ ns.RegisterPage("raid", "Raid", "frames", function(page)
     -- greying runs after it on every refresh)
     UI.Gate(page, master, function() return DB().enabled end)
     MainTab(subs.main, page, H)
-    Later(subs.texts, "Texts come in the next step.")
+    TextsTab(subs.texts, page)
     Later(subs.auras, "Buffs and debuffs come in a later step.")
     Later(subs.mt, "Main tank options come in a later step.")
     Later(subs.pets, "Pet options come in a later step.")

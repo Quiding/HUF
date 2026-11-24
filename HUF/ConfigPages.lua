@@ -783,14 +783,16 @@ end
 local SHORT = { TOPLEFT = "TL", TOP = "T", TOPRIGHT = "TR", LEFT = "L", CENTER = "C", RIGHT = "R",
     BOTTOMLEFT = "BL", BOTTOM = "B", BOTTOMRIGHT = "BR" }
 
-local function TextsPage(f, key, page)
+-- getTexts (optional): the texts table to edit (raid frames: groups / main tanks / pets)
+local function TextsPage(f, key, page, getTexts)
+    local Tx = getTexts or function() return U(key).texts end
     local bar, anchor = "health", nil
     -- default selection: the first anchor with text on the health bar
     for _, a in ipairs(ns.ANCHORS) do
-        if not anchor and U(key).texts.health[a].text ~= "" then anchor = a end
+        if not anchor and Tx().health[a].text ~= "" then anchor = a end
     end
     anchor = anchor or "CENTER"
-    local T = function() return U(key).texts[bar][anchor] end
+    local T = function() return Tx()[bar][anchor] end
 
     local L = UI.Column(f, 0, 0, COL_W)
     L:Cycle("Bar", {
@@ -826,7 +828,7 @@ local function TextsPage(f, key, page)
     L:Add(grid, 80)
     table.insert(page.widgets, { Refresh = function()
         for a, b in pairs(cells) do
-            local used = U(key).texts[bar][a].text ~= ""
+            local used = Tx()[bar][a].text ~= ""
             b.fill:SetColorTexture(A[1], A[2], A[3], used and 0.35 or 0.04)
             if b.sel.SetShown then b.sel:SetShown(a == anchor) end
             if used then b.label:SetTextColor(1, 1, 1) else b.label:SetTextColor(0.5, 0.5, 0.5) end
@@ -876,6 +878,7 @@ local function TextsPage(f, key, page)
     R:Slider("Horizontal (X)", -150, 150, 1, Opt(T, "x"))
     R:Slider("Vertical (Y)", -80, 80, 1, Opt(T, "y"))
 end
+ns.TextsPage = TextsPage
 
 -- Debuffs / Buffs: one tab each. Left: what shows and how it looks;
 -- right: where it goes.

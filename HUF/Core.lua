@@ -66,10 +66,28 @@ for _, u in ipairs(ns.UNITS) do ns.UNIT_BY_KEY[u.key] = u end
 for _, u in ipairs(ns.GROUPS) do ns.UNIT_BY_KEY[u.key] = u end
 -- every frame with a settings page, in page order
 -- a frame's settings: a unit's table, for "raid" the active raid profile's
+-- main tanks / pets of a raid profile: the profile, with their own texts
+local subViews = setmetatable({}, { __mode = "k" })
+local function SubView(prof, field)
+    local views = subViews[prof]
+    if not views then views = {} subViews[prof] = views end
+    local v = views[field]
+    if not v then
+        v = setmetatable({}, { __index = function(_, k)
+            if k == "texts" then return prof[field] or prof.texts end
+            return prof[k]
+        end })
+        views[field] = v
+    end
+    return v
+end
 function ns.UnitSettings(key)
-    if key == "raid" then
+    if key == "raid" or key == "raidmt" or key == "raidpet" then
         local r = ns.db.raid
-        return r.profiles[r.profile] or r.profiles.BASIC
+        local prof = r.profiles[r.profile] or r.profiles.BASIC
+        if key == "raidmt" then return SubView(prof, "textsMT") end
+        if key == "raidpet" then return SubView(prof, "textsPet") end
+        return prof
     end
     return ns.db.units[key]
 end
@@ -469,16 +487,20 @@ local function BuildDefaults()
         r.healPred.alpha = 0.55
         r.texts.health = Texts({ CENTER = { "[name]", 11 } })
         r.texts.power = Texts()
+        r.health.texture, r.power.texture = "Blizzard Raid", "Blizzard Raid"
         r.debuffs.enabled, r.buffs.enabled = false, false
         r.castBar.enabled = true
         r.castBar.classes = { DRUID = true, PALADIN = true, PRIEST = true, SHAMAN = true }
         r.castBar.iconSize = 10
         r.group = { range = true, rangeAlpha = 0.4 }
         r.threatBorder = true                                   -- red edge while an NPC attacks the member
+        -- texts of the main tanks and the pets (Texts tab: Groups / Main Tanks / Pets)
+        r.textsMT = ns.CopyTable(r.texts)
+        r.textsPet = { health = Texts({ CENTER = { "[name]", 11 } }), power = Texts() }
         r.layout = {
             growth = "DOWN",        -- members in a group: DOWN | UP | RIGHT | LEFT (also decides how groups stack)
-            padX = 7, padY = 15,    -- space between groups
-            gap = 2,                -- space between the members of a group (X or Y by the growth direction)
+            padX = 8, padY = 20,    -- space between groups
+            gap = 4,                -- space between the members of a group (X or Y by the growth direction)
             anchors = {},           -- [G1..G8 / MT / PET] = { to = "SCREEN" | key, x, y } once changed by hand; else automatic
         }
         return r
@@ -488,6 +510,12 @@ local function BuildDefaults()
     local basicRaid = RaidProfile(90, 22)
     basicRaid.power.enabled = false
     basicRaid.castBar.enabled = false
+    -- Healer: missing health in the middle (status colours, nothing at full health)
+    local healerRaid = RaidProfile(100, 35)
+    for _, t in ipairs({ healerRaid.texts, healerRaid.textsMT }) do
+        local c = t.health.CENTER
+        c.text, c.colorMode, c.hideFull = "[hp:missing]", "STATUS", true
+    end
 
     return {
         global = {
@@ -524,7 +552,7 @@ local function BuildDefaults()
         raid = {
             enabled = false,        -- HUF's raid frames (Blizzard's while off)
             profile = "BASIC",      -- BASIC | HEALER | CUSTOM
-            profiles = { BASIC = basicRaid, HEALER = RaidProfile(100, 35), CUSTOM = RaidProfile() },
+            profiles = { BASIC = basicRaid, HEALER = healerRaid, CUSTOM = RaidProfile() },
         },
         -- damage meter: the game's meter data in a HUF window, privacy names
         damageMeter = {
@@ -1324,6 +1352,32 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 24
+    end
+    -- 0.5.45: raid profiles - padding 8 / 20, group padding 4, bar texture Blizzard Raid,
+    -- Healer: missing health in the middle (only where still the 0.5.44 defaults)
+    if HUFDB.dataVersion < 25 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local raid = type(prof.raid) == "table" and prof.raid.profiles
+            if type(raid) == "table" then
+                for key, r in pairs(raid) do
+                    if type(r) == "table" then
+                        local l = r.layout
+                        if type(l) == "table" then
+                            if l.padX == 7 and l.padY == 15 then l.padX, l.padY = 8, 20 end
+                            if l.gap == 2 then l.gap = 4 end
+                        end
+                        for _, b in ipairs({ r.health, r.power }) do
+                            if type(b) == "table" and b.texture == "Fade" then b.texture = "Blizzard Raid" end
+                        end
+                        local c = key == "HEALER" and type(r.texts) == "table" and type(r.texts.health) == "table" and r.texts.health.CENTER
+                        if type(c) == "table" and c.text == "[name]" then
+                            c.text, c.colorMode, c.hideFull = "[hp:missing]", "STATUS", true
+                        end
+                    end
+                end
+            end
+        end
+        HUFDB.dataVersion = 25
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}
