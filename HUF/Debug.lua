@@ -10,7 +10,11 @@
 local _, ns = ...
 local IsSecret = ns.IsSecret
 
-local MAX_LINES = 4000
+local MAX_LINES = 1500           -- kept lines (survive /reload)
+local TRIM_STEP = 100            -- the oldest lines go in blocks, not one by one
+local MAX_LINE_LEN = 900         -- a longer line is cut (recorder snapshots)
+local VIEW_LINES = 400           -- the log window shows the newest lines
+local REPORT_LINES = 600         -- the report's log part
 local early = {}                 -- lines before the saved variables are loaded
 
 local function DB()
@@ -51,16 +55,30 @@ local function Stamp()
     return date("%H:%M:%S", math.floor(t)) .. (".%03d"):format(math.floor((t % 1) * 1000))
 end
 
-local function Add(line)
-    line = Stamp() .. " " .. line
+-- the same line again right after itself: one line with "(xN)"
+local lastText, lastCount = nil, 0
+local function Add(text)
+    if #text > MAX_LINE_LEN then text = text:sub(1, MAX_LINE_LEN) .. (" ...(+%d)"):format(#text - MAX_LINE_LEN) end
     local d = DB()
     if not d then
-        early[#early + 1] = line
+        early[#early + 1] = Stamp() .. " " .. text
         return
     end
     local log = d.log
+    if text == lastText and #log > 0 then
+        lastCount = lastCount + 1
+        log[#log] = ("%s %s (x%d)"):format(Stamp(), text, lastCount)
+        return
+    end
+    lastText, lastCount = text, 1
+    local line = Stamp() .. " " .. text
     log[#log + 1] = line
-    if #log > MAX_LINES then table.remove(log, 1) end
+    local n = #log
+    if n > MAX_LINES + TRIM_STEP then
+        local drop = n - MAX_LINES
+        table.move(log, drop + 1, n, 1)
+        for i = n, n - drop + 1, -1 do log[i] = nil end
+    end
     if d.chat then DEFAULT_CHAT_FRAME:AddMessage("|cff888888HUF " .. line .. "|r") end
 end
 
@@ -82,6 +100,44 @@ end
 -- a line that is written whether the debug log is on or not (the recorder)
 function ns.LogRaw(category, text)
     Add("[" .. category .. "] " .. text)
+end
+
+-- only when the text differs from the last one under the same key
+-- (states that are re-checked often: instance names, dispel types ...)
+local lastByKey = {}
+function ns.LogChanged(key, category, fmt, ...)
+    if not ns.DebugOn() then return end
+    local msg = Format(fmt, ...)
+    if lastByKey[key] == msg then return end
+    lastByKey[key] = msg
+    Add("[" .. category .. "] " .. msg)
+end
+
+-- parts written in the same moment become one line ("; " between them),
+-- e.g. every frame's new unit after a group change
+local batches, batchOrder, batchQueued = {}, {}, false
+local function FlushBatches()
+    batchQueued = false
+    for _, cat in ipairs(batchOrder) do
+        local parts = batches[cat]
+        if parts and #parts > 0 then Add("[" .. cat .. "] " .. table.concat(parts, "; ")) end
+        batches[cat] = nil
+    end
+    wipe(batchOrder)
+end
+function ns.LogBatch(category, fmt, ...)
+    if not ns.DebugOn() then return end
+    local parts = batches[category]
+    if not parts then
+        parts = {}
+        batches[category] = parts
+        batchOrder[#batchOrder + 1] = category
+    end
+    parts[#parts + 1] = Format(fmt, ...)
+    if not batchQueued then
+        batchQueued = true
+        C_Timer.After(0, FlushBatches)
+    end
 end
 -- older name used all over the code
 function ns.Debug(fmt, ...) ns.Log("debug", fmt, ...) end
@@ -110,6 +166,8 @@ function ns.ClearLog()
     local d = DB()
     if d then d.log = {} end
     announced = {}
+    lastText, lastCount = nil, 0
+    wipe(lastByKey)
 end
 
 function ns.SetDebug(on)
@@ -135,9 +193,13 @@ ns.On("ADDON_ACTION_BLOCKED", function(addon, func) Blocked("ADDON_ACTION_BLOCKE
 ns.On("ADDON_ACTION_FORBIDDEN", function(addon, func) Blocked("ADDON_ACTION_FORBIDDEN", addon, func) end)
 
 -- the game's own events, for the order things happened in
+-- (with the data recorder on, its own lines name these moments: no second line)
 for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "PLAYER_REGEN_DISABLED",
     "PLAYER_REGEN_ENABLED", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UNIT_PET", "ZONE_CHANGED_NEW_AREA" }) do
-    ns.On(e, function(a1) ns.Log("event", "%s %s", e, a1 or "") end)
+    ns.On(e, function(a1)
+        if ns.Recorder and ns.Recorder.IsOn and ns.Recorder.IsOn() and e ~= "UNIT_PET" then return end
+        ns.LogBatch("event", "%s%s", e, a1 and (" " .. Str(a1)) or "")
+    end)
 end
 
 ---------------------------------------------------------------------------
@@ -311,15 +373,24 @@ function ns.DebugReport()
         add("")
     end
     local d = DB()
-    add(("--- log (%d lines, debug log %s) ---"):format(d and #d.log or 0, ns.DebugOn() and "on" or "off"))
-    if d then for _, line in ipairs(d.log) do add(line) end end
+    local n = d and #d.log or 0
+    local from = math.max(1, n - REPORT_LINES + 1)
+    add(("--- log (%d lines%s, debug log %s) ---"):format(n, from > 1 and (", the newest " .. REPORT_LINES .. " here") or "", ns.DebugOn() and "on" or "off"))
+    if d then for i = from, n do add(d.log[i]) end end
     return table.concat(lines, "\n")
 end
 
+-- the newest lines only: a text box with thousands of long lines stalls the game
 function ns.LogText()
     local d = DB()
     if not d or #d.log == 0 then return "(the log is empty)" end
-    return table.concat(d.log, "\n")
+    local n = #d.log
+    local from = math.max(1, n - VIEW_LINES + 1)
+    local text = table.concat(d.log, "\n", from, n)
+    if from > 1 then
+        text = ("(the newest %d of %d lines; the debug report has %d)\n"):format(n - from + 1, n, math.min(n, REPORT_LINES)) .. text
+    end
+    return text
 end
 
 -- one snapshot of every frame into the log

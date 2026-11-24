@@ -1115,8 +1115,8 @@ function NP.ApplyInstanceNames(confirmed)
         busy = false
     end
     HUFDB.instanceNames[me] = next(saved) and saved or nil
-    ns.Log("nameplates", "instance names: inside=%s (%s) private=%s hide=%s%s", tostring(inside), tostring(itype),
-        tostring(NamesPrivate()), tostring(want and true or false), confirmed and " (2nd look)" or "")
+    ns.LogChanged("np-instance", "nameplates", "instance names: inside=%s (%s) private=%s hide=%s", tostring(inside), tostring(itype),
+        tostring(NamesPrivate()), tostring(want and true or false))
 end
 ns.On("PLAYER_ENTERING_WORLD", function()
     NP.ApplyInstanceNames()

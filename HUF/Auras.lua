@@ -1140,7 +1140,7 @@ local function TeamChanged()
         C_Timer.After(10, function() retrying = false TeamChanged() end)
     end
     if not changed then return end
-    ns.Log("auras", "group can dispel: %s; purge: %s", teamKey ~= "" and teamKey or "nothing",
+    ns.LogChanged("auras-team", "auras", "group can dispel: %s; purge: %s", teamKey ~= "" and teamKey or "nothing",
            purgeKey ~= "" and purgeKey or "nothing")
     for _, r in ipairs(rows) do
         local cfg = r.cfg

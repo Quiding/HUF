@@ -177,7 +177,7 @@ ns.RegisterPage("help", "Help", "general", function(page)
     local L = UI.Column(f, 0, 0, COL_W)
     L:Header("Debug log")
     L:Check("Debug log", function() return ns.DebugOn() end, function(v) ns.SetDebug(v) end,
-        "Logs what HUF does: frames made and placed, units, shown / hidden, clicks, setting changes, combat queue, MMT link. Errors are always logged. The log keeps the last 4000 lines and survives /reload.")
+        "Logs what HUF does: frames made and placed, units, shown / hidden, clicks, setting changes, combat queue, MMT link. Errors are always logged. The log keeps the last 1500 lines and survives /reload; the same line repeated becomes one line with (xN), and changes that happen together (a group change) share one line. The log window shows the newest 400 lines, the report the newest 600.")
     L:Check("Also print log lines to chat", function() return HUFDB.debug.chat end,
         function(v) HUFDB.debug.chat = v end)
     local size = UI.Label(f, "")

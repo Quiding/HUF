@@ -250,16 +250,53 @@ function Rec.Context(why)
         why, V(zone), V(inInst), V(instType), V(InCombatLockdown()), V(IsInGroup()), V(IsInRaid()), V(GetNumGroupMembers())))
 end
 
+function Rec.IsOn() return HUFDB and Rec.DB().enabled or false end
+
+-- a snapshot line: "unit: f1 | f2 | f3 ..."; fields by their name (text before "=")
+local function Fields(line)
+    local head, rest = line:match("^(.-): (.*)$")
+    local list, byName = {}, {}
+    for part in ((rest or line) .. " | "):gmatch("(.-) | ") do
+        local name = part:match("^([^=]+)=") or part
+        list[#list + 1] = name
+        byName[name] = part
+    end
+    return head or line, list, byName
+end
+
+-- only what changed since this unit's last line (the whole snapshot the
+-- first time and for "now"); all units of one moment share one log line
 function Rec.Record(force, only)
     local db = Rec.DB()
     if not db.enabled and not force then return end
+    local out = {}
     for _, unit in ipairs(only or Units(db)) do
         local ok, line = pcall(Snapshot, unit, db)
         if not ok then line = unit .. ": ERR " .. tostring(line) end
-        if force or not db.changesOnly or last[unit] ~= line then
+        local prev = last[unit]
+        if force or not db.changesOnly or prev ~= line then
             last[unit] = line
-            ns.LogRaw("rec", line)
+            if force or not prev or not db.changesOnly then
+                out[#out + 1] = line
+            else
+                local head, list, now = Fields(line)
+                local _, _, before = Fields(prev)
+                local changed = {}
+                for _, name in ipairs(list) do
+                    if before[name] ~= now[name] then changed[#changed + 1] = now[name] end
+                end
+                for name in pairs(before) do
+                    if not now[name] then changed[#changed + 1] = name .. " gone" end
+                end
+                if #changed > 0 then out[#out + 1] = head .. ": " .. table.concat(changed, " | ") end
+            end
         end
+    end
+    if #out == 0 then return end
+    if force then
+        for _, l in ipairs(out) do ns.LogRaw("rec", l) end      -- full snapshots: one per unit
+    else
+        ns.LogRaw("rec", table.concat(out, "  //  "))
     end
 end
 

@@ -387,8 +387,8 @@ function Frame.SetupSecure(f)
         ns.Log("click", "%s %s on unit %s (type=%s, menu=%s)", Frame.Label(self), button, self:GetAttribute("unit"),
             self:GetAttribute(button == "RightButton" and "*type2" or "*type1"), ns.db.global.menuMode)
     end)
-    f:HookScript("OnShow", function(self) ns.Log("show", "%s shown (unit %s)", Frame.Label(self), self.hunit) end)
-    f:HookScript("OnHide", function(self) ns.Log("show", "%s hidden (unit %s)", Frame.Label(self), self.hunit) end)
+    f:HookScript("OnShow", function(self) ns.LogBatch("units", "%s shown", Frame.Label(self)) end)
+    f:HookScript("OnHide", function(self) ns.LogBatch("units", "%s hidden", Frame.Label(self)) end)
 end
 
 ---------------------------------------------------------------------------
@@ -412,7 +412,7 @@ function Frame.SetUnit(f, unit)
         if unit then Frame.Update(f) end
         return
     end
-    ns.Log("unit", "%s: unit %s -> %s", Frame.Label(f), f.hunit, unit)
+    ns.LogBatch("units", "%s %s -> %s", Frame.Label(f), f.hunit, unit)
     f.hunit = unit
     f.evUnit = unit
     local ev = f.ev
