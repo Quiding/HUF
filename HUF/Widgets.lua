@@ -135,7 +135,42 @@ function UI.Slider(parent, width, text, min, max, step, get, set, fmt)
         updating = true
         s:SetValue(get())
         value:SetFormattedText(fmt, get())
+        if c.input and not c.input:HasFocus() then c.input:SetText(fmt:format(get())) end
         updating = false
+    end
+    -- the value as a small edit box too: drag the slider or type a number
+    function c.EnableInput()
+        if c.input then return c end
+        value:Hide()
+        local e = CreateFrame("EditBox", nil, c)
+        e:SetSize(46, 15)
+        e:SetPoint("TOPRIGHT", 0, 2)
+        e:SetAutoFocus(false)
+        e:SetFontObject("GameFontHighlightSmall")
+        e:SetJustifyH("CENTER")
+        e:SetMaxLetters(8)
+        UI.Fill(e, 0.09, 0.09, 0.10, 1)
+        UI.Border(e, 0.25, 0.25, 0.25, 1)
+        local function Commit()
+            local v = tonumber(e:GetText())
+            if v then
+                v = math.max(min, math.min(max, math.floor(v / step + 0.5) * step))
+                local old = get()
+                if not (type(old) == "number" and math.abs(old - v) < step / 1000) then
+                    set(v)
+                    ns.Log("config", "%s = %s", text, v)
+                    ns.Refresh()
+                end
+            end
+            e:SetText(fmt:format(get()))
+            c.Refresh()
+        end
+        e:SetScript("OnEnterPressed", function(self) Commit() self:ClearFocus() end)
+        e:SetScript("OnEditFocusLost", Commit)
+        e:SetScript("OnEscapePressed", function(self) self:SetText(fmt:format(get())) self:ClearFocus() end)
+        c.input = e
+        e:SetText(fmt:format(get()))
+        return c
     end
     s:SetScript("OnValueChanged", function(_, v)
         if updating then return end
@@ -146,6 +181,7 @@ function UI.Slider(parent, width, text, min, max, step, get, set, fmt)
         set(v)
         ns.Log("config", "%s = %s", text, v)
         value:SetFormattedText(fmt, v)
+        if c.input and not c.input:HasFocus() then c.input:SetText(fmt:format(v)) end
         ns.Refresh()
     end)
     s:SetScript("OnMouseWheel", function(self, delta)

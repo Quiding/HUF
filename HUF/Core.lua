@@ -459,9 +459,9 @@ local function BuildDefaults()
     -- Raid frames (Raid.lua): three raid profiles, the same for now (the
     -- user gives Basic / Healer their own values later). A profile = the
     -- frame settings (read by Frame.lua like a unit's) + the raid layout.
-    local function RaidProfile()
+    local function RaidProfile(w, h)
         local r = UnitDefaults({ "TOPLEFT", "TOPLEFT", 20, -200 })   -- group 1 when it is anchored to the screen
-        r.width, r.height = 125, 20
+        r.width, r.height = w or 125, h or 20
         r.health.colorMode = "CLASS"
         r.health.color = C(0.20, 0.65, 0.30)                    -- #33a64d
         r.health.high, r.health.mid, r.health.low = C(0.20, 0.75, 0.30), C(1.00, 0.70, 0.10), C(0.85, 0.15, 0.15)
@@ -477,11 +477,16 @@ local function BuildDefaults()
         r.threatBorder = true                                   -- red edge while an NPC attacks the member
         r.layout = {
             growth = "DOWN",        -- members in a group: DOWN | UP | RIGHT | LEFT (also decides how groups stack)
-            padX = 5, padY = 10,    -- space between groups
+            padX = 7, padY = 15,    -- space between groups
             anchors = {},           -- [G1..G8 / MT / PET] = { to = "SCREEN" | key, x, y } once changed by hand; else automatic
         }
         return r
     end
+
+    -- Basic: small, no resource bars, no cast bars
+    local basicRaid = RaidProfile(90, 22)
+    basicRaid.power.enabled = false
+    basicRaid.castBar.enabled = false
 
     return {
         global = {
@@ -518,7 +523,7 @@ local function BuildDefaults()
         raid = {
             enabled = false,        -- HUF's raid frames (Blizzard's while off)
             profile = "BASIC",      -- BASIC | HEALER | CUSTOM
-            profiles = { BASIC = RaidProfile(), HEALER = RaidProfile(), CUSTOM = RaidProfile() },
+            profiles = { BASIC = basicRaid, HEALER = RaidProfile(100, 35), CUSTOM = RaidProfile() },
         },
         -- damage meter: the game's meter data in a HUF window, privacy names
         damageMeter = {
@@ -1294,6 +1299,30 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 23
+    end
+    -- 0.5.43: raid profile defaults (Basic 90 x 22 without resource / cast bars, Healer 100 x 35,
+    -- padding 7 / 15) where a profile still has the 0.5.42 defaults
+    if HUFDB.dataVersion < 24 then
+        for _, prof in pairs(HUFDB.profiles or {}) do
+            local raid = type(prof.raid) == "table" and prof.raid.profiles
+            if type(raid) == "table" then
+                for key, r in pairs(raid) do
+                    if type(r) == "table" then
+                        if r.width == 125 and r.height == 20 then
+                            if key == "BASIC" then r.width, r.height = 90, 22
+                            elseif key == "HEALER" then r.width, r.height = 100, 35 end
+                        end
+                        local l = r.layout
+                        if type(l) == "table" and l.padX == 5 and l.padY == 10 then l.padX, l.padY = 7, 15 end
+                        if key == "BASIC" then
+                            if type(r.power) == "table" and r.power.enabled == true then r.power.enabled = false end
+                            if type(r.castBar) == "table" and r.castBar.enabled == true then r.castBar.enabled = false end
+                        end
+                    end
+                end
+            end
+        end
+        HUFDB.dataVersion = 24
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

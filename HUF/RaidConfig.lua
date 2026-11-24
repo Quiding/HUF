@@ -98,14 +98,14 @@ local function MainTab(f, page, H)
     UI.Tooltip(ex, "Show Example Bars", "Shows all groups, main tanks and pets with made-up members and the current settings (also in unlock mode, where each group can be dragged). Click again to hide them.")
     local half = (S.width - 16) / 2
     Pair(S, sp,
-        UI.Slider(sp, half, "Width", 40, 300, 1, function() return P().width end, function(v) P().width = v end),
-        UI.Slider(sp, half, "Height", 10, 80, 1, function() return P().height end, function(v) P().height = v end))
+        UI.Slider(sp, half, "Width", 40, 300, 1, function() return P().width end, function(v) P().width = v end).EnableInput(),
+        UI.Slider(sp, half, "Height", 10, 80, 1, function() return P().height end, function(v) P().height = v end).EnableInput())
     S:Cycle("Group Growth Direction", GROWTHS, function() return L().growth end, function(v) L().growth = v end,
         "How members line up in a group; also how the groups stack while they follow each other: Top > Bottom / Bottom > Top put groups 1-4 side by side and 5-8 in a second row; Left > Right / Right > Left put all eight groups below each other. Main tanks and pets always go below the groups.")
     S:Slider("Opacity", 0.1, 1, 0.05, function() return P().alpha end, function(v) P().alpha = v end, "%.2f")
     Pair(S, sp,
-        UI.Slider(sp, half, "Horizontal Padding", 0, 40, 1, function() return L().padX end, function(v) L().padX = v end),
-        UI.Slider(sp, half, "Vertical Padding", 0, 40, 1, function() return L().padY end, function(v) L().padY = v end))
+        UI.Slider(sp, half, "Horizontal Padding", 0, 40, 1, function() return L().padX end, function(v) L().padX = v end).EnableInput(),
+        UI.Slider(sp, half, "Vertical Padding", 0, 40, 1, function() return L().padY end, function(v) L().padY = v end).EnableInput())
 
     -- Frame Anchoring ------------------------------------------------------
     local FA_Y = -(SP_H + GAP)
@@ -165,7 +165,8 @@ local function MainTab(f, page, H)
     local function HP(k) return function() return P().health[k] end, function(v) P().health[k] = v end end
     local function Mode(m) return function() return P().health.colorMode == m end end
     R:Cycle("Bar Texture", ns.TextureChoices, HP("texture"))
-    R:Cycle("Bar Color", COLOR_MODES, HP("colorMode"), "By class: the member's class colour. By status: green / amber / red by health left. Static: one colour.")
+    local gm, sm = HP("colorMode")
+    R:Cycle("Bar Colour", COLOR_MODES, gm, sm, "By class: the member's class colour. By status: green / amber / red by health left. Static: one colour.")
     Gate(R:Color("Static Colour", HP("color")), Mode("STATIC"))
     Gate(R:Color("Status: above 75%", HP("high")), Mode("STATUS"))
     Gate(R:Color("Status: above 40%", HP("mid")), Mode("STATUS"))
@@ -230,6 +231,19 @@ ns.RegisterPage("raid", "Raid", "frames", function(page)
     end, "Basic, Healer or Custom: each keeps its own raid frame settings. For now all three start the same.")
     prof:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, 0)
     table.insert(page.widgets, prof)
+    local reset = UI.Button(page, 90, "Reset profile", function()
+        local key = DB().profile
+        local name = key
+        for _, c in ipairs(RD().PROFILES) do if c.value == key then name = c.text end end
+        UI.Confirm(("Put the raid profile \"%s\" back to its default settings?"):format(name), "Reset", function()
+            DB().profiles[key] = ns.CopyTable(ns.DEFAULTS.raid.profiles[key])
+            ns.Log("config", "raid profile %s reset", key)
+            ns.Refresh()
+            ns.RefreshConfig()
+        end, "Cancel")
+    end)
+    reset:SetPoint("RIGHT", prof, "LEFT", -8, 0)
+    UI.Tooltip(reset, "Reset profile", "Puts the selected raid profile (size, layout, look, anchors) back to its default settings. The other profiles stay as they are.")
 
     local subs, order = {}, { { "main", "Main Frames" }, { "texts", "Texts" }, { "auras", "Buffs/Debuffs" }, { "mt", "Maintank" }, { "pets", "Pets" } }
     local function Show(key)
