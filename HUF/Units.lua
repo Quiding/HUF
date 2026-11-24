@@ -74,6 +74,7 @@ function Units.HideBlizzard()
         Kill("CompactRaidFrameManager")      -- only the panel; Blizzard's raid frames stay (HUF has none yet)
     end
     if not ns.db.global.hideBlizzard then return end
+    if ns.db.raid and ns.db.raid.enabled then Kill("CompactRaidFrameContainer") end   -- back after /reload when off
     for key, list in pairs(BLIZZARD) do
         if ns.db.units[key].enabled then
             for _, name in ipairs(list) do Kill(name) end

@@ -572,6 +572,28 @@ local function BoxSpecs()
             point = function() return q().point end, size = function() return 700, 450 end,
             scale = function() return q().scale or 1 end, apply = QL.Look }
     end
+    local RD = ns.Raid
+    if RD and ns.db.raid then
+        local drag = {}
+        for _, key in ipairs(RD.KEYS) do
+            list["raid" .. key] = { label = "Raid: " .. RD.TITLES[key], page = "raid",
+                on = function() return ns.db.raid.enabled end,
+                frame = function() return RD.PreviewFrame(key) end,
+                point = function()
+                    local _, x, y = RD.Anchor(key)
+                    drag[key] = { "TOPLEFT", "TOPLEFT", x, y }
+                    return drag[key]
+                end,
+                size = function() return RD.GroupSize(key) end,
+                apply = function()
+                    local p = drag[key]
+                    if not p then return end
+                    local to = RD.Anchor(key)
+                    RD.SetAnchor(key, to, p[3], p[4])
+                    ns.Refresh()
+                end }
+        end
+    end
     local LF = ns.LootFeed
     if LF and ns.db.lootFeed then
         local c = function() return ns.db.lootFeed end
@@ -637,6 +659,7 @@ function Movers.SetUnlocked(on)
     if on and InCombatLockdown() then ns.Print("Not in combat.") return end
     ns.unlocked = on and true or false
     ns.Log("move", "unlock mode %s", ns.unlocked and "on" or "off")
+    if ns.Raid then pcall(ns.Raid.SetUnlocked, ns.unlocked) end   -- example bars first: the boxes cover them
     if ns.unlocked then
         Movers.LayoutAll()
     else

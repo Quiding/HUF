@@ -153,12 +153,27 @@ local function OnLeave() GameTooltip:Hide() end
 local CAST_EVENT = {}
 for _, e in ipairs(ns.Cast.EVENTS) do CAST_EVENT[e] = true end
 
+-- a cast bar limited to some classes (raid frames): this member's class in it?
+local function CastAllowed(f)
+    local cb = f.s.castBar
+    if not (cb and cb.enabled) then return false end
+    if type(cb.classes) ~= "table" then return true end
+    local class
+    if f.fake then class = f.fake.class
+    elseif f.hunit then
+        local ok, _, token = pcall(UnitClass, f.hunit)
+        if ok and not IsSecret(token) then class = token end
+    end
+    return class ~= nil and cb.classes[class] == true
+end
+Frame.CastAllowed = CastAllowed
+
 local function OnUnitEvent(ev, event, _, castGUID, spellID, interruptedBy)
     local f = ev.owner
     if not f.hunit or f.fake then return end
     if CAST_EVENT[event] then
         local cb = f.s.castBar
-        if cb and cb.enabled then
+        if CastAllowed(f) then
             ns.Cast.OnEvent(f.cast, f.hunit, event, castGUID, spellID, interruptedBy, cb.interruptTime)
         end
     elseif event == "UNIT_HEAL_PREDICTION" then
@@ -200,7 +215,7 @@ end
 
 function Frame.Build(f, key, secure)
     f.key = key
-    f.s = ns.db.units[key]
+    f.s = ns.UnitSettings(key)
     f.secure = secure
 
     f.bg = f:CreateTexture(nil, "BACKGROUND", nil, -8)
@@ -582,7 +597,7 @@ function Frame.LayoutCast(f, level)
     c.showInterrupt = cb.interrupt
     c.interruptColor = cb.interruptColor
     if f.fake then return end
-    if f.hunit then ns.Cast.Start(c, f.hunit) end
+    if f.hunit and CastAllowed(f) then ns.Cast.Start(c, f.hunit) end
 end
 
 -- a made-up cast for the unlock preview
@@ -1118,8 +1133,10 @@ function Frame.Update(f)
     Frame.UpdateTexts(f)
     Frame.UpdatePortrait(f)
     Frame.UpdateHappiness(f)
-    local cb = f.s.castBar
-    if not f.fake and cb and cb.enabled and f.cast then ns.Cast.Start(f.cast, f.hunit) end
+    if not f.fake and f.cast then
+        if CastAllowed(f) then ns.Cast.Start(f.cast, f.hunit)
+        elseif f.s.castBar and f.s.castBar.enabled then ns.Cast.Stop(f.cast, true) end
+    end
     Frame.UpdateRange(f)
     pcall(Frame.UpdateAuraSight, f)
 end
@@ -1171,7 +1188,7 @@ function Frame.UpdateRange(f)
 end
 
 function Frame.Apply(f)
-    f.s = ns.db.units[f.key]
+    f.s = ns.UnitSettings(f.key)
     Frame.LayoutSecure(f)
     Frame.LayoutInner(f)
     Frame.Update(f)

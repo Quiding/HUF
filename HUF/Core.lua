@@ -65,6 +65,14 @@ ns.UNIT_BY_KEY = {}
 for _, u in ipairs(ns.UNITS) do ns.UNIT_BY_KEY[u.key] = u end
 for _, u in ipairs(ns.GROUPS) do ns.UNIT_BY_KEY[u.key] = u end
 -- every frame with a settings page, in page order
+-- a frame's settings: a unit's table, for "raid" the active raid profile's
+function ns.UnitSettings(key)
+    if key == "raid" then
+        local r = ns.db.raid
+        return r.profiles[r.profile] or r.profiles.BASIC
+    end
+    return ns.db.units[key]
+end
 ns.FRAME_KEYS = {}
 for _, u in ipairs(ns.UNITS) do ns.FRAME_KEYS[#ns.FRAME_KEYS + 1] = u end
 for _, u in ipairs(ns.GROUPS) do ns.FRAME_KEYS[#ns.FRAME_KEYS + 1] = u end
@@ -448,6 +456,33 @@ local function BuildDefaults()
     }
     u.party = g
 
+    -- Raid frames (Raid.lua): three raid profiles, the same for now (the
+    -- user gives Basic / Healer their own values later). A profile = the
+    -- frame settings (read by Frame.lua like a unit's) + the raid layout.
+    local function RaidProfile()
+        local r = UnitDefaults({ "TOPLEFT", "TOPLEFT", 20, -200 })   -- group 1 when it is anchored to the screen
+        r.width, r.height = 125, 20
+        r.health.colorMode = "CLASS"
+        r.health.color = C(0.20, 0.65, 0.30)                    -- #33a64d
+        r.health.high, r.health.mid, r.health.low = C(0.20, 0.75, 0.30), C(1.00, 0.70, 0.10), C(0.85, 0.15, 0.15)
+        r.power.enabled, r.power.size, r.power.gap = true, 4, 0
+        r.healPred.alpha = 0.55
+        r.texts.health = Texts({ CENTER = { "[name]", 11 } })
+        r.texts.power = Texts()
+        r.debuffs.enabled, r.buffs.enabled = false, false
+        r.castBar.enabled = true
+        r.castBar.classes = { DRUID = true, PALADIN = true, PRIEST = true, SHAMAN = true }
+        r.castBar.iconSize = 10
+        r.group = { range = true, rangeAlpha = 0.4 }
+        r.threatBorder = true                                   -- red edge while an NPC attacks the member
+        r.layout = {
+            growth = "DOWN",        -- members in a group: DOWN | UP | RIGHT | LEFT (also decides how groups stack)
+            padX = 5, padY = 10,    -- space between groups
+            anchors = {},           -- [G1..G8 / MT / PET] = { to = "SCREEN" | key, x, y } once changed by hand; else automatic
+        }
+        return r
+    end
+
     return {
         global = {
             accent = "BLUE", accentColor = C(0.31, 0.70, 1.00),
@@ -480,6 +515,11 @@ local function BuildDefaults()
             mmt = "ALWAYS",            -- MMT team members: ALWAYS | OUTSIDE (only with MMT's "hide outside") | NEVER
         },
         units = u,
+        raid = {
+            enabled = false,        -- HUF's raid frames (Blizzard's while off)
+            profile = "BASIC",      -- BASIC | HEALER | CUSTOM
+            profiles = { BASIC = RaidProfile(), HEALER = RaidProfile(), CUSTOM = RaidProfile() },
+        },
         -- damage meter: the game's meter data in a HUF window, privacy names
         damageMeter = {
             enabled = true,

@@ -576,4 +576,3 @@ local function Later(key, title, text)
     end)
 end
 Later("focus", "Focus Target", "The focus target frame comes in a later version.")
-Later("raid", "Raid", "Raid frames come in a later version.")

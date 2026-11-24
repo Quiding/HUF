@@ -256,6 +256,7 @@ function ns.FrameReport(add)
     if ns.Windows then ns.Windows.Report(add) end
     if ns.QuestLog then ns.QuestLog.Report(add) end
     if ns.QuestLinks then ns.QuestLinks.Report(add) end
+    if ns.Raid then ns.Raid.Report(add) end
     do
         local api = C_PetInfo and C_PetInfo.GetPetHappiness and "C_PetInfo" or (GetPetHappiness and "global" or "none")
         local okH, h = pcall(function() return (C_PetInfo and C_PetInfo.GetPetHappiness or GetPetHappiness)() end)

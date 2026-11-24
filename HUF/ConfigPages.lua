@@ -43,6 +43,7 @@ local function TextureChoices()
     end
     return l
 end
+ns.TextureChoices = TextureChoices
 
 local function BackgroundChoices()
     local l = {}
