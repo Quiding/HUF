@@ -75,9 +75,10 @@ local function Add(text)
     log[#log + 1] = line
     local n = #log
     if n > MAX_LINES + TRIM_STEP then
+        -- (the game's Lua 5.1 has no table.move: copy by hand)
         local drop = n - MAX_LINES
-        table.move(log, drop + 1, n, 1)
-        for i = n, n - drop + 1, -1 do log[i] = nil end
+        for i = 1, MAX_LINES do log[i] = log[i + drop] end
+        for i = n, MAX_LINES + 1, -1 do log[i] = nil end
     end
     if d.chat then DEFAULT_CHAT_FRAME:AddMessage("|cff888888HUF " .. line .. "|r") end
 end
