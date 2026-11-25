@@ -42,7 +42,7 @@ local function MeterPage(f)
     L:Check("Reduce opacity out of combat", gf, sf, "All windows at the opacity below while out of combat; a window under the mouse is fully visible.")
     L:Slider("Opacity out of combat", 0, 1, 0.05, function() return D().fadeAlpha end, function(v) D().fadeAlpha = v end, "%.2f")
     local gh, sh = Opt("hideThreatOOC")
-    L:Check("Hide threat windows out of combat", gh, sh, "A window showing threat appears when a fight starts and goes when it ends. Switched to threat out of combat, it stays until the next fight is over.")
+    L:Check("Hide threat windows out of combat", gh, sh, "A window showing threat appears when a fight starts and goes when it ends. Switched to threat out of combat, it stays until the next fight is over. While these settings are open or in unlock mode every window shows, so you can move and change them.")
     local gp, sp = Opt("threatPets")
     L:Check("Threat: pets too", gp, sp)
     local gc, sc = Opt("threatColors")
@@ -133,6 +133,9 @@ local function TitlePage(f)
 end
 
 ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
+    -- open page: hidden threat windows show (DM.Editing), closed: hidden again
+    page:HookScript("OnShow", function() if ns.DamageMeter then ns.DamageMeter.Apply() end end)
+    page:HookScript("OnHide", function() if ns.DamageMeter then C_Timer.After(0, ns.DamageMeter.Apply) end end)
     local on = UI.Check(page, 260, "Use HUF's damage meter", function() return D().enabled end,
         function(v) D().enabled = v end, "The game's own meter data in a HUF window, with privacy names. Also /huf meter.")
     on:SetPoint("TOPLEFT", 0, 4)

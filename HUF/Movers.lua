@@ -660,6 +660,7 @@ function Movers.SetUnlocked(on)
     ns.unlocked = on and true or false
     ns.Log("move", "unlock mode %s", ns.unlocked and "on" or "off")
     if ns.Raid then pcall(ns.Raid.SetUnlocked, ns.unlocked) end   -- example bars first: the boxes cover them
+    if ns.DamageMeter and ns.db.damageMeter.enabled then pcall(ns.DamageMeter.Apply) end   -- hidden threat windows show for moving
     if ns.unlocked then
         Movers.LayoutAll()
     else

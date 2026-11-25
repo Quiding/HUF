@@ -1747,10 +1747,17 @@ end
 
 -- threat windows out of combat (option): hidden. One switched to threat out of
 -- combat stays until the next fight is over, so it doesn't vanish on the spot.
+-- In unlock mode or while the damage meter settings are open every window
+-- shows, so threat windows can be moved and changed out of combat too.
+function DM.Editing()
+    if ns.unlocked then return true end
+    local page = ns.configPages and ns.configPages.damagemeter
+    return page and page.frame and page.frame:IsVisible() and true or false
+end
 local function WindowWanted(w)
     local c = S()
     if not (c.hideThreatOOC and w.cfg and w.cfg.meterType == "Threat") then return true end
-    if InCombatLockdown() then return true end
+    if InCombatLockdown() or DM.Editing() then return true end
     return w.keepThreat and true or false
 end
 
