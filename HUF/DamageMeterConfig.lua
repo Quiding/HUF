@@ -181,7 +181,7 @@ local function TitlePage(f)
     R:Slider("Icon size (at most the title bar's height - 2)", 10, 32, 1, Opt("titleIconSize"))
     local gm, sm = Opt("titleIconsMuted")
     R:Check("Muted icons", gm, sm, "Grey and dimmed to fit the dark title bar; the accent colour under the mouse. Off: the icons in their own colours.")
-    R:Note("Title bar: meter type and fight (click: list, mouse wheel: step through), + new window, R reset, x close.")
+    R:Note("Title bar: meter type and fight (click: list, mouse wheel: step through; the fight list ends with \"Reset all fights\"), + new window, x close (the window and its settings; the last window turns the meter off).")
 end
 
 ns.RegisterPage("damagemeter", "Damage meter", "general", function(page)

@@ -1400,23 +1400,24 @@ local function Layout()
     end
     ns.ApplyFont(w.label, c.font, c.titleSize, c.outline)
     w.label:SetTextColor(1, 1, 1)
+    -- every window has its x (also while locked); reset is in the fight list now,
+    -- the old R button stays as a zero-width anchor
     local resetB = w.resetText:GetParent()
-    -- the extra windows' x: not while the meter is locked
-    local closable = (w.index or 1) > 1 and not c.locked
     local closeB = w.closeText:GetParent()
-    closeB:SetShown(closable)
-    closeB:SetWidth(closable and 14 or 0.1)
+    closeB:Show()
+    closeB:SetWidth(14)
     resetB:ClearAllPoints()
-    resetB:SetPoint("TOPRIGHT", closeB, "TOPLEFT", closable and -2 or 0, 0)
-    resetB:SetPoint("BOTTOMRIGHT", closeB, "BOTTOMLEFT", closable and -2 or 0, 0)
-    resetB:SetWidth(14)
+    resetB:SetPoint("TOPRIGHT", closeB, "TOPLEFT", -1, 0)
+    resetB:SetPoint("BOTTOMRIGHT", closeB, "BOTTOMLEFT", -1, 0)
+    resetB:SetWidth(0.1)
+    resetB:Hide()
     w.typeB:ClearAllPoints()
     w.sessB:ClearAllPoints()
     w.addB:ClearAllPoints()
     w.label:ClearAllPoints()
     if c.titleIcons then
         -- like EllesmereUI's header: the name at the left; at the right the
-        -- meter type and fight icons, + new window, R reset, x close
+        -- meter type and fight icons, + new window, x close
         local is = math.max(8, math.min(c.titleIconSize or 18, th - 2))
         w.addB:SetPoint("TOPRIGHT", resetB, "TOPLEFT", -3, 0)
         w.addB:SetPoint("BOTTOMRIGHT", resetB, "BOTTOMLEFT", -3, 0)
@@ -1547,7 +1548,7 @@ local function TitleDropdown(parent, items, get, set, tip)
         if self.disabled then return end
         local list, cur, idx = items(), get(), nil
         local values = {}
-        for _, e in ipairs(list) do if not e.header then values[#values + 1] = e.value end end
+        for _, e in ipairs(list) do if not e.header and not e.noWheel then values[#values + 1] = e.value end end
         for i, v in ipairs(values) do if v == cur then idx = i end end
         idx = ((idx or 1) - 1 - delta) % #values + 1
         set(values[idx])
@@ -1663,33 +1664,36 @@ local function Build(index)
     w.addB = add
     w.quickLast = add
 
-    -- close (every window but the first)
-    local close = TitleButton(title, function() DM.CloseWindow(w.index) end, "Close this window")
+    -- close: this window and its settings (the last one: the meter off)
+    local close = TitleButton(title, function() DM.CloseWindow(w.index) end, "Close this window (its settings go)")
     close:SetPoint("TOPRIGHT", -3, 0)
     close:SetPoint("BOTTOMRIGHT", -3, 0)
-    close:SetWidth(index > 1 and 14 or 0.1)
+    close:SetWidth(14)
     close.text:SetText("x")
-    close:SetShown(index > 1)
     w.closeText = close.text
 
-    local reset = TitleButton(title, function()
-        UI.Confirm("Reset all damage meter data?", "Reset", function()
-            if Available() and C_DamageMeter.ResetAllCombatSessions then pcall(C_DamageMeter.ResetAllCombatSessions) end
-            for _, o in ipairs(wins) do if o.cfg then o.cfg.session = "CURRENT" end end
-            DM.Refresh()
-        end)
-    end, "Reset all fights")
-    reset:SetPoint("TOPRIGHT", close, "TOPLEFT", index > 1 and -2 or 0, 0)
-    reset:SetPoint("BOTTOMRIGHT", close, "BOTTOMLEFT", index > 1 and -2 or 0, 0)
-    reset:SetWidth(14)
-    reset.text:SetText("R")
+    -- (no R button any more: "Reset all fights" is the last entry of the fight list)
+    local reset = TitleButton(title, function() end, "")
+    reset:SetPoint("TOPRIGHT", close, "TOPLEFT", -1, 0)
+    reset:SetPoint("BOTTOMRIGHT", close, "BOTTOMLEFT", -1, 0)
+    reset:SetWidth(0.1)
+    reset:Hide()
     w.resetText = reset.text
 
     local sessB = TitleDropdown(title, function()
         local l = {}
         for _, e in ipairs(DM.Sessions()) do l[#l + 1] = { value = e.id, text = e.text } end
+        l[#l + 1] = { value = "HUF_RESET", text = "|cffff6060Reset all fights|r", noWheel = true }   -- the wheel never lands on it
         return l
     end, function() return w.cfg.session end, function(v)
+        if v == "HUF_RESET" then
+            UI.Confirm("Reset all damage meter data?", "Reset", function()
+                if Available() and C_DamageMeter.ResetAllCombatSessions then pcall(C_DamageMeter.ResetAllCombatSessions) end
+                for _, o in ipairs(wins) do if o.cfg then o.cfg.session = "CURRENT" end end
+                DM.Refresh()
+            end)
+            return
+        end
         w.cfg.session = v
         w.offset = 0
         DM.Refresh()
@@ -1898,10 +1902,20 @@ function DM.AddWindow()
     if ns.RefreshConfig then ns.RefreshConfig() end
 end
 
--- closes window i (not the first): its settings go, the ones after move up
+-- closes window i: its settings go, the ones after move up; the only
+-- window left: asks, then turns the meter off (its settings stay)
 function DM.CloseWindow(i)
     local c = S()
-    if i <= 1 or i > c.windowCount then return end
+    i = i or 1
+    if i < 1 or i > c.windowCount then return end
+    if c.windowCount <= 1 then
+        UI.Confirm("Turn the damage meter off? (Back on: settings > Damage meter, or /huf meter)", "Turn off", function()
+            c.enabled = false
+            DM.Apply()
+            if ns.RefreshConfig then ns.RefreshConfig() end
+        end, "Cancel")
+        return
+    end
     -- the closed window's breakdown and those after it (their settings move up)
     for j = i, #wins do
         local w = wins[j]
