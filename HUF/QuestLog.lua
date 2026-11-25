@@ -366,6 +366,7 @@ end
 -- The quest list (classic title buttons)
 ---------------------------------------------------------------------------
 local rows = {}
+local QUEST_INDENT = 12      -- quests further in than their category title
 local function NewRow(i)
     local r = CreateFrame("Button", nil, frame.listChild)
     r:SetSize(frame.listW, RowH())
@@ -428,6 +429,10 @@ local function DrawList()
                 r:SetPoint("TOPLEFT", frame.listChild, "TOPLEFT", 0, -(i - 1) * RowH())
                 Font(r.text, "list")
                 Font(r.tag, "list")
+                -- quests sit a little further in than their category
+                local indent = e.header and 0 or QUEST_INDENT
+                r.text:SetPoint("LEFT", 20 + indent, 0)
+                r.check:SetPoint("LEFT", 2 + indent, 0)
                 if e.header then
                     r.expand:SetTexture(e.collapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up")
                     r.expand:Show()
