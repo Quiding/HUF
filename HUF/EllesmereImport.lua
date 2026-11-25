@@ -720,7 +720,6 @@ local function ConvertDamageMeter(addon, m, notes)
     local vis = G("visibility", "always")
     m.show = "ALWAYS"
     m.fadeOOC = false
-    m.hideThreatOOC = false             -- Ellesmere keeps its threat window out of combat
     if w.hideOutOfInstance then
         m.show = "INSTANCE"
     elseif DM_SHOW[vis] then

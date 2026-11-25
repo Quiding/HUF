@@ -1781,11 +1781,10 @@ function DM.Editing()
     local page = ns.configPages and ns.configPages.damagemeter
     return page and page.frame and page.frame:IsVisible() and true or false
 end
+-- (0.5.51: "Hide threat windows out of combat" is gone - "Show" decides for
+-- every window, "In combat" included)
 local function WindowWanted(w)
-    local c = S()
-    if not (c.hideThreatOOC and w.cfg and w.cfg.meterType == "Threat") then return true end
-    if InCombatLockdown() or DM.Editing() then return true end
-    return w.keepThreat and true or false
+    return true
 end
 
 -- out of combat (option): all windows at the set opacity, full while the

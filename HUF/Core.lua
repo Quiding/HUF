@@ -573,7 +573,6 @@ local function BuildDefaults()
             threatPets = true,          -- threat view: pets too
             threatColors = true,        -- threat view: bars in the game's threat colours
             fadeOOC = true, fadeAlpha = 0.4,   -- out of combat: windows at this opacity (full under the mouse)
-            hideThreatOOC = true,       -- windows showing threat: hidden out of combat
             -- look (defaults: HUF's own; an EllesmereUI import sets Ellesmere's)
             bgColor = C(0.04, 0.04, 0.05),
             windowBorder = true,        -- a thin grey line around each window

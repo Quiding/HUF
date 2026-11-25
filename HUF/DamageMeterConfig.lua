@@ -85,18 +85,17 @@ local function MeterPage(f)
     L:Header("Meter (all windows)")
     local gb, sb = Opt("hideBlizzard")
     L:Check("Hide Blizzard's damage meter", gb, sb, "Switches the game's meter window off while HUF's is on, and back on when HUF's is off.")
+    local gShow, sShow = Opt("show")
     L:Cycle("Show", {
         { value = "ALWAYS", text = "Always" },
         { value = "GROUP", text = "In a group" },
         { value = "INSTANCE", text = "In instances" },
         { value = "COMBAT", text = "In combat" },
-    }, Opt("show"))
+    }, gShow, sShow, "When the windows show. While these settings are open or in unlock mode they always show, so you can move and change them.")
     L:Slider("Windows", 1, 5, 1, Opt("windowCount"))
     local gf, sf = Opt("fadeOOC")
     L:Check("Reduce opacity out of combat", gf, sf, "All windows at the opacity below while out of combat; a window under the mouse is fully visible.")
     L:Slider("Opacity out of combat", 0, 1, 0.05, function() return D().fadeAlpha end, function(v) D().fadeAlpha = v end, "%.2f")
-    local gh, sh = Opt("hideThreatOOC")
-    L:Check("Hide threat windows out of combat", gh, sh, "A window showing threat appears when a fight starts and goes when it ends. Switched to threat out of combat, it stays until the next fight is over. While these settings are open or in unlock mode every window shows, so you can move and change them.")
     local gp, sp = Opt("threatPets")
     L:Check("Threat: pets too", gp, sp)
     local gc, sc = Opt("threatColors")
