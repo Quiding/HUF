@@ -43,7 +43,7 @@ local function Ordered(section)
 end
 
 -- the Utility Frames tabs, in this order; their old page keys still open them
-local UTILITY = { { "bags", "Bags" }, { "chat", "Chat" }, { "minimap", "Minimap" }, { "questlog", "Quest Log" }, { "aurabars", "De-/Buff Bar" } }
+local UTILITY = { { "bags", "Bags" }, { "chat", "Chat" }, { "minimap", "Minimap" }, { "questlog", "Quest Log" }, { "aurabars", "De-/Buff Bar" }, { "tooltips", "Tooltips" } }
 local UTIL_OF = {}
 for _, t in ipairs(UTILITY) do UTIL_OF[t[1]] = true end
 local UTIL_TOP = 28

@@ -594,6 +594,14 @@ local function BoxSpecs()
                 end }
         end
     end
+    if ns.Tooltips and ns.db.tooltip then
+        local tc = function() return ns.db.tooltip end
+        list.tooltip = { label = "Tooltip (fixed place)", page = "tooltips",
+            on = function() return tc().enabled and (tc().anchor == "FIXED" or tc().combatFixed) end,
+            point = function() return tc().point end,
+            size = function() return 220, 90 end,
+            apply = function() ns.Tooltips.Apply() end }
+    end
     local LF = ns.LootFeed
     if LF and ns.db.lootFeed then
         local c = function() return ns.db.lootFeed end

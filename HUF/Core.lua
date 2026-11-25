@@ -601,6 +601,16 @@ local function BuildDefaults()
             categories = { list = {}, quests = {} },               -- own quest categories (HUF.QuestLog API)
             chatLinks = true,                                      -- quest links in chat: coloured, a click opens HUF's quest window
         },
+        -- the game's tooltips (Utility Frames > Tooltips)
+        tooltip = {
+            enabled = true,
+            anchor = "CURSOR_RIGHT",     -- CURSOR_LEFT | CURSOR_RIGHT | FIXED
+            combatFixed = true,          -- in combat at the fixed place
+            targetOfTarget = true, title = false, spellID = true,
+            bgColor = C(0.05, 0.05, 0.06), bgAlpha = 0.85,
+            border = "ACCENT", borderColor = C(0.30, 0.30, 0.30),   -- ACCENT | CUSTOM
+            point = { "BOTTOMRIGHT", "BOTTOMRIGHT", -40, 140 },      -- the fixed place
+        },
         -- loot feed (General > Loot Feed): rows for what you gain, fading out
         lootFeed = {
             fastLoot = true,            -- take every slot when the loot window opens (Shift: the normal window)
