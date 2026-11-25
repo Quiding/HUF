@@ -103,7 +103,7 @@ local function Tiles(page)
     local gated = {}
 
     -- General ---------------------------------------------------------------
-    local G_H = 240
+    local G_H = 262
     local gt, G = ns.ConfigTile(page, 0, TOP, TILE_W, G_H, "General", "Interface\\Icons\\INV_Misc_Gear_01")
     local gl, sl = Opt("locked")
     G:Check("Lock Frame", gl, sl, "No dragging by the title bar (unlock mode still moves it).")
@@ -120,10 +120,11 @@ local function Tiles(page)
     gated[#gated + 1] = G:Check("Threat: Bars in Threat Colours", gc, sc, "Grey, yellow, orange and red (has aggro) like the game's threat warning. Only for a window that shows threat.")
     local gf, sf = Opt("fadeOOC")
     local gfa, sfa = Opt("fadeAlpha")
-    local fadeCheck = UI.Check(gt, half, "Reduce Opacity out of combat", gf, sf, "This window at the opacity on the right while out of combat; fully visible under the mouse.")
-    local fadeSlider = UI.Slider(gt, half, "Opacity", 0, 100, 5, function() return math.floor((gfa() or 0) * 100 + 0.5) end,
-        function(v) sfa(v / 100) end, "%d%%").EnableInput()
-    Pair(G, gt, fadeCheck, fadeSlider)
+    G:Check("Reduce Opacity out of combat", gf, sf, "This window at the opacity below while out of combat; fully visible under the mouse.")
+    local fadeSlider = G:Slider("Opacity out of combat", 0, 100, 5, function() return math.floor((gfa() or 0) * 100 + 0.5) end,
+        function(v) sfa(v / 100) end, "%d%%")
+    fadeSlider.EnableInput()
+    gated[#gated + 1] = { w = fadeSlider, on = function() return gf() and true or false end }
     local gk, sk = Opt("breakdownInline")
     G:Check("Data-Breakdown inside the window", gk, sk, "Clicking a name shows its spells in the same window; right-clicking the names shows the list of meters to pick one. < or a right-click goes back to the names. Off: the breakdown in a panel beside the window.")
     local gn, sn = Opt("nameHover")
@@ -197,14 +198,17 @@ local function Tiles(page)
     B:Add(th, 20)
     Pair(B, bt, Sl("Title bar height", 12, 30, 1, "titleHeight"), Sl("Title text size", 6, 20, 1, "titleSize"))
     Pair(B, bt, Cl("Title colour", "titleColor"), Sl("Icon size", 10, 32, 1, "titleIconSize"))
-    Pair(B, bt, Ck("Rank before the name", "showRank"), Ck("Accent line under the title", "titleLine"), UI.ROW + 2)
+    Pair(B, bt, Ck("Rank before the name", "showRank"), Ck("Title accent line", "titleLine", "An accent-coloured line under the title bar."), UI.ROW + 2)
     Pair(B, bt, Ck("Fight in the accent colour", "titleAccent"),
         Ck("Type and fight as icons", "titleIcons", "The meter type's name at the left, icon buttons for the meter type and the fight at the right (their names in the tooltips)."), UI.ROW + 2)
     Pair(B, bt, Ck("Muted icons", "titleIconsMuted", "Grey and dimmed to fit the dark title bar; the accent colour under the mouse. Off: the icons in their own colours."), nil, UI.ROW + 2)
 
     table.insert(page.widgets, { Refresh = function()
-        local on = D().enabled and IsThreat()
-        for _, w in ipairs(gated) do UI.SetActive(w, on) end
+        local threat = D().enabled and IsThreat()
+        for _, w in ipairs(gated) do
+            if type(w) == "table" and w.on then UI.SetActive(w.w, D().enabled and w.on())
+            else UI.SetActive(w, threat) end
+        end
     end })
 end
 
