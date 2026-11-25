@@ -65,6 +65,27 @@ local function Info(i)
             questID = questID, questLogIndex = i, frequency = frequency, hufComplete = isComplete }
     end
 end
+-- party members on a quest (as the vanilla quest log shows "[n]")
+local function MatesOn(questID, logIndex)
+    local list = {}
+    if not IsInGroup() then return list end
+    for i = 1, (GetNumSubgroupMembers and GetNumSubgroupMembers() or 0) do
+        local u = "party" .. i
+        local on
+        if CQ.IsUnitOnQuest then
+            local ok, v = pcall(CQ.IsUnitOnQuest, u, questID)
+            if ok then on = v end
+        end
+        if on == nil and IsUnitOnQuest and logIndex then
+            local ok, v = pcall(IsUnitOnQuest, logIndex, u)
+            if ok then on = v end
+        end
+        if on and not ns.IsSecret(on) and on ~= 0 then list[#list + 1] = u end
+    end
+    return list
+end
+QL.MatesOn = MatesOn
+
 local function NumEntries()
     if CQ.GetNumQuestLogEntries then return Safe(CQ.GetNumQuestLogEntries) end
     return Safe(GetNumQuestLogEntries)
@@ -392,8 +413,27 @@ local function NewRow(i)
     r.hl:SetAllPoints()
     r.hl:Hide()
     r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    r:SetScript("OnEnter", function(self) if self.entry and not self.entry.header then self.hl:Show() end end)
-    r:SetScript("OnLeave", function(self) if not (self.entry and self.entry.questID == selected) then self.hl:Hide() end end)
+    r:SetScript("OnEnter", function(self)
+        if not (self.entry and not self.entry.header) then return end
+        self.hl:Show()
+        -- group members on this quest (privacy names)
+        local mates = self.mates
+        if mates and #mates > 0 then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(PARTY_QUEST_STATUS_ON or "Party members on quest:", 1, 0.82, 0)
+            for _, u in ipairs(mates) do
+                local n = ns.NameText and ns.NameText(u) or UnitName(u)
+                local _, class = UnitClass(u)
+                local cc = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+                GameTooltip:AddLine(n or u, cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1)
+            end
+            GameTooltip:Show()
+        end
+    end)
+    r:SetScript("OnLeave", function(self)
+        if not (self.entry and self.entry.questID == selected) then self.hl:Hide() end
+        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
     r:SetScript("OnClick", function(self, button)
         local e = self.entry
         if not e then return end
@@ -442,13 +482,17 @@ local function DrawList()
                     r.tag:SetText(e.collapsed and ("(" .. e.n .. ")") or "")
                     r.tag:SetTextColor(0.6, 0.6, 0.6)
                     r.hl:Hide()
+                    r.mates = nil
                 else
                     local c = LevelColor(e.level)
                     r.expand:Hide()
                     r.check:SetShown(e.tracked)
                     local lvl = (S().levels and e.level and e.level > 0)
                         and ("[" .. e.level .. ((e.elite or (e.group and e.group > 1)) and "+" or "") .. "] ") or ""
-                    r.text:SetText(lvl .. e.title)
+                    local mates = MatesOn(e.questID, e.index)
+                    r.mates = mates
+                    local pre = #mates > 0 and ("|cff66c2ff[" .. #mates .. "]|r ") or ""
+                    r.text:SetText(pre .. lvl .. e.title)
                     r.text:SetTextColor(c.r, c.g, c.b)
                     local tag = e.failed and "(Failed)" or (e.complete and "(Complete)" or (e.daily and "(Daily)" or
                         ((e.group and e.group > 1) and ("(" .. e.group .. ")") or "")))
