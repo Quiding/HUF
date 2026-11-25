@@ -82,20 +82,22 @@ end
 -- tab 1: meter and windows
 local function MeterPage(f)
     local L = UI.Column(f, 0, 0, COL_W)
-    L:Header("Meter (all windows)")
+    L:Header("All windows")
     local gb, sb = Opt("hideBlizzard")
     L:Check("Hide Blizzard's damage meter", gb, sb, "Switches the game's meter window off while HUF's is on, and back on when HUF's is off.")
+    L:Slider("Windows", 1, 5, 1, Opt("windowCount"))
+    L:Header("Meter (the window chosen above)")
     local gShow, sShow = Opt("show")
     L:Cycle("Show", {
         { value = "ALWAYS", text = "Always" },
         { value = "GROUP", text = "In a group" },
         { value = "INSTANCE", text = "In instances" },
         { value = "COMBAT", text = "In combat" },
-    }, gShow, sShow, "When the windows show. While these settings are open or in unlock mode they always show, so you can move and change them.")
-    L:Slider("Windows", 1, 5, 1, Opt("windowCount"))
+    }, gShow, sShow, "When this window shows. While these settings are open or in unlock mode every window shows, so you can move and change them.")
     local gf, sf = Opt("fadeOOC")
-    L:Check("Reduce opacity out of combat", gf, sf, "All windows at the opacity below while out of combat; a window under the mouse is fully visible.")
-    L:Slider("Opacity out of combat", 0, 1, 0.05, function() return D().fadeAlpha end, function(v) D().fadeAlpha = v end, "%.2f")
+    L:Check("Reduce opacity out of combat", gf, sf, "This window at the opacity below while out of combat; fully visible under the mouse.")
+    local gfa, sfa = Opt("fadeAlpha")
+    L:Slider("Opacity out of combat", 0, 1, 0.05, gfa, sfa, "%.2f")
     local gp, sp = Opt("threatPets")
     L:Check("Threat: pets too", gp, sp)
     local gc, sc = Opt("threatColors")
@@ -194,14 +196,14 @@ ns.RegisterPage("damagemeter", "Damage meter", "general", function(page)
     local pick = UI.Dropdown(page, 330, "Settings of", WindowChoices, function() return sel end, function(v)
         sel = v
         ns.RefreshConfig()
-    end, "Each damage meter window has its own size and look (Window, Bars & text, Title bar). The Meter settings are the same for all windows.")
+    end, "Each damage meter window has its own settings: when it shows, fading, threat options, size and look. Only \"Hide Blizzard's damage meter\" and the number of windows are for all windows.")
     pick:SetPoint("TOPLEFT", 0, -22)
     table.insert(page.widgets, pick)
     local all = UI.Button(page, 220, "Apply settings to all frames", function()
-        UI.Confirm(("Give every damage meter window the size and look of window %d?"):format(sel), "Apply", ApplyToAll, "Cancel")
+        UI.Confirm(("Give every damage meter window the settings of window %d?"):format(sel), "Apply", ApplyToAll, "Cancel")
     end)
     all:SetPoint("LEFT", pick, "RIGHT", 16, 0)
-    UI.Tooltip(all, "Apply settings to all frames", "Copies the chosen window's size and look (Window, Bars & text, Title bar) to every other window. Their meter type, fight and place stay their own.")
+    UI.Tooltip(all, "Apply settings to all frames", "Copies the chosen window's settings (Meter, Window, Bars & text, Title bar) to every other window. Their meter type, fight and place stay their own.")
     table.insert(page.widgets, { Refresh = function() UI.SetActive(all, (D().windowCount or 1) > 1) end })
     local tabs = { { "meter", "Meter & windows" }, { "bars", "Bars & text" }, { "title", "Title bar" } }
     local subs, strip = {}, nil

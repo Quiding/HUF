@@ -27,7 +27,8 @@ local PER_WINDOW = {}
 for _, k in ipairs({ "width", "rows", "rowHeight", "rowGap", "scale", "locked", "windowBorder", "breakdownInline",
     "nameHover", "texture", "colorMode", "color", "bgAlpha", "bgColor", "icons", "rowBorder", "barBgAlpha", "barBgColor",
     "font", "fontSize", "outline", "numbers", "showRank", "titleHeight", "titleSize", "titleColor", "titleAlpha",
-    "titleLine", "titleAccent", "titleIcons", "titleIconSize", "titleIconsMuted" }) do PER_WINDOW[k] = true end
+    "titleLine", "titleAccent", "titleIcons", "titleIconSize", "titleIconsMuted",
+    "show", "fadeOOC", "fadeAlpha", "threatPets", "threatColors" }) do PER_WINDOW[k] = true end
 DM.PER_WINDOW = PER_WINDOW
 local win
 local view = setmetatable({}, {
@@ -1762,14 +1763,15 @@ end
 ---------------------------------------------------------------------------
 -- Showing, updating
 ---------------------------------------------------------------------------
+-- the meter as a whole (each window's "Show" is checked in WindowWanted)
 local function WantShown()
-    local c = S()
-    if not c.enabled or not Available() then return false end
-    if DM.Editing and DM.Editing() then return true end   -- settings open / unlock mode: always reachable
-    if c.show == "GROUP" then return IsInGroup() end
-    if c.show == "INSTANCE" then return (IsInInstance()) and true or false end
-    if c.show == "COMBAT" then return InCombatLockdown() and true or false end   -- combat start / end re-apply
-    return true
+    return ns.db.damageMeter.enabled and Available() and true or false
+end
+-- a setting of window w (its own, else the shared one)
+local function WOpt(w, k)
+    local v = w and w.cfg and w.cfg[k]
+    if v == nil then v = ns.db.damageMeter[k] end
+    return v
 end
 
 -- threat windows out of combat (option): hidden. One switched to threat out of
@@ -1784,6 +1786,11 @@ end
 -- (0.5.51: "Hide threat windows out of combat" is gone - "Show" decides for
 -- every window, "In combat" included)
 local function WindowWanted(w)
+    if DM.Editing() then return true end   -- settings open / unlock mode: always reachable
+    local show = WOpt(w, "show")
+    if show == "GROUP" then return IsInGroup() end
+    if show == "INSTANCE" then return (IsInInstance()) and true or false end
+    if show == "COMBAT" then return InCombatLockdown() and true or false end   -- combat start / end re-apply
     return true
 end
 
@@ -1791,13 +1798,15 @@ end
 -- mouse is over one (checked 10x a second while it matters)
 local fader
 local function Fade()
-    local c = S()
-    local dim = c.fadeOOC and not InCombatLockdown()
+    local dim = false
+    local combat = InCombatLockdown()
     for _, w in ipairs(wins) do
         if w:IsShown() then
+            local wdim = WOpt(w, "fadeOOC") and not combat
+            dim = dim or wdim
             local p = w.bd and w.bd.open and w.panel
             local over = w:IsMouseOver() or (p and p:IsShown() and p:IsMouseOver())
-            local a = (dim and not over) and c.fadeAlpha or 1
+            local a = (wdim and not over) and WOpt(w, "fadeAlpha") or 1
             w:SetAlpha(a)
             if p then p:SetAlpha(a) end
         end
