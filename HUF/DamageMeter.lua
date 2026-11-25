@@ -103,7 +103,7 @@ function DM.ApplyBlizzard()
     cvarPending = nil
     local cur = GetCV("damageMeterEnabled")
     if cur == nil then return end
-    local want = S().enabled and S().hideBlizzard and Available()
+    local want = ns.db.damageMeter.enabled and Available()   -- HUF's meter on = the game's window off
     local saved = HUFDB.damageMeterCVar
     if want then
         if cur ~= "0" then

@@ -71,118 +71,141 @@ local function Textures()
     return l
 end
 
-local TOP = -64
-local function SubFrame(page)
-    local f = CreateFrame("Frame", nil, page)
-    f:SetPoint("TOPLEFT", 0, TOP - 16)
-    f:SetSize(ns.PAGE_W, ns.PAGE_H + TOP - 16)
-    return f
+local TILE_W, GAP, TOP = 344, 10, -58
+
+-- two widgets side by side in one row of a column
+local function Pair(col, parent, a, b, h)
+    h = h or 38
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetSize(col.width, h)
+    local half = (col.width - 12) / 2
+    for i, w in ipairs({ a, b }) do
+        if w then
+            w:SetParent(row)
+            w:ClearAllPoints()
+            w:SetPoint("TOPLEFT", row, "TOPLEFT", i == 1 and 0 or (half + 12), 0)
+            w:SetWidth(half)
+        end
+    end
+    col:Add(row, h)
+    return row
 end
 
--- tab 1: meter and windows
-local function MeterPage(f)
-    local L = UI.Column(f, 0, 0, COL_W)
-    L:Header("All windows")
-    local gb, sb = Opt("hideBlizzard")
-    L:Check("Hide Blizzard's damage meter", gb, sb, "Switches the game's meter window off while HUF's is on, and back on when HUF's is off.")
-    L:Slider("Windows", 1, 5, 1, Opt("windowCount"))
-    L:Header("Meter (the window chosen above)")
+-- the selected window shows threat?
+local function IsThreat()
+    local w = Win()
+    return w and w.meterType == "Threat" or false
+end
+
+local function Tiles(page)
+    local H = ns.PAGE_H + TOP
+    local half = (TILE_W - 16 - 12) / 2
+    local gated = {}
+
+    -- General ---------------------------------------------------------------
+    local G_H = 240
+    local gt, G = ns.ConfigTile(page, 0, TOP, TILE_W, G_H, "General", "Interface\\Icons\\INV_Misc_Gear_01")
+    local gl, sl = Opt("locked")
+    G:Check("Lock Frame", gl, sl, "No dragging by the title bar (unlock mode still moves it).")
     local gShow, sShow = Opt("show")
-    L:Cycle("Show", {
+    G:Cycle("Show", {
         { value = "ALWAYS", text = "Always" },
         { value = "GROUP", text = "In a group" },
         { value = "INSTANCE", text = "In instances" },
         { value = "COMBAT", text = "In combat" },
     }, gShow, sShow, "When this window shows. While these settings are open or in unlock mode every window shows, so you can move and change them.")
-    local gf, sf = Opt("fadeOOC")
-    L:Check("Reduce opacity out of combat", gf, sf, "This window at the opacity below while out of combat; fully visible under the mouse.")
-    local gfa, sfa = Opt("fadeAlpha")
-    L:Slider("Opacity out of combat", 0, 1, 0.05, gfa, sfa, "%.2f")
     local gp, sp = Opt("threatPets")
-    L:Check("Threat: pets too", gp, sp)
+    gated[#gated + 1] = G:Check("Threat: Show Pets", gp, sp, "Pets in the threat list too. Only for a window that shows threat.")
     local gc, sc = Opt("threatColors")
-    L:Check("Threat: bars in threat colours", gc, sc, "Grey, yellow, orange and red (has aggro) like the game's threat warning.")
-
-    local R = UI.Column(f, COL2_X, 0, COL_W)
-    R:Header("Window (the one chosen above)")
-    R:Slider("Width", 120, 500, 1, Opt("width"))
-    R:Slider("Rows", 1, 40, 1, Opt("rows"))
-    R:Slider("Row height", 10, 40, 1, Opt("rowHeight"))
-    R:Slider("Space between rows", 0, 6, 1, Opt("rowGap"))
-    local gsc, ssc = Opt("scale")
-    R:Slider("Scale", 0.5, 2, 0.05, gsc, ssc, "%.2f")
-    local gl, sl = Opt("locked")
-    R:Check("Lock (no dragging by the title)", gl, sl)
-    local gw, sw = Opt("windowBorder")
-    R:Check("Line around the window", gw, sw)
+    gated[#gated + 1] = G:Check("Threat: Bars in Threat Colours", gc, sc, "Grey, yellow, orange and red (has aggro) like the game's threat warning. Only for a window that shows threat.")
+    local gf, sf = Opt("fadeOOC")
+    local gfa, sfa = Opt("fadeAlpha")
+    local fadeCheck = UI.Check(gt, half, "Reduce Opacity out of combat", gf, sf, "This window at the opacity on the right while out of combat; fully visible under the mouse.")
+    local fadeSlider = UI.Slider(gt, half, "Opacity", 0, 100, 5, function() return math.floor((gfa() or 0) * 100 + 0.5) end,
+        function(v) sfa(v / 100) end, "%d%%").EnableInput()
+    Pair(G, gt, fadeCheck, fadeSlider)
     local gk, sk = Opt("breakdownInline")
-    R:Check("Breakdown and meter list inside the window", gk, sk, "Clicking a name shows its spells in the same window; right-clicking the names shows the list of meters to pick one. < or a right-click goes back to the names. Off: the breakdown in a panel beside the window. On by default.")
+    G:Check("Data-Breakdown inside the window", gk, sk, "Clicking a name shows its spells in the same window; right-clicking the names shows the list of meters to pick one. < or a right-click goes back to the names. Off: the breakdown in a panel beside the window.")
     local gn, sn = Opt("nameHover")
-    R:Check("Hover a name: its top spells", gn, sn, "A box beside the window with the player's spells while the mouse is on the name. A click still opens the whole breakdown.")
-    R:Note("Click a row for its breakdown. Names follow Names & MMT; in instance combat the game hides the meter's names: HUF then shows a name it recognised, else the class, never a hidden real name.")
-end
+    G:Check("Hovering name: Show the top abilities", gn, sn, "A box beside the window with the player's spells while the mouse is on the name. A click still opens the whole breakdown.")
 
--- tab 2: bars and text
-local function BarsPage(f)
-    local L = UI.Column(f, 0, 0, COL_W)
-    L:Header("Bars")
-    L:Cycle("Texture", Textures, Opt("texture"))
-    L:Cycle("Colour", {
-        { value = "CLASS", text = "Class" },
-        { value = "ACCENT", text = "Accent" },
-        { value = "STATIC", text = "Static colour" },
-    }, Opt("colorMode"))
-    L:Color("Static colour", Opt("color"))
-    local gba, sba = Opt("bgAlpha")
-    L:Slider("Background opacity", 0, 1, 0.05, gba, sba, "%.2f")
-    L:Cycle("Icons", {
-        { value = "NONE", text = "None" },
-        { value = "CLASS", text = "Class icon before the bar" },
-    }, Opt("icons"))
-    L:Slider("Border around each bar", 0, 3, 1, Opt("rowBorder"))
-    local gbb, sbb = Opt("barBgAlpha")
-    L:Slider("Empty part of a bar: opacity", 0, 1, 0.05, gbb, sbb, "%.2f")
+    -- Window Size -----------------------------------------------------------
+    local W_Y = TOP - G_H - GAP
+    local wt, W = ns.ConfigTile(page, 0, W_Y, TILE_W, H - G_H - GAP, "Window Size", "Interface\\Icons\\INV_Misc_Spyglass_03")
+    local gw, sw = Opt("width")
+    local gr, sr = Opt("rows")
+    local grh, srh = Opt("rowHeight")
+    local gg, sg = Opt("rowGap")
+    local gth = Opt("titleHeight")
+    -- the frame's height comes from the rows: changing it changes the rows
+    local function FrameH() return (gth() or 20) + gr() * (grh() + gg()) + 2 end
+    Pair(W, wt,
+        UI.Slider(wt, half, "Frame Width", 120, 500, 1, gw, sw).EnableInput(),
+        UI.Slider(wt, half, "Frame Height", 40, 800, 1, FrameH, function(v)
+            sr(math.max(1, math.min(40, math.floor((v - (gth() or 20) - 2) / (grh() + gg()) + 0.5))))
+        end).EnableInput())
+    Pair(W, wt,
+        UI.Slider(wt, half, "Rows", 1, 40, 1, gr, sr).EnableInput(),
+        UI.Slider(wt, half, "Row Height", 10, 40, 1, grh, srh).EnableInput())
+    local gsc, ssc = Opt("scale")
+    Pair(W, wt,
+        UI.Slider(wt, half, "Row Padding", 0, 6, 1, gg, sg).EnableInput(),
+        UI.Slider(wt, half, "Scale", 50, 200, 5, function() return math.floor((gsc() or 1) * 100 + 0.5) end,
+            function(v) ssc(v / 100) end, "%d%%").EnableInput())
+    W:Note("Frame Height follows the rows: a new height sets the rows that fit.")
 
-    local R = UI.Column(f, COL2_X, 0, COL_W)
-    R:Header("Text")
-    R:Cycle("Font", Fonts, Opt("font"))
-    R:Slider("Size", 6, 20, 1, Opt("fontSize"))
-    R:Cycle("Outline", {
-        { value = "GLOBAL", text = "HUF Global Outline" },
-        { value = "NONE", text = "None" },
-        { value = "OUTLINE", text = "Thin" },
-        { value = "THICKOUTLINE", text = "Thick" },
-    }, Opt("outline"))
-    R:Cycle("Numbers", {
-        { value = "BOTH", text = "Total (per second)" },
-        { value = "BAR", text = "Total | per second" },
-        { value = "TOTAL", text = "Total" },
-        { value = "PERSECOND", text = "Per second" },
-    }, Opt("numbers"))
-    local gr, sr = Opt("showRank")
-    R:Check("Rank before the name", gr, sr)
-end
+    -- Bars & Text -----------------------------------------------------------
+    local bt, B = ns.ConfigTile(page, TILE_W + GAP, TOP, TILE_W, H, "Bars & Text", "Interface\\Icons\\INV_Misc_Note_01")
+    local function Dd(text, choices, k, tip)
+        local g, st = Opt(k)
+        return UI.Dropdown(bt, half, text, choices, g, st, tip)
+    end
+    local function Sl(text, a, b, step, k, fmt)
+        local g, st = Opt(k)
+        return UI.Slider(bt, half, text, a, b, step, g, st, fmt)
+    end
+    local function Ck(text, k, tip)
+        local g, st = Opt(k)
+        return UI.Check(bt, half, text, g, st, tip)
+    end
+    local function Cl(text, k)
+        local g, st = Opt(k)
+        return UI.Color(bt, half, text, g, st)
+    end
+    Pair(B, bt, Dd("Texture", Textures, "texture"), Dd("Colour", {
+        { value = "CLASS", text = "Class" }, { value = "ACCENT", text = "Accent" }, { value = "STATIC", text = "Static" },
+    }, "colorMode"), UI.ROW + 4)
+    Pair(B, bt, Cl("Static colour", "color"), Dd("Icons", {
+        { value = "NONE", text = "None" }, { value = "CLASS", text = "Class" },
+    }, "icons", "A class icon before each bar."), UI.ROW + 4)
+    Pair(B, bt, Sl("Background opacity", 0, 1, 0.05, "bgAlpha", "%.2f"), Sl("Empty bar opacity", 0, 1, 0.05, "barBgAlpha", "%.2f"))
+    Pair(B, bt, Sl("Bar border", 0, 3, 1, "rowBorder"), Sl("Text size", 6, 20, 1, "fontSize"))
+    local gfo, sfo = Opt("font")
+    B:Cycle("Font", Fonts, gfo, sfo)
+    local gou, sou = Opt("outline")
+    B:Cycle("Outline", {
+        { value = "GLOBAL", text = "HUF Global Outline" }, { value = "NONE", text = "None" },
+        { value = "OUTLINE", text = "Thin" }, { value = "THICKOUTLINE", text = "Thick" },
+    }, gou, sou)
+    local gnu, snu = Opt("numbers")
+    B:Cycle("Numbers", {
+        { value = "BOTH", text = "Total (per second)" }, { value = "BAR", text = "Total | per second" },
+        { value = "TOTAL", text = "Total" }, { value = "PERSECOND", text = "Per second" },
+    }, gnu, snu)
+    local th = UI.Label(bt, "Title bar")
+    th:SetTextColor(UI.ACCENT[1], UI.ACCENT[2], UI.ACCENT[3])
+    B:Add(th, 20)
+    Pair(B, bt, Sl("Title bar height", 12, 30, 1, "titleHeight"), Sl("Title text size", 6, 20, 1, "titleSize"))
+    Pair(B, bt, Cl("Title colour", "titleColor"), Sl("Icon size", 10, 32, 1, "titleIconSize"))
+    Pair(B, bt, Ck("Rank before the name", "showRank"), Ck("Accent line under the title", "titleLine"), UI.ROW + 2)
+    Pair(B, bt, Ck("Fight in the accent colour", "titleAccent"),
+        Ck("Type and fight as icons", "titleIcons", "The meter type's name at the left, icon buttons for the meter type and the fight at the right (their names in the tooltips)."), UI.ROW + 2)
+    Pair(B, bt, Ck("Muted icons", "titleIconsMuted", "Grey and dimmed to fit the dark title bar; the accent colour under the mouse. Off: the icons in their own colours."), nil, UI.ROW + 2)
 
--- tab 3: title bar
-local function TitlePage(f)
-    local L = UI.Column(f, 0, 0, COL_W)
-    L:Header("Title bar")
-    L:Slider("Height", 12, 30, 1, Opt("titleHeight"))
-    L:Slider("Title size", 6, 20, 1, Opt("titleSize"))
-    L:Color("Colour", Opt("titleColor"))
-    local gt, st = Opt("titleLine")
-    L:Check("Accent line under it", gt, st)
-    local ga, sa = Opt("titleAccent")
-    L:Check("Fight in the accent colour", ga, sa)
-
-    local R = UI.Column(f, COL2_X, 0, COL_W)
-    R:Header("Icons")
-    local gi, si = Opt("titleIcons")
-    R:Check("Icons for meter type and fight", gi, si, "The meter type's name at the left, icon buttons for the meter type and the fight at the right (their names in the tooltips).")
-    R:Slider("Icon size (at most the title bar's height - 2)", 10, 32, 1, Opt("titleIconSize"))
-    local gm, sm = Opt("titleIconsMuted")
-    R:Check("Muted icons", gm, sm, "Grey and dimmed to fit the dark title bar; the accent colour under the mouse. Off: the icons in their own colours.")
-    R:Note("Title bar: meter type and fight (click: list, mouse wheel: step through; the fight list ends with \"Reset all fights\"), + new window, x close (the window and its settings; the last window turns the meter off).")
+    table.insert(page.widgets, { Refresh = function()
+        local on = D().enabled and IsThreat()
+        for _, w in ipairs(gated) do UI.SetActive(w, on) end
+    end })
 end
 
 ns.RegisterPage("damagemeter", "Damage meter", "general", function(page)
@@ -190,33 +213,20 @@ ns.RegisterPage("damagemeter", "Damage meter", "general", function(page)
     page:HookScript("OnShow", function() if ns.DamageMeter then ns.DamageMeter.Apply() end end)
     page:HookScript("OnHide", function() if ns.DamageMeter then C_Timer.After(0, ns.DamageMeter.Apply) end end)
     local on = UI.Check(page, 260, "Use HUF's damage meter", function() return D().enabled end,
-        function(v) D().enabled = v end, "The game's own meter data in a HUF window, with privacy names. Also /huf meter.")
+        function(v) D().enabled = v end, "The game's own meter data in HUF windows, with privacy names; the game's own meter window is switched off meanwhile. Also /huf meter.")
     on:SetPoint("TOPLEFT", 0, 4)
-    -- which window the size / look settings below change
+    -- which window the settings below change
     local pick = UI.Dropdown(page, 330, "Settings of", WindowChoices, function() return sel end, function(v)
         sel = v
         ns.RefreshConfig()
-    end, "Each damage meter window has its own settings: when it shows, fading, threat options, size and look. Only \"Hide Blizzard's damage meter\" and the number of windows are for all windows.")
+    end, "Each damage meter window has its own settings. New windows: + in a window's title bar; x closes one.")
     pick:SetPoint("TOPLEFT", 0, -22)
     table.insert(page.widgets, pick)
     local all = UI.Button(page, 220, "Apply settings to all frames", function()
         UI.Confirm(("Give every damage meter window the settings of window %d?"):format(sel), "Apply", ApplyToAll, "Cancel")
     end)
     all:SetPoint("LEFT", pick, "RIGHT", 16, 0)
-    UI.Tooltip(all, "Apply settings to all frames", "Copies the chosen window's settings (Meter, Window, Bars & text, Title bar) to every other window. Their meter type, fight and place stay their own.")
+    UI.Tooltip(all, "Apply settings to all frames", "Copies the chosen window's settings (General, Window Size, Bars & Text) to every other window. Their meter type, fight and place stay their own.")
     table.insert(page.widgets, { Refresh = function() UI.SetActive(all, (D().windowCount or 1) > 1) end })
-    local tabs = { { "meter", "Meter & windows" }, { "bars", "Bars & text" }, { "title", "Title bar" } }
-    local subs, strip = {}, nil
-    local function Show(k)
-        for n, sf in pairs(subs) do sf:SetShown(n == k) end
-        strip:Select(k)
-    end
-    strip = UI.SubTabs(page, tabs, Show)
-    strip:SetPoint("TOPLEFT", 0, -50)
-    strip:SetPoint("TOPRIGHT", 0, -50)
-    subs.meter = SubFrame(page); MeterPage(subs.meter)
-    subs.bars = SubFrame(page); BarsPage(subs.bars)
-    subs.title = SubFrame(page); TitlePage(subs.title)
-    strip:Bind(subs, Show)
-    Show("meter")
+    Tiles(page)
 end, function() return ns.db.damageMeter.enabled end)
