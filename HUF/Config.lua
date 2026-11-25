@@ -28,8 +28,8 @@ end
 
 -- the order in the list (others after these, in the order they were registered)
 local NAV_ORDER = {
-    general = { "general", "utility", "clickcast", "profiles", "help" },
-    frames = { "player", "target", "targettarget", "pet", "focus", "party", "raid", "nameplates", "damagemeter" },
+    general = { "general", "utility", "damagemeter", "clickcast", "profiles", "help" },
+    frames = { "player", "target", "targettarget", "pet", "focus", "party", "raid", "nameplates" },
 }
 local function Ordered(section)
     local out, seen = {}, {}

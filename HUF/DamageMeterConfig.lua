@@ -1,11 +1,64 @@
--- HUF: settings page for the damage meter (PRIMARY FRAMES > Damage meter).
+-- HUF: settings page for the damage meter (GENERAL > Damage Meter).
 
 local _, ns = ...
 local UI = ns.UI
 local COL_W, COL2_X = 330, 366
 
 local function D() return ns.db.damageMeter end
-local function Opt(k) return function() return D()[k] end, function(v) D()[k] = v end end
+-- the window whose settings the page shows (the dropdown at the top)
+local sel = 1
+local function Win()
+    local list = D().windows or {}
+    if sel > #list or sel > (D().windowCount or 1) then sel = 1 end
+    return list[sel]
+end
+local function PW(k) return ns.DamageMeter and ns.DamageMeter.PER_WINDOW and ns.DamageMeter.PER_WINDOW[k] end
+-- per-window keys: the selected window's own value, else the shared one; a
+-- change goes to that window only. Meter-wide keys: the shared settings.
+local function Opt(k)
+    return function()
+        local w = PW(k) and Win()
+        if w and w[k] ~= nil then return w[k] end
+        return D()[k]
+    end, function(v)
+        local w = PW(k) and Win()
+        if w then w[k] = v else D()[k] = v end
+    end
+end
+
+local TYPE_NAMES = { DamageDone = "Damage done", HealingDone = "Healing done", DamageTaken = "Damage taken",
+    AvoidableDamageTaken = "Avoidable damage", EnemyDamageTaken = "Enemy damage taken", Interrupts = "Interrupts",
+    Dispels = "Dispels", Deaths = "Deaths", Threat = "Threat" }
+local function WindowChoices()
+    if ns.DamageMeter and ns.DamageMeter.EnsureWindows then ns.DamageMeter.EnsureWindows() end
+    local l = {}
+    for i = 1, (D().windowCount or 1) do
+        local w = D().windows and D().windows[i]
+        local t = w and (TYPE_NAMES[w.meterType] or w.meterType) or ""
+        l[#l + 1] = { value = i, text = ("Window %d%s"):format(i, t ~= "" and (" (" .. t .. ")") or "") }
+    end
+    return l
+end
+
+-- every window takes the selected window's size and look
+local function ApplyToAll()
+    local src = Win()
+    if not src then return end
+    local n = 0
+    for i = 1, (D().windowCount or 1) do
+        local w = D().windows[i]
+        if w and i ~= sel then
+            for k in pairs(ns.DamageMeter.PER_WINDOW) do
+                local v = src[k]
+                if v == nil then v = D()[k] end
+                w[k] = type(v) == "table" and ns.CopyTable(v) or v
+            end
+            n = n + 1
+        end
+    end
+    ns.Log("config", "damage meter: window %d's settings to %d other windows", sel, n)
+    ns.Refresh()
+end
 
 local function Fonts()
     local l = { { value = "GLOBAL", text = "HUF Global Font" } }
@@ -18,7 +71,7 @@ local function Textures()
     return l
 end
 
-local TOP = -36
+local TOP = -64
 local function SubFrame(page)
     local f = CreateFrame("Frame", nil, page)
     f:SetPoint("TOPLEFT", 0, TOP - 16)
@@ -29,13 +82,14 @@ end
 -- tab 1: meter and windows
 local function MeterPage(f)
     local L = UI.Column(f, 0, 0, COL_W)
-    L:Header("Meter")
+    L:Header("Meter (all windows)")
     local gb, sb = Opt("hideBlizzard")
     L:Check("Hide Blizzard's damage meter", gb, sb, "Switches the game's meter window off while HUF's is on, and back on when HUF's is off.")
     L:Cycle("Show", {
         { value = "ALWAYS", text = "Always" },
         { value = "GROUP", text = "In a group" },
         { value = "INSTANCE", text = "In instances" },
+        { value = "COMBAT", text = "In combat" },
     }, Opt("show"))
     L:Slider("Windows", 1, 5, 1, Opt("windowCount"))
     local gf, sf = Opt("fadeOOC")
@@ -49,17 +103,13 @@ local function MeterPage(f)
     L:Check("Threat: bars in threat colours", gc, sc, "Grey, yellow, orange and red (has aggro) like the game's threat warning.")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
-    R:Header("Window")
+    R:Header("Window (the one chosen above)")
     R:Slider("Width", 120, 500, 1, Opt("width"))
-    local gr, sr = Opt("rows")
-    -- every window: drops the windows' own row counts (an EllesmereUI import sets them)
-    R:Slider("Rows", 1, 40, 1, gr, function(v)
-        sr(v)
-        for _, w in ipairs(ns.db.damageMeter.windows or {}) do w.rows = nil end
-    end)
+    R:Slider("Rows", 1, 40, 1, Opt("rows"))
     R:Slider("Row height", 10, 40, 1, Opt("rowHeight"))
     R:Slider("Space between rows", 0, 6, 1, Opt("rowGap"))
-    R:Slider("Scale", 0.5, 2, 0.05, function() return D().scale end, function(v) D().scale = v end, "%.2f")
+    local gsc, ssc = Opt("scale")
+    R:Slider("Scale", 0.5, 2, 0.05, gsc, ssc, "%.2f")
     local gl, sl = Opt("locked")
     R:Check("Lock (no dragging by the title)", gl, sl)
     local gw, sw = Opt("windowBorder")
@@ -82,13 +132,15 @@ local function BarsPage(f)
         { value = "STATIC", text = "Static colour" },
     }, Opt("colorMode"))
     L:Color("Static colour", Opt("color"))
-    L:Slider("Background opacity", 0, 1, 0.05, function() return D().bgAlpha end, function(v) D().bgAlpha = v end, "%.2f")
+    local gba, sba = Opt("bgAlpha")
+    L:Slider("Background opacity", 0, 1, 0.05, gba, sba, "%.2f")
     L:Cycle("Icons", {
         { value = "NONE", text = "None" },
         { value = "CLASS", text = "Class icon before the bar" },
     }, Opt("icons"))
     L:Slider("Border around each bar", 0, 3, 1, Opt("rowBorder"))
-    L:Slider("Empty part of a bar: opacity", 0, 1, 0.05, function() return D().barBgAlpha end, function(v) D().barBgAlpha = v end, "%.2f")
+    local gbb, sbb = Opt("barBgAlpha")
+    L:Slider("Empty part of a bar: opacity", 0, 1, 0.05, gbb, sbb, "%.2f")
 
     local R = UI.Column(f, COL2_X, 0, COL_W)
     R:Header("Text")
@@ -132,13 +184,26 @@ local function TitlePage(f)
     R:Note("Title bar: meter type and fight (click: list, mouse wheel: step through), + new window, R reset, x close.")
 end
 
-ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
+ns.RegisterPage("damagemeter", "Damage meter", "general", function(page)
     -- open page: hidden threat windows show (DM.Editing), closed: hidden again
     page:HookScript("OnShow", function() if ns.DamageMeter then ns.DamageMeter.Apply() end end)
     page:HookScript("OnHide", function() if ns.DamageMeter then C_Timer.After(0, ns.DamageMeter.Apply) end end)
     local on = UI.Check(page, 260, "Use HUF's damage meter", function() return D().enabled end,
         function(v) D().enabled = v end, "The game's own meter data in a HUF window, with privacy names. Also /huf meter.")
     on:SetPoint("TOPLEFT", 0, 4)
+    -- which window the size / look settings below change
+    local pick = UI.Dropdown(page, 330, "Settings of", WindowChoices, function() return sel end, function(v)
+        sel = v
+        ns.RefreshConfig()
+    end, "Each damage meter window has its own size and look (Window, Bars & text, Title bar). The Meter settings are the same for all windows.")
+    pick:SetPoint("TOPLEFT", 0, -22)
+    table.insert(page.widgets, pick)
+    local all = UI.Button(page, 220, "Apply settings to all frames", function()
+        UI.Confirm(("Give every damage meter window the size and look of window %d?"):format(sel), "Apply", ApplyToAll, "Cancel")
+    end)
+    all:SetPoint("LEFT", pick, "RIGHT", 16, 0)
+    UI.Tooltip(all, "Apply settings to all frames", "Copies the chosen window's size and look (Window, Bars & text, Title bar) to every other window. Their meter type, fight and place stay their own.")
+    table.insert(page.widgets, { Refresh = function() UI.SetActive(all, (D().windowCount or 1) > 1) end })
     local tabs = { { "meter", "Meter & windows" }, { "bars", "Bars & text" }, { "title", "Title bar" } }
     local subs, strip = {}, nil
     local function Show(k)
@@ -146,8 +211,8 @@ ns.RegisterPage("damagemeter", "Damage meter", "frames", function(page)
         strip:Select(k)
     end
     strip = UI.SubTabs(page, tabs, Show)
-    strip:SetPoint("TOPLEFT", 0, -22)
-    strip:SetPoint("TOPRIGHT", 0, -22)
+    strip:SetPoint("TOPLEFT", 0, -50)
+    strip:SetPoint("TOPRIGHT", 0, -50)
     subs.meter = SubFrame(page); MeterPage(subs.meter)
     subs.bars = SubFrame(page); BarsPage(subs.bars)
     subs.title = SubFrame(page); TitlePage(subs.title)

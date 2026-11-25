@@ -19,7 +19,29 @@ local IsSecret = ns.IsSecret
 local DM = {}
 ns.DamageMeter = DM
 
-local function S() return ns.db.damageMeter end
+-- Settings: the meter-wide ones in ns.db.damageMeter; the look and size can
+-- differ per window (windows[i][key] set = its own value, else the shared
+-- one). S() reads through the window at hand (`win`), so the window code
+-- needs no change; writes go to the shared settings.
+local PER_WINDOW = {}
+for _, k in ipairs({ "width", "rows", "rowHeight", "rowGap", "scale", "locked", "windowBorder", "breakdownInline",
+    "nameHover", "texture", "colorMode", "color", "bgAlpha", "bgColor", "icons", "rowBorder", "barBgAlpha", "barBgColor",
+    "font", "fontSize", "outline", "numbers", "showRank", "titleHeight", "titleSize", "titleColor", "titleAlpha",
+    "titleLine", "titleAccent", "titleIcons", "titleIconSize", "titleIconsMuted" }) do PER_WINDOW[k] = true end
+DM.PER_WINDOW = PER_WINDOW
+local win
+local view = setmetatable({}, {
+    __index = function(_, k)
+        local wc = PER_WINDOW[k] and win and win.cfg
+        if wc then
+            local v = wc[k]
+            if v ~= nil then return v end
+        end
+        return ns.db.damageMeter[k]
+    end,
+    __newindex = function(_, k, v) ns.db.damageMeter[k] = v end,
+})
+local function S() return view end
 
 local TYPES = {
     { key = "DamageDone", text = "Damage done", perSecond = true },
@@ -300,9 +322,8 @@ end
 -- Window
 ---------------------------------------------------------------------------
 -- several windows (e.g. damage and threat side by side): each has its own
--- list, fight and position (S().windows[i]); size and look are shared.
--- The window code works on `win`, the window at hand.
-local win
+-- list, fight and position (S().windows[i]) and may have its own size and
+-- look (PER_WINDOW). The window code works on `win`, the window at hand.
 local wins = {}
 function DM.Windows() return wins end
 local ROW_POOL = 40
@@ -1740,8 +1761,10 @@ end
 local function WantShown()
     local c = S()
     if not c.enabled or not Available() then return false end
+    if DM.Editing and DM.Editing() then return true end   -- settings open / unlock mode: always reachable
     if c.show == "GROUP" then return IsInGroup() end
     if c.show == "INSTANCE" then return (IsInInstance()) and true or false end
+    if c.show == "COMBAT" then return InCombatLockdown() and true or false end   -- combat start / end re-apply
     return true
 end
 
