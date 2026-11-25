@@ -281,6 +281,8 @@ local HUF_PARTS = {
     { "nameplates", "Nameplates" }, { "minimap", "Minimap" }, { "dataBars", "Data bars" },
     { "chat", "Chat" }, { "damageMeter", "Damage meter" }, { "bags", "Bags" },
     { "auraBars", "Buff bars" }, { "windows", "Windows" }, { "questLog", "Quest log" },
+    { "raid", "Raid frames" }, { "lootFeed", "Loot feed" }, { "tooltip", "Tooltips" },
+    "OTHER",    -- every other settings table in the text, so nothing is left out silently
 }
 function ns.ProfileParts(t)
     local parts = {}
@@ -293,6 +295,17 @@ function ns.ProfileParts(t)
                         parts[#parts + 1] = { title = u.title, tbl = units[u.key], on = true, path = { "units", u.key } }
                     end
                 end
+            end
+        elseif e == "OTHER" then
+            local known = { units = true, _extra = true }
+            for _, k in ipairs(HUF_PARTS) do if type(k) == "table" then known[k[1]] = true end end
+            local rest = {}
+            for k, v in pairs(t) do
+                if type(k) == "string" and not known[k] and type(v) == "table" then rest[#rest + 1] = k end
+            end
+            table.sort(rest)
+            for _, k in ipairs(rest) do
+                parts[#parts + 1] = { title = k, tbl = t[k], on = true, path = { k } }
             end
         elseif type(t[e[1]]) == "table" then
             parts[#parts + 1] = { title = e[2], tbl = t[e[1]], on = true, path = { e[1] } }
