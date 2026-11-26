@@ -271,7 +271,7 @@ local function Layout(info)
         Texts(b, s)
     end
     f:SetSize(per * size + (per - 1) * gap, rows * size + (rows - 1) * gap)
-    f.per, f.rows = per, rows
+    f.per, f.rows, f.count = per, rows, n
     -- the gaps between the buttons: the slot colour too (EllesmereUI's dark grid), or see-through
     -- (the gaps: each button's border reaches over them, Skin)
     f:ClearAllPoints()
@@ -310,14 +310,26 @@ local function BarFrame(info)
         settings = function() if ns.OpenConfigTab then ns.OpenConfigTab("actionbars", info.key) end end,
         get = function() local s = S(info.key) return s and s.point end,
         set = function(v) local s = S(info.key) if s and type(v) == "table" then s.point = v AB.Apply() end end,
-        -- unlock mode's corner grips: the buttons grow or shrink, rows and columns stay
+        -- unlock mode's corner grips: the layout that fills the dragged box with the biggest
+        -- buttons - drag it tall and narrow and the bar turns vertical, bigger and the buttons grow
         resize = {
             get = function() return f:GetWidth(), f:GetHeight() end,
             set = function(w, h)
                 local s = S(info.key)
-                local per, rows, gap = f.per or 12, f.rows or 1, s.spacing or 2
-                local size = math.min((w - (per - 1) * gap) / per, (h - (rows - 1) * gap) / rows)
-                s.size = math.max(16, math.min(64, math.floor(size + 0.5)))
+                local n = math.max(1, math.min(s.buttons or info.count, f.count or info.count))
+                local gap = s.spacing or 2
+                local best, bestSize
+                for per = 1, n do
+                    local rows = math.ceil(n / per)
+                    -- only layouts without a half-empty last row (12: 1, 2, 3, 4, 6, 12 per row)
+                    if per * rows - n < per then
+                        local size = math.min((w - (per - 1) * gap) / per, (h - (rows - 1) * gap) / rows)
+                        if not bestSize or size > bestSize + 0.01 then best, bestSize = per, size end
+                    end
+                end
+                if not best then return end
+                s.perRow = best
+                s.size = math.max(16, math.min(64, math.floor(bestSize + 0.5)))
                 Layout(info)
             end,
         },
