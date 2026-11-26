@@ -80,18 +80,25 @@ local function BarsTab(f)
     R:Slider("Border", 0, 3, 1, function() return D().border end, function(v) D().border = v end)
     R:Check("Border in the accent colour", function() return D().borderAccent end, function(v) D().borderAccent = v end)
     R:Color("Border colour", function() return D().borderColor end, function(c) D().borderColor = c end)
+    R:Slider("Icon zoom", 0, 0.3, 0.005, function() return D().iconZoom or 0.055 end, function(v) D().iconZoom = v end, "%.3f")
     R:Slider("Slot background", 0, 1, 0.05, function() return D().slotAlpha end, function(v) D().slotAlpha = v end, "%.2f")
     R:Check("Fill the gaps between buttons", function() return D().fillGaps ~= false end, function(v) D().fillGaps = v end,
         "The borders reach over the spacing, so the lines between the buttons are solid (as EllesmereUI's bars). Off: a thin border on each button and see-through gaps.")
     R:Slider("Key text size", 6, 24, 1, function() return D().keySize end, function(v) D().keySize = v end)
     R:Color("Key text colour", function() return D().keyColor end, function(c) D().keyColor = c end)
     R:Slider("Stack count size", 6, 24, 1, function() return D().countSize end, function(v) D().countSize = v end)
+    -- EllesmereUI: only when there is something to import - EllesmereUI itself, or the copy HUF
+    -- kept of its action bars while it was on
+    local src, from = AB.EllesmereSource()
+    if not src then return end
     R:Header("EllesmereUI")
     local msg = UI.Label(f, "")
     msg:SetWidth(COL_W)
     msg:SetJustifyH("LEFT")
     msg:SetWordWrap(true)
-    R:Button("Import EllesmereUI's action bars", function()
+    local IsLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+    local live = IsLoaded and IsLoaded("EllesmereUI")
+    R:Button(live and "Import EllesmereUI's action bars" or "Import EllesmereUI's action bars (saved copy)", function()
         local ok, text = AB.ImportEllesmere()
         msg:SetText(ok and ("|cff60ff60" .. text .. "|r") or ("|cffff6060" .. text .. "|r"))
         if ok then Refresh() end

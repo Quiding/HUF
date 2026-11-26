@@ -124,6 +124,18 @@ end
 ---------------------------------------------------------------------------
 -- Look
 ---------------------------------------------------------------------------
+-- the game's own button art: away (alpha 0, so the game setting it again changes nothing)
+function AB.HideArt(b)
+    local nt = b.GetNormalTexture and b:GetNormalTexture()
+    if nt then nt:SetAlpha(0) end
+    for _, k in ipairs({ "SlotArt", "SlotBackground", "Border", "Background", "FloatingBG", "IconBorder" }) do
+        local t = b[k]
+        if type(t) == "table" and t.SetAlpha then t:SetAlpha(0) end
+    end
+    local fb = _G[(b:GetName() or "") .. "FloatingBG"]
+    if fb then fb:SetAlpha(0) end
+end
+
 local function Skin(b, scale, gap)
     local d = DB()
     local p = skinned[b]
@@ -134,8 +146,10 @@ local function Skin(b, scale, gap)
         p.icon = icon
         if icon then
             if b.IconMask and icon.RemoveMaskTexture then pcall(icon.RemoveMaskTexture, icon, b.IconMask) end
-            icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         end
+        -- the game draws its button art again (empty slot backgrounds after showing the
+        -- grid, ...): hidden again right after
+        if b.UpdateButtonArt then hooksecurefunc(b, "UpdateButtonArt", function(self) if AB.HideArt then AB.HideArt(self) end end) end
         -- the slot behind the icon: flat and dark
         p.bg = b:CreateTexture(nil, "BACKGROUND", nil, -8)
         p.bg:SetAllPoints(b)
@@ -146,14 +160,11 @@ local function Skin(b, scale, gap)
     end
     -- the game's round frame art and the slot pictures: away (the game sets the art
     -- again now and then: alpha stays)
-    local nt = b.GetNormalTexture and b:GetNormalTexture()
-    if nt then nt:SetAlpha(0) end
-    for _, k in ipairs({ "SlotArt", "SlotBackground", "Border" }) do
-        local t = b[k]
-        if type(t) == "table" and t.SetAlpha then t:SetAlpha(0) end
+    AB.HideArt(b)
+    if p.icon then
+        local z = d.iconZoom or 0.055
+        p.icon:SetTexCoord(z, 1 - z, z, 1 - z)
     end
-    local fb = _G[(b:GetName() or "") .. "FloatingBG"]
-    if fb then fb:SetAlpha(0) end
     -- the slot: see-through black (EllesmereUI's: black at 60 %)
     p.bg:SetColorTexture(0, 0, 0, d.slotAlpha or 0.6)
     -- the border: one screen pixel whatever the button's scale
@@ -604,6 +615,9 @@ function AB.ConvertEllesmere(src, out)
     end
     local main = type(src.bars) == "table" and src.bars.MainBar
     if type(main) == "table" then
+        out.fillGaps = false      -- EllesmereUI: a thin border on each button, see-through gaps
+        if type(src.iconZoom) == "number" then out.iconZoom = math.max(0, math.min(0.3, src.iconZoom / 100)) end
+        if type(src.slotBgOpacity) == "number" then out.slotAlpha = math.max(0, math.min(1, src.slotBgOpacity / 100)) end
         out.keySize = math.max(6, math.min(24, math.floor(Num(main.keybindFontSize, 12) + 0.5)))
         out.countSize = math.max(6, math.min(24, math.floor(Num(main.countFontSize, 14) + 0.5)))
         local kc = main.keybindFontColor

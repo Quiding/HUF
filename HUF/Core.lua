@@ -631,7 +631,8 @@ local function BuildDefaults()
         actionBars = {
             enabled = false,
             border = 1, borderAccent = false, borderColor = C(0, 0, 0), slotAlpha = 0.6,
-            fillGaps = true,            -- the gaps between buttons in the slot colour (a dark grid, as EllesmereUI)
+            fillGaps = false,           -- borders reaching over the spacing (solid lines); off: see-through gaps (EllesmereUI)
+            iconZoom = 0.055,           -- the icon's edge cut away on each side (EllesmereUI: 5.5 %)
             keySize = 12, countSize = 14, keyColor = C(1, 1, 1),
             -- the bars around them (ExtraBars.lua): HUF's XP / reputation bars, the game's micro
             -- menu, bag bar and queue button held by HUF (place: where the game had it, first time).
@@ -1447,6 +1448,13 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 26
+    end
+    -- 27: action bars - see-through gaps like EllesmereUI (the first versions closed them)
+    if HUFDB.dataVersion < 27 then
+        for _, p in pairs(HUFDB.profiles or {}) do
+            if type(p) == "table" and type(p.actionBars) == "table" then p.actionBars.fillGaps = false end
+        end
+        HUFDB.dataVersion = 27
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}
