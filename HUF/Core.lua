@@ -634,16 +634,17 @@ local function BuildDefaults()
             fillGaps = true,            -- the gaps between buttons in the slot colour (a dark grid, as EllesmereUI)
             keySize = 12, countSize = 14, keyColor = C(1, 1, 1),
             -- the bars around them (ExtraBars.lua): HUF's XP / reputation bars, the game's micro
-            -- menu, bag bar and queue button held by HUF (place: where the game had it, first time)
+            -- menu, bag bar and queue button held by HUF (place: where the game had it, first time).
+            -- On with HUF's action bars (each can be switched off); nothing while those are off
             extra = {
                 hideBlizzardStatus = true,
-                xp = { enabled = false, width = 400, height = 10, text = "MOUSEOVER", textSize = 11, mouseover = false,
+                xp = { enabled = true, width = 400, height = 10, text = "MOUSEOVER", textSize = 11, mouseover = false,
                        hideMaxLevel = true, point = { "BOTTOM", "BOTTOM", 0, 4 } },
-                rep = { enabled = false, width = 400, height = 10, text = "MOUSEOVER", textSize = 11, mouseover = false,
+                rep = { enabled = true, width = 400, height = 10, text = "MOUSEOVER", textSize = 11, mouseover = false,
                         point = { "BOTTOM", "BOTTOM", 0, 18 } },
-                micro = { enabled = false, scale = 1, hidden = false, mouseover = false },
-                bags = { enabled = false, scale = 1, hidden = false, mouseover = false },
-                queue = { enabled = false, scale = 1, hidden = false, mouseover = false },
+                micro = { enabled = true, scale = 1, hidden = false, mouseover = false },
+                bags = { enabled = true, scale = 1, hidden = false, mouseover = false },
+                queue = { enabled = true, scale = 1, hidden = false, mouseover = false },
             },
             bars = {
                 MainBar = { enabled = true, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 40 },
@@ -1433,6 +1434,19 @@ ns.On("ADDON_LOADED", function(name)
             end
         end
         HUFDB.dataVersion = 25
+    end
+    -- 26: the bars around the action bars are on by default (they only act while HUF's
+    -- action bars are on); profiles saved with the first version had them off
+    if HUFDB.dataVersion < 26 then
+        for _, p in pairs(HUFDB.profiles or {}) do
+            local x = type(p) == "table" and type(p.actionBars) == "table" and p.actionBars.extra
+            if type(x) == "table" then
+                for _, k in ipairs({ "xp", "rep", "micro", "bags", "queue" }) do
+                    if type(x[k]) == "table" then x[k].enabled = true end
+                end
+            end
+        end
+        HUFDB.dataVersion = 26
     end
     HUFDB.profiles = HUFDB.profiles or {}
     HUFDB.chars = HUFDB.chars or {}

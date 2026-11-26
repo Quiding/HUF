@@ -9,7 +9,8 @@
 -- Micro menu, bag bar, queue button (the looking-for-group eye): the game's own frames,
 -- held by a HUF frame - moved in unlock mode, scaled, faded until the mouse is over them,
 -- or hidden. When Edit Mode or the game anchors them again, HUF puts them back.
--- Off (every part's default): the part is not touched.
+-- Every part is on by default, but only while HUF's action bars are on (General > Action
+-- Bars); each can be switched off. Off: the part is not touched.
 
 local _, ns = ...
 
@@ -17,6 +18,7 @@ local EB = {}
 ns.ExtraBars = EB
 
 local function E() local d = ns.db and ns.db.actionBars return d and d.extra end
+local function On() local d = ns.db and ns.db.actionBars return d and d.enabled end
 local function S(key) local e = E() return e and e[key] end
 
 local hidden = CreateFrame("Frame", nil, UIParent)
@@ -130,7 +132,7 @@ local DATA = { xp = XPData, rep = RepData }
 
 function EB.Update(key)
     local f, s = bars[key], S(key)
-    if not (f and s and s.enabled) then return end
+    if not (f and s and s.enabled and On()) then return end
     local cur, max, rested, color, text, tip = DATA[key]()
     if not cur then f:Hide() return end
     f:Show()
@@ -291,7 +293,7 @@ end
 
 function EB.Apply()
     local e = E()
-    if not e then return end
+    if not e or not ns.db.actionBars.enabled then return end
     ApplyDataBar("xp", "XP bar")
     ApplyDataBar("rep", "Reputation bar")
     if (e.xp.enabled or e.rep.enabled) and e.hideBlizzardStatus ~= false then ParkStatus() end

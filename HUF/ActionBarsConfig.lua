@@ -136,7 +136,7 @@ local function DataTab(f)
     R:Check("Hide the game's XP / reputation bars", function() return ns.db.actionBars.extra.hideBlizzardStatus ~= false end,
         function(v) ns.db.actionBars.extra.hideBlizzardStatus = v if not v then ns.AskReload("The game's bars come back after a reload.") end end,
         "While HUF's XP or reputation bar is on.")
-    L:Note("Move them in unlock mode (/huf unlock). Border colour: the action bars' (Action bars tab).")
+    L:Note("On with HUF's action bars (Action bars tab). Move them in unlock mode (/huf unlock). Border colour: the action bars'.")
 end
 
 ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ local function MenusTab(f)
     HeldColumn(L, "queue", "Queue button", "The looking-for-group eye.")
     local R = UI.Column(f, COL2_X, 0, COL_W)
     HeldColumn(R, "bags", "Bag bar", "The game's bag buttons.")
-    R:Note("The first time, each one stays where the game had it; move it in unlock mode (/huf unlock).")
+    R:Note("On with HUF's action bars (Action bars tab). The first time, each one stays where the game had it; move it in unlock mode (/huf unlock).")
 end
 
 ns.RegisterPage("actionbars", "Action Bars", "general", function(page)
