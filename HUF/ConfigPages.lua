@@ -230,10 +230,12 @@ ns.RegisterPage("general", "General", "general", function(page)
         elseif not US.Restore() then ns.AskReload("The game's own UI scale comes back after a reload.") end
     end, "Sets the scale of the whole interface itself, from 0.40 to 1.15 - the game's own UI Scale stops at 0.64. Off: the game's UI Scale (Esc > Options) as before."
         .. (US.EllesmereOwns() and "\n\nEllesmereUI is loaded and sets the scale itself, so HUF leaves it alone while EllesmereUI is on." or ""))
+    -- drag: steps of 0.01; the box takes any value typed (0.5333 ...)
     scaleSlider = L:Slider("UI scale", US.MIN, US.MAX, 0.01, function() return US.Clamp(U().scale) end, function(v)
         U().scale = US.Clamp(v)
         US.ApplySoon()
-    end, "%.2f")
+    end, "%.4f")
+    scaleSlider.EnableInput(0.0001)
     L:Button("Pixel perfect for this screen", function()
         local v = US.PixelPerfect()
         if not v then return end
