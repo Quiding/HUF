@@ -907,6 +907,58 @@ local function Grab(b)
             end)
         end)
         g:SetScript("OnDragStop", function() EndDrag(true) end)
+        -- its right edge: drag = width (the block's side padding), Shift + drag = text size
+        local e = CreateFrame("Button", nil, g)
+        e:SetWidth(8)
+        e:SetPoint("TOPRIGHT", 4, 0)
+        e:SetPoint("BOTTOMRIGHT", 4, 0)
+        e:SetFrameLevel(g:GetFrameLevel() + 2)
+        local bar = e:CreateTexture(nil, "OVERLAY")
+        bar:SetPoint("TOP", 0, -2)
+        bar:SetPoint("BOTTOM", 0, 2)
+        bar:SetWidth(2)
+        bar:SetColorTexture(A[1], A[2], A[3], 0.9)
+        e:SetScript("OnEnter", function(self)
+            bar:SetWidth(4)
+            local even = self:GetParent():GetParent().barCfg.sizing == "EVEN"
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText("Resize")
+            GameTooltip:AddLine(even and "This bar spreads its blocks evenly (Bars tab: Sizing): drag does nothing here."
+                or "Drag: the block's width.", 1, 1, 1, true)
+            GameTooltip:AddLine("Shift + drag: its text size.", 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        e:SetScript("OnLeave", function() bar:SetWidth(2) GameTooltip:Hide() end)
+        e:SetScript("OnMouseDown", function(self, button)
+            if button ~= "LeftButton" then return end
+            local blk = self:GetParent():GetParent()
+            local bc, cfg = blk.cfg, blk.barCfg
+            local x0 = GetCursorPosition() / blk:GetEffectiveScale()
+            local st = { bc = bc, cfg = cfg, x0 = x0, pads = bc.padL + bc.padR, scale = bc.scale or 100,
+                text = IsShiftKeyDown(), s = blk:GetEffectiveScale() }
+            self:SetScript("OnUpdate", function()
+                local dx = GetCursorPosition() / st.s - st.x0
+                if st.text then
+                    local v = math.max(50, math.min(300, math.floor(st.scale + dx + 0.5)))
+                    if v ~= st.bc.scale then st.bc.scale = v DB.ApplyBar(st.cfg) end
+                    GameTooltip:SetOwner(self, "ANCHOR_TOP") GameTooltip:SetText(("Text size %d%%"):format(v)) GameTooltip:Show()
+                else
+                    local total = math.max(0, math.min(400, math.floor(st.pads + dx + 0.5)))
+                    local l = math.floor(total / 2)
+                    if l ~= st.bc.padL or total - l ~= st.bc.padR then
+                        st.bc.padL, st.bc.padR = l, total - l
+                        DB.LayoutBar(st.cfg)
+                    end
+                    GameTooltip:SetOwner(self, "ANCHOR_TOP") GameTooltip:SetText(("Padding %d + %d"):format(l, total - l)) GameTooltip:Show()
+                end
+            end)
+        end)
+        e:SetScript("OnMouseUp", function(self)
+            self:SetScript("OnUpdate", nil)
+            GameTooltip:Hide()
+            if ns.RefreshConfig then ns.RefreshConfig() end
+        end)
+        g.edge = e
         grabs[b] = g
     end
     g:Show()
@@ -923,25 +975,55 @@ end
 local function Panel()
     if panel then return panel end
     panel = CreateFrame("Frame", "HUF_ArrangeBlocks", UIParent)
-    panel:SetSize(300, 54)
-    panel:SetPoint("TOP", 0, -120)
+    panel:SetSize(400, 128)
+    panel:SetPoint("TOP", 0, -110)
     panel:SetFrameStrata("DIALOG")
+    panel:SetClampedToScreen(true)
     panel:SetMovable(true)
     panel:EnableMouse(true)
     panel:RegisterForDrag("LeftButton")
     panel:SetScript("OnDragStart", panel.StartMoving)
     panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
-    ns.UI.Fill(panel, 0.05, 0.05, 0.06, 0.95)
-    ns.UI.Border(panel, A[1], A[2], A[3], 0.9)
+    ns.UI.Fill(panel, 0.05, 0.05, 0.06, 0.96)
+    ns.UI.Border(panel, 0.2, 0.2, 0.22, 1)
+    -- an accent line along the top, the title under it
+    local top = panel:CreateTexture(nil, "ARTWORK")
+    top:SetPoint("TOPLEFT", 1, -1)
+    top:SetPoint("TOPRIGHT", -1, -1)
+    top:SetHeight(2)
+    top:SetColorTexture(A[1], A[2], A[3], 1)
+    local icon = panel:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(20, 20)
+    icon:SetPoint("TOPLEFT", 12, -12)
+    icon:SetTexture("Interface\\Icons\\INV_Misc_Gear_01")
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     local t = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    t:SetPoint("TOP", 0, -8)
-    t:SetText("Arranging data bar blocks")
+    t:SetPoint("LEFT", icon, "RIGHT", 8, 0)
+    t:SetText("Arrange data bar blocks")
     t:SetTextColor(A[1], A[2], A[3])
-    local s = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    s:SetPoint("TOP", t, "BOTTOM", 0, -4)
-    s:SetText("Drag a block along its bar or onto another one.")
-    local done = ns.UI.Button(panel, 60, "Done", function() DB.SetArranging(false) end)
-    done:SetPoint("BOTTOMRIGHT", -6, 6)
+    local close = ns.UI.Button(panel, 22, "x", function() DB.SetArranging(false) end)
+    close:SetPoint("TOPRIGHT", -8, -10)
+    local hints = {
+        "|cffffd100Drag a block|r along its bar, or onto another data bar.",
+        "|cffffd100Drag its right edge|r: its width.   |cffffd100Shift + drag|r: its text size.",
+        "The accent line shows where a block will land.",
+    }
+    local prev
+    for i, h in ipairs(hints) do
+        local s = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        s:SetPoint("TOPLEFT", prev or icon, "BOTTOMLEFT", 0, i == 1 and -10 or -4)
+        s:SetPoint("RIGHT", panel, "RIGHT", -12, 0)
+        s:SetJustifyH("LEFT")
+        s:SetText(h)
+        prev = s
+    end
+    local done = ns.UI.Button(panel, 90, "Done", function() DB.SetArranging(false) end)
+    done:SetPoint("BOTTOMRIGHT", -10, 10)
+    local set = ns.UI.Button(panel, 130, "Data bar settings", function()
+        DB.SetArranging(false)
+        if ns.OpenConfigTab then ns.OpenConfigTab("databars", "blocks") end
+    end)
+    set:SetPoint("RIGHT", done, "LEFT", -8, 0)
     panel:Hide()
     return panel
 end
