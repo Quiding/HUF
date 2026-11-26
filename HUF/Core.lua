@@ -633,7 +633,7 @@ local function BuildDefaults()
             border = 1, borderAccent = false, borderColor = C(0, 0, 0), slotAlpha = 0.6,
             fillGaps = false,           -- borders reaching over the spacing (solid lines); off: see-through gaps (EllesmereUI)
             iconZoom = 0.055,           -- the icon's edge cut away on each side (EllesmereUI: 5.5 %)
-            keySize = 12, countSize = 14, keyColor = C(1, 1, 1),
+            keySize = 12, countSize = 12, keyColor = C(1, 1, 1),
             -- the bars around them (ExtraBars.lua): HUF's XP / reputation bars, the game's micro
             -- menu, bag bar and queue button held by HUF (place: where the game had it, first time).
             -- On with HUF's action bars (each can be switched off); nothing while those are off
@@ -648,13 +648,13 @@ local function BuildDefaults()
                 queue = { enabled = true, scale = 1, hidden = false, mouseover = false },
             },
             bars = {
-                MainBar = { enabled = true, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 40 },
+                MainBar = { enabled = true, buttons = 12, perRow = 12, size = 34, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 40 },
                             mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false },
-                Bar2 = { enabled = true, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 78 },
+                Bar2 = { enabled = true, buttons = 12, perRow = 12, size = 34, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 76 },
                          mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false },
-                Bar3 = { enabled = true, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 116 },
+                Bar3 = { enabled = true, buttons = 10, perRow = 5, size = 34, spacing = 2, point = { "BOTTOM", "BOTTOM", -312, 40 },
                          mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false },
-                Bar4 = { enabled = false, buttons = 12, perRow = 1, size = 36, spacing = 2, point = { "RIGHT", "RIGHT", -10, 0 },
+                Bar4 = { enabled = true, buttons = 10, perRow = 5, size = 34, spacing = 2, point = { "BOTTOM", "BOTTOM", 312, 40 },
                          mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false },
                 Bar5 = { enabled = false, buttons = 12, perRow = 1, size = 36, spacing = 2, point = { "RIGHT", "RIGHT", -48, 0 },
                          mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false },
@@ -665,13 +665,13 @@ local function BuildDefaults()
                 Bar8 = { enabled = false, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "CENTER", "CENTER", 0, -276 },
                          mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false },
                 -- bars 9 / 10 borrow bar 7's / 8's buttons (action pages 2 and 10); keys = their own
-                Bar9 = { enabled = false, buttons = 12, perRow = 6, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", -420, 40 },
+                Bar9 = { enabled = false, buttons = 12, perRow = 6, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", -312, 118 },
                          mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false, keys = {} },
-                Bar10 = { enabled = false, buttons = 12, perRow = 6, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", 420, 40 },
+                Bar10 = { enabled = false, buttons = 12, perRow = 6, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", 312, 118 },
                           mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false, keys = {} },
-                StanceBar = { enabled = true, buttons = 10, perRow = 10, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", -170, 154 },
+                StanceBar = { enabled = true, buttons = 10, perRow = 10, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", -170, 118 },
                               mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false },
-                PetBar = { enabled = true, buttons = 10, perRow = 10, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", 170, 154 },
+                PetBar = { enabled = true, buttons = 10, perRow = 10, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", 170, 118 },
                            mouseover = false, hideHotkey = false, hideMacro = false, rowsUp = false },
             },
         },
