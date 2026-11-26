@@ -294,7 +294,8 @@ function PA.NewMover(kind)
     m:Hide()
     movers[kind] = m
     if ns.Snap then ns.Snap.Register(m) end
-    -- unlock mode's corner grips: the icons grow or shrink (rows and columns stay)
+    -- unlock mode's corner grips: dragging sets how many icons fit across and down (columns /
+    -- rows); Shift + drag: the icon size
     if ns.Movers and ns.Movers.AddGrips then
         ns.Movers.AddGrips(m, m, {
             box = m,
@@ -305,16 +306,18 @@ function PA.NewMover(kind)
                 get = function() local g = Geometry(S(kind)) return g.w, g.h end,
                 set = function(w, h)
                     local s = S(kind)
-                    local g = Geometry(s)
-                    local _, _, _, vertical = Flow(s)
-                    local across = vertical and g.lines or g.perLine     -- icons side by side
-                    local down = vertical and g.perLine or g.lines       -- icons on top of each other
                     local extra = (s.timer and s.timerPos == "BELOW") and (s.timerSize + 2) or 0
-                    local byW = (w + s.padding) / across - s.padding
-                    local byH = (h + s.padding) / down - s.padding - extra
-                    -- the side dragged more decides
-                    local size = math.abs(byW - s.size) >= math.abs(byH - s.size) and byW or byH
-                    s.size = math.max(12, math.min(64, math.floor(size + 0.5)))
+                    local across = math.max(1, math.min(40, math.floor((w + s.padding) / (s.size + s.padding) + 0.5)))
+                    local down = math.max(1, math.min(10, math.floor((h + s.padding) / (s.size + s.padding + extra) + 0.5)))
+                    -- the width holds the columns and the height the rows, whichever way the icons flow
+                    s.columns, s.rows = across, down
+                    PA.Apply()
+                end,
+            },
+            scaler = {
+                get = function() return S(kind).size end,
+                set = function(v)
+                    S(kind).size = math.max(12, math.min(64, math.floor(v + 0.5)))
                     PA.Apply()
                 end,
             },
