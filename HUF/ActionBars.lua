@@ -323,26 +323,26 @@ local function BarFrame(info)
         settings = function() if ns.OpenConfigTab then ns.OpenConfigTab("actionbars", info.key) end end,
         get = function() local s = S(info.key) return s and s.point end,
         set = function(v) local s = S(info.key) if s and type(v) == "table" then s.point = v AB.Apply() end end,
-        -- unlock mode's corner grips: the layout that fills the dragged box with the biggest
-        -- buttons - drag it tall and narrow and the bar turns vertical, bigger and the buttons grow
+        -- unlock mode's corner grips: the grid closest to the dragged box, the buttons keep
+        -- their size (drag it tall and narrow and the bar turns vertical); Shift + drag: size
         resize = {
             get = function() return f:GetWidth(), f:GetHeight() end,
             set = function(w, h)
                 local s = S(info.key)
                 local n = math.max(1, math.min(s.buttons or info.count, f.count or info.count))
-                local gap = s.spacing or 2
-                local best, bestSize
+                local gap, size = s.spacing or 2, s.size or 36
+                local best, bestD
                 for per = 1, n do
                     local rows = math.ceil(n / per)
-                    -- only layouts without a half-empty last row (12: 1, 2, 3, 4, 6, 12 per row)
+                    -- only grids without a half-empty last row (12: 1, 2, 3, 4, 6, 12 per row)
                     if per * rows - n < per then
-                        local size = math.min((w - (per - 1) * gap) / per, (h - (rows - 1) * gap) / rows)
-                        if not bestSize or size > bestSize + 0.01 then best, bestSize = per, size end
+                        local bw, bh = per * size + (per - 1) * gap, rows * size + (rows - 1) * gap
+                        local dd = math.abs(bw - w) + math.abs(bh - h)
+                        if not bestD or dd < bestD then best, bestD = per, dd end
                     end
                 end
-                if not best then return end
+                if not best or best == s.perRow then return end
                 s.perRow = best
-                s.size = math.max(16, math.min(64, math.floor(bestSize + 0.5)))
                 Layout(info)
             end,
             -- Shift + drag: the button size only (rows and columns stay)
