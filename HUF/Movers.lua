@@ -805,6 +805,12 @@ local boxes = {}
 --       settings = function() end,           -- optional: right-click on the box
 --       get = function() return place end,   -- optional, with set: the window's place (any table),
 --       set = function(place) end,           -- carried in HUF's profile export / import
+--       resize = {                           -- optional: corner grips and the size window
+--           get = function() return w, h end,        -- its size (in the window's own units)
+--           set = function(w, h) end,                -- a new size (the opposite corner stays put)
+--           done = function() end,                   -- optional: the drag / typing ended
+--           step = function() return 1, 1 end,       -- optional: snap the size to steps
+--       },
 --   })
 --   HUF.UnregisterMover(id)
 Movers.external = {}
@@ -819,6 +825,8 @@ function ns.RegisterMover(id, spec)
     Movers.external[id] = {
         external = true, label = tostring(spec.label or id), save = spec.save, settings = spec.settings,
         get = spec.get, set = spec.set, preview = spec.preview,
+        resize = type(spec.resize) == "table" and type(spec.resize.get) == "function" and type(spec.resize.set) == "function"
+            and spec.resize or nil,
         frame = getFrame,
         on = function()
             local f = getFrame()
