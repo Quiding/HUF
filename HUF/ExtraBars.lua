@@ -87,6 +87,15 @@ local function NewBar(key, label)
         settings = function() if ns.OpenConfigTab then ns.OpenConfigTab("actionbars", "data") end end,
         get = function() local s = S(key) return s and s.point end,
         set = function(v) local s = S(key) if s and type(v) == "table" then s.point = v EB.Apply() end end,
+        resize = {   -- unlock mode's corner grips: width and height
+            get = function() local s = S(key) return s.width or 400, s.height or 10 end,
+            set = function(w, h)
+                local s = S(key)
+                s.width = math.max(50, math.min(1600, math.floor(w + 0.5)))
+                s.height = math.max(2, math.min(40, math.floor(h + 0.5)))
+                EB.Apply()
+            end,
+        },
     })
     return f
 end
@@ -236,6 +245,16 @@ local function Hold(key)
         settings = function() if ns.OpenConfigTab then ns.OpenConfigTab("actionbars", "menus") end end,
         get = function() local t = S(key) return t and t.point end,
         set = function(v) local t = S(key) if t and type(v) == "table" then t.point = v EB.Apply() end end,
+        resize = {   -- unlock mode's corner grips: its scale (the game's frame keeps its shape)
+            get = function() return h:GetWidth(), h:GetHeight() end,
+            set = function(w)
+                local f = Target(key)
+                local base = f and f:GetWidth() or 0
+                if base <= 0 then return end
+                S(key).scale = math.max(0.5, math.min(2, w / base))
+                Seat(key)
+            end,
+        },
     })
     return h
 end

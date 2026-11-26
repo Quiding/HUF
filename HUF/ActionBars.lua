@@ -271,6 +271,7 @@ local function Layout(info)
         Texts(b, s)
     end
     f:SetSize(per * size + (per - 1) * gap, rows * size + (rows - 1) * gap)
+    f.per, f.rows = per, rows
     -- the gaps between the buttons: the slot colour too (EllesmereUI's dark grid), or see-through
     -- (the gaps: each button's border reaches over them, Skin)
     f:ClearAllPoints()
@@ -309,6 +310,17 @@ local function BarFrame(info)
         settings = function() if ns.OpenConfigTab then ns.OpenConfigTab("actionbars", info.key) end end,
         get = function() local s = S(info.key) return s and s.point end,
         set = function(v) local s = S(info.key) if s and type(v) == "table" then s.point = v AB.Apply() end end,
+        -- unlock mode's corner grips: the buttons grow or shrink, rows and columns stay
+        resize = {
+            get = function() return f:GetWidth(), f:GetHeight() end,
+            set = function(w, h)
+                local s = S(info.key)
+                local per, rows, gap = f.per or 12, f.rows or 1, s.spacing or 2
+                local size = math.min((w - (per - 1) * gap) / per, (h - (rows - 1) * gap) / rows)
+                s.size = math.max(16, math.min(64, math.floor(size + 0.5)))
+                Layout(info)
+            end,
+        },
     })
     return f
 end
