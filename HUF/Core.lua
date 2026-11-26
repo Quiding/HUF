@@ -631,6 +631,20 @@ local function BuildDefaults()
         actionBars = {
             enabled = false,
             border = 1, borderAccent = false, borderColor = C(0, 0, 0), slotAlpha = 0.6,
+            fillGaps = true,            -- the gaps between buttons in the slot colour (a dark grid, as EllesmereUI)
+            keySize = 12, countSize = 14, keyColor = C(1, 1, 1),
+            -- the bars around them (ExtraBars.lua): HUF's XP / reputation bars, the game's micro
+            -- menu, bag bar and queue button held by HUF (place: where the game had it, first time)
+            extra = {
+                hideBlizzardStatus = true,
+                xp = { enabled = false, width = 400, height = 10, text = "MOUSEOVER", textSize = 11, mouseover = false,
+                       hideMaxLevel = true, point = { "BOTTOM", "BOTTOM", 0, 4 } },
+                rep = { enabled = false, width = 400, height = 10, text = "MOUSEOVER", textSize = 11, mouseover = false,
+                        point = { "BOTTOM", "BOTTOM", 0, 18 } },
+                micro = { enabled = false, scale = 1, hidden = false, mouseover = false },
+                bags = { enabled = false, scale = 1, hidden = false, mouseover = false },
+                queue = { enabled = false, scale = 1, hidden = false, mouseover = false },
+            },
             bars = {
                 MainBar = { enabled = true, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 40 },
                             mouseover = false, hideHotkey = false, hideMacro = false },
@@ -648,6 +662,11 @@ local function BuildDefaults()
                          mouseover = false, hideHotkey = false, hideMacro = false },
                 Bar8 = { enabled = false, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "CENTER", "CENTER", 0, -276 },
                          mouseover = false, hideHotkey = false, hideMacro = false },
+                -- bars 9 / 10 borrow bar 7's / 8's buttons (action pages 2 and 10); keys = their own
+                Bar9 = { enabled = false, buttons = 12, perRow = 6, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", -420, 40 },
+                         mouseover = false, hideHotkey = false, hideMacro = false, keys = {} },
+                Bar10 = { enabled = false, buttons = 12, perRow = 6, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", 420, 40 },
+                          mouseover = false, hideHotkey = false, hideMacro = false, keys = {} },
                 StanceBar = { enabled = true, buttons = 10, perRow = 10, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", -170, 154 },
                               mouseover = false, hideHotkey = false, hideMacro = false },
                 PetBar = { enabled = true, buttons = 10, perRow = 10, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", 170, 154 },

@@ -316,6 +316,7 @@ function ns.FrameReport(add)
     if ns.PlayerAuras then ns.PlayerAuras.Report(add) end
     if ns.Chat then ns.Chat.Report(add) end
     if ns.ActionBars then ns.ActionBars.Report(add) end
+    if ns.ExtraBars then ns.ExtraBars.Report(add) end
     if ns.Bags then ns.Bags.Report(add) end
     if ns.Windows then ns.Windows.Report(add) end
     if ns.QuestLog then ns.QuestLog.Report(add) end

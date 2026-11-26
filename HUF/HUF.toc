@@ -33,6 +33,7 @@ PlayerAuras.lua
 Chat.lua
 Bags.lua
 ActionBars.lua
+ExtraBars.lua
 Windows.lua
 QuestLog.lua
 QuestLinks.lua

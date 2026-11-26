@@ -38,6 +38,11 @@ local BARS = {
     { key = "Bar6", label = "Action Bar 6", prefix = "MultiBar5Button", count = 12, blizz = { "MultiBar5" }, page = 13 },
     { key = "Bar7", label = "Action Bar 7", prefix = "MultiBar6Button", count = 12, blizz = { "MultiBar6" }, page = 14 },
     { key = "Bar8", label = "Action Bar 8", prefix = "MultiBar7Button", count = 12, blizz = { "MultiBar7" }, page = 15 },
+    -- bars 9 and 10 (EllesmereUI's extra bars, action pages 2 and 10): the game has no buttons for
+    -- them, so they borrow bar 7's / bar 8's while that bar is off in HUF; their keys are HUF's own
+    -- (override bindings, from the EllesmereUI import or the settings)
+    { key = "Bar9", label = "Action Bar 9", prefix = "MultiBar6Button", count = 12, blizz = { "MultiBar6" }, page = 2, lender = "Bar7", bind = "EUI_BAR9_BUTTON" },
+    { key = "Bar10", label = "Action Bar 10", prefix = "MultiBar7Button", count = 12, blizz = { "MultiBar7" }, page = 10, lender = "Bar8", bind = "EUI_BAR10_BUTTON" },
     { key = "StanceBar", label = "Stance Bar", prefix = "StanceButton", count = 10, blizz = { "StanceBar", "StanceBarFrame" }, stance = true },
     { key = "PetBar", label = "Pet Bar", prefix = "PetActionButton", count = 10, blizz = { "PetActionBar", "PetActionBarFrame" }, pet = true },
 }
@@ -160,10 +165,45 @@ local function Skin(b, scale)
     p.border:SetColor(c.r, c.g, c.b, 1)
 end
 
+-- the key: white and outlined, top right on a button with an action, in the middle of an empty
+-- slot (as EllesmereUI shows them); the stack count bottom right
+local function Font() return (ns.FontPath and ns.FontPath("GLOBAL")) or STANDARD_TEXT_FONT end
+local function PlaceTexts(b)
+    local p = skinned[b]
+    if not (p and p.hotkey) then return end
+    local d = DB()
+    local empty = b.action and HasAction and not HasAction(b.action)
+    p.hotkey:ClearAllPoints()
+    if empty then p.hotkey:SetPoint("CENTER", b, "CENTER", 0, 0)
+    else p.hotkey:SetPoint("TOPRIGHT", b, "TOPRIGHT", -2, -2) end
+    p.hotkey:SetJustifyH(empty and "CENTER" or "RIGHT")
+    -- a borrowed bar's own key (bars 9 / 10): the game's button doesn't know it
+    if b.hufKey then p.hotkey:SetText(GetBindingText and GetBindingText(b.hufKey, true) or b.hufKey) p.hotkey:Show() end
+    local c = d.keyColor or { r = 1, g = 1, b = 1 }
+    p.hotkey:SetTextColor(c.r, c.g, c.b)
+end
+
 local function Texts(b, s)
     local p = skinned[b]
     if not p then return end
-    if p.hotkey then p.hotkey:SetAlpha(s.hideHotkey and 0 or 1) end
+    local d = DB()
+    local scale = b:GetScale() or 1
+    if p.hotkey then
+        -- sizes in the bar's units: the button itself is scaled
+        p.hotkey:SetFont(Font(), (d.keySize or 12) / scale, "OUTLINE")
+        p.hotkey:SetAlpha(s.hideHotkey and 0 or 1)
+        if not p.hotkeyHooked and b.UpdateHotkeys then
+            p.hotkeyHooked = true
+            hooksecurefunc(b, "UpdateHotkeys", function(self) PlaceTexts(self) end)
+        end
+        PlaceTexts(b)
+    end
+    local count = b.Count or _G[(b:GetName() or "") .. "Count"]
+    if count then
+        count:SetFont(Font(), (d.countSize or 14) / scale, "OUTLINE")
+        count:ClearAllPoints()
+        count:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+    end
     if p.name then p.name:SetAlpha(s.hideMacro and 0 or 1) end
 end
 
@@ -208,6 +248,14 @@ local function Layout(info)
         Texts(b, s)
     end
     f:SetSize(per * size + (per - 1) * gap, rows * size + (rows - 1) * gap)
+    -- the gaps between the buttons: the slot colour too (EllesmereUI's dark grid), or see-through
+    if not f.fill then
+        f.fill = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+        f.fill:SetAllPoints(f)
+    end
+    local d = DB()
+    f.fill:SetColorTexture(0.05, 0.05, 0.06, d.slotAlpha or 0.6)
+    f.fill:SetShown(d.fillGaps ~= false and gap > 0)
     f:ClearAllPoints()
     local pt = s.point or { "BOTTOM", "BOTTOM", 0, 40 }
     f:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
@@ -291,6 +339,34 @@ local function Take(info)
     return true
 end
 
+-- bars 9 / 10: their keys (override bindings on HUF's bar, the game's own bindings stay)
+local function BindKeys(info)
+    local f, s = frames[info.key], S(info.key)
+    if not (f and s and info.bind) then return end
+    ClearOverrideBindings(f)
+    local list = Buttons(info)
+    for i, b in ipairs(list) do
+        local key = type(s.keys) == "table" and s.keys[i] or nil
+        b.hufKey = (type(key) == "string" and key ~= "") and key or nil
+        if b.hufKey then SetOverrideBindingClick(f, false, b.hufKey, b:GetName(), "LeftButton") end
+        PlaceTexts(b)
+    end
+end
+
+-- a borrowing bar (9 / 10) runs only while the bar it borrows from is off
+local function Allowed(info)
+    if info.lender then
+        local l = S(info.lender)
+        return not (l and l.enabled) and not taken[info.lender]
+    end
+    -- a lender whose buttons a borrowing bar already holds waits for a reload
+    for _, o in ipairs(BARS) do
+        if o.lender == info.key and taken[o.key] then return false end
+    end
+    return true
+end
+AB.Allowed = function(key) local info = BY_KEY[key] return info and Allowed(info) end
+
 local function Visible(info)
     local f = frames[info.key]
     if not f or info.pet then return end   -- the pet bar: its state driver
@@ -308,12 +384,13 @@ function AB.Apply()
     if InCombatLockdown() then stats.deferred = stats.deferred + 1 ns.RunOOC("ab:apply", AB.Apply) return end
     for _, info in ipairs(BARS) do
         local s = S(info.key)
-        if s and s.enabled then
+        if s and s.enabled and Allowed(info) then
             local ok, err = pcall(Take, info)
             if not ok then ns.LogError("action bar " .. info.key, err) end
             if taken[info.key] then
                 Layout(info)
                 Visible(info)
+                if info.bind then BindKeys(info) end
             end
         end
     end
@@ -347,6 +424,15 @@ function AB.Fade()
 end
 
 -- forms learned / changed: the stance bar's count and visibility
+-- an action placed or removed: the key moves between the middle (empty) and the corner
+local slotEv = CreateFrame("Frame")
+slotEv:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+slotEv:RegisterEvent("UPDATE_BINDINGS")
+slotEv:SetScript("OnEvent", function()
+    if not (DB() and DB().enabled) then return end
+    for b in pairs(skinned) do PlaceTexts(b) end
+end)
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -385,6 +471,23 @@ local function EllesmereLive()
     return nil
 end
 
+-- the keys bound to EllesmereUI's bar 9 / 10 buttons (its key binding commands exist while it is loaded)
+local function EllesmereKeys()
+    local out, any = {}, false
+    for _, info in ipairs(BARS) do
+        if info.bind then
+            local k = {}
+            for i = 1, info.count do
+                local key = GetBindingKey and GetBindingKey(info.bind .. i)
+                k[i] = key or ""
+                if key then any = true end
+            end
+            out[info.key] = k
+        end
+    end
+    return any and out or nil
+end
+
 -- while EllesmereUI is on, HUF keeps a copy of the parts it imports (bars and places), so
 -- the import still works after EllesmereUI is switched off (its saved settings only load with it)
 local function KeepCopy()
@@ -392,12 +495,20 @@ local function KeepCopy()
     if not (a and HUFDB) then return end
     local bars = {}
     for key in pairs(BY_KEY) do bars[key] = Copy(a.bars[key]) end
-    HUFDB.ellesmereActionBars = { time = time(), bars = bars, barPositions = Copy(a.barPositions) }
+    for _, key in ipairs({ "XPBar", "RepBar", "MicroBar", "BagBar", "QueueStatus" }) do bars[key] = Copy(a.bars[key]) end
+    local old = HUFDB.ellesmereActionBars
+    HUFDB.ellesmereActionBars = { time = time(), bars = bars, barPositions = Copy(a.barPositions),
+        _keys = EllesmereKeys() or (type(old) == "table" and old._keys) or nil }
 end
 
 function AB.EllesmereSource()
     local a = EllesmereLive()
-    if a then return a, "EllesmereUI" end
+    if a then
+        local src = {}
+        for k, v in pairs(a) do src[k] = v end
+        src._keys = EllesmereKeys() or (HUFDB and type(HUFDB.ellesmereActionBars) == "table" and HUFDB.ellesmereActionBars._keys) or nil
+        return src, "EllesmereUI"
+    end
     local c = HUFDB and HUFDB.ellesmereActionBars
     if type(c) == "table" and type(c.bars) == "table" then
         return c, ("the copy HUF kept on %s"):format(date("%Y-%m-%d %H:%M", c.time or 0))
@@ -430,8 +541,55 @@ function AB.ConvertEllesmere(src, out)
             end
         end
     end
+    -- XP / reputation bars, micro menu, bag bar, queue button (ExtraBars.lua)
+    local x = out.extra
+    if type(x) == "table" and type(src.bars) == "table" then
+        local pos = type(src.barPositions) == "table" and src.barPositions or {}
+        local function Place(t, ek)
+            local p = pos[ek]
+            if type(p) == "table" and type(p.x) == "number" and type(p.y) == "number" then
+                t.point = { p.point or "CENTER", p.relPoint or "CENTER", math.floor(p.x + 0.5), math.floor(p.y + 0.5) }
+            end
+        end
+        for hk, ek in pairs({ xp = "XPBar", rep = "RepBar" }) do
+            local eb, t = src.bars[ek], x[hk]
+            if type(eb) == "table" and type(t) == "table" then
+                n = n + 1
+                t.enabled = not eb.alwaysHidden
+                t.width = math.max(50, math.floor(Num(eb.width, t.width) + 0.5))
+                t.height = math.max(2, math.floor(Num(eb.height, t.height) + 0.5))
+                t.textSize = math.max(6, math.floor(Num(eb.textSize, t.textSize) + 0.5))
+                t.mouseover = eb.mouseoverEnabled and true or false
+                Place(t, ek)
+            end
+        end
+        for hk, ek in pairs({ micro = "MicroBar", bags = "BagBar", queue = "QueueStatus" }) do
+            local eb, t = src.bars[ek], x[hk]
+            if type(eb) == "table" and type(t) == "table" then
+                n = n + 1
+                t.enabled = true
+                t.hidden = eb.alwaysHidden and true or false
+                t.mouseover = eb.mouseoverEnabled and true or false
+                Place(t, ek)
+            end
+        end
+    end
+
+    -- bars 9 / 10: the keys bound to EllesmereUI's buttons for them
+    for _, info in ipairs(BARS) do
+        local keys = info.bind and type(src._keys) == "table" and src._keys[info.key]
+        if type(keys) == "table" and out.bars[info.key] then
+            local k = {}
+            for i = 1, info.count do k[i] = type(keys[i]) == "string" and keys[i] or "" end
+            out.bars[info.key].keys = k
+        end
+    end
     local main = type(src.bars) == "table" and src.bars.MainBar
     if type(main) == "table" then
+        out.keySize = math.max(6, math.min(24, math.floor(Num(main.keybindFontSize, 12) + 0.5)))
+        out.countSize = math.max(6, math.min(24, math.floor(Num(main.countFontSize, 14) + 0.5)))
+        local kc = main.keybindFontColor
+        if type(kc) == "table" and type(kc.r) == "number" then out.keyColor = { r = kc.r, g = kc.g, b = kc.b } end
         out.border = main.borderEnabled == false and 0 or math.max(0, math.min(3, math.floor(Num(main.borderSize, 1) + 0.5)))
         local c = main.borderColor
         if type(c) == "table" and type(c.r) == "number" then
