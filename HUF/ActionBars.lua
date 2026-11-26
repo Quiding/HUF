@@ -248,7 +248,12 @@ local function Layout(info)
         if i <= n then
             local col = (i - 1) % per
             local row = math.floor((i - 1) / per)
-            b:SetPoint("TOPLEFT", f, "TOPLEFT", col * (size + gap) / scale, -row * (size + gap) / scale)
+            if s.rowsUp then
+                -- the first row at the bottom, new rows above it (EllesmereUI's "grow up")
+                b:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", col * (size + gap) / scale, row * (size + gap) / scale)
+            else
+                b:SetPoint("TOPLEFT", f, "TOPLEFT", col * (size + gap) / scale, -row * (size + gap) / scale)
+            end
             if info.stance or info.pet then b:Show() end
         else
             -- past the chosen count: kept out of sight (the game still owns its key binding)
@@ -531,11 +536,20 @@ function AB.ConvertEllesmere(src, out)
         if type(eb) == "table" and type(s) == "table" then
             n = n + 1
             s.enabled = eb.enabled ~= false and not eb.alwaysHidden
-            s.buttons = math.max(1, math.min(info.count, math.floor(Num(eb.numIcons, info.count) + 0.5)))
-            local rows = math.max(1, math.floor(Num(eb.numRows, 1) + 0.5))
-            s.perRow = math.max(1, math.ceil(s.buttons / rows))
-            s.size = math.max(16, math.min(64, math.floor(Num(eb.buttonWidth, s.size) + 0.5)))
-            s.spacing = math.max(0, math.min(20, math.floor(Num(eb.buttonPadding, s.spacing) + 0.5)))
+            -- Ellesmere uses its override counts first (what its bar shows)
+            s.buttons = math.max(1, math.min(info.count, math.floor(Num(eb.overrideNumIcons, Num(eb.numIcons, info.count)) + 0.5)))
+            local rows = math.max(1, math.floor(Num(eb.overrideNumRows, Num(eb.numRows, 1)) + 0.5))
+            if eb.orientation == "vertical" then
+                -- a vertical bar: its rows count is the number of columns
+                s.perRow = math.max(1, math.min(s.buttons, rows))
+                s.rowsUp = false
+            else
+                s.perRow = math.max(1, math.ceil(s.buttons / rows))
+                local grow = type(eb.growDirection) == "string" and eb.growDirection:upper() or "UP"
+                s.rowsUp = (grow == "UP" or grow == "CENTER")
+            end
+            s.size = math.max(16, math.min(64, math.floor(Num(eb.buttonWidth, s.size or 36) + 0.5)))
+            s.spacing = math.max(0, math.min(20, math.floor(Num(eb.buttonPadding, s.spacing or 2) + 0.5)))
             s.mouseover = eb.mouseoverEnabled and true or false
             s.hideHotkey = eb.hideKeybind and true or false
             s.hideMacro = eb.hideMacroText and true or false
