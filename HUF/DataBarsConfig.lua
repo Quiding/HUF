@@ -124,6 +124,10 @@ end
 local function BarsPage(f)
     local L = UI.Column(f, 0, 0, COL_W)
     PickBar(L)
+    L:Button("Arrange blocks (drag them on the bars)", function()
+        DB.SetArranging(true)
+        if ns.HideConfig then ns.HideConfig() end
+    end)
     L:Button("New bar", function()
         DB.NewBar()
         selBar, selBlock = #List(), 1
@@ -258,6 +262,10 @@ local TYPE_OPTIONS = {
 local function BlocksPage(f)
     local L = UI.Column(f, 0, 0, COL_W)
     PickBar(L)
+    L:Button("Arrange blocks (drag them on the bars)", function()
+        DB.SetArranging(true)
+        if ns.HideConfig then ns.HideConfig() end
+    end)
     L:Cycle("Block", BlockChoices, function() return Block() and selBlock end,
         function(v) selBlock = v if ns.RefreshConfig then ns.RefreshConfig() end end)
     L:Button("Add a block", function(self)

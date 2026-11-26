@@ -606,7 +606,7 @@ function DB.UpdateVisibility()
     local anyHover = false
     for cfg, rec in pairs(recs) do
         if rec.frame:IsShown() then
-            rec.frame:SetAlpha((ns.unlocked or Wanted(cfg, rec)) and 1 or 0)
+            rec.frame:SetAlpha((ns.unlocked or DB.arranging or Wanted(cfg, rec)) and 1 or 0)
             if cfg.visibility == "HOVER" then anyHover = true end
         end
     end
@@ -662,6 +662,7 @@ function DB.ApplyBar(cfg)
     end
     f:Show()
     DB.LayoutBar(cfg)
+    if DB.arranging and DB.Grabs then DB.Grabs(cfg) end
 end
 
 -- /run HUF.DataBars.PrintEdges(): left / right / bottom / top of the chat
@@ -787,6 +788,180 @@ function DB.SetUnlocked(on)
     end
     DB.UpdateVisibility()
 end
+
+---------------------------------------------------------------------------
+-- Arranging blocks (the Data Bars page's "Arrange blocks", /huf blocks): every block gets a
+-- handle; drag one along its bar or onto another data bar - an accent line shows where it
+-- lands - and drop it there. Dropped anywhere else: it stays where it was. A small panel with
+-- "Done" ends it (as MMT's lock / unlock). Blocks don't take clicks meanwhile.
+---------------------------------------------------------------------------
+DB.arranging = false
+local grabs = {}           -- [block frame] = its handle
+local panel, ghost, marker
+local drag                 -- { b = block frame, cfg = its bar }
+
+-- the bar under the cursor and where in it (index among its blocks, the dragged one left out)
+local function DropAt()
+    for cfg, rec in pairs(recs) do
+        local f = rec.frame
+        if f:IsShown() and f:IsMouseOver(4, -4, -4, 4) then
+            local x = GetCursorPosition() / f:GetEffectiveScale()
+            local at, n, lineX = 1, 0, f:GetLeft()
+            for _, b in ipairs(rec.blocks) do
+                if not (drag and b == drag.b) then
+                    n = n + 1
+                    local cx = b:GetCenter()
+                    if cx and x > cx then at, lineX = n + 1, b:GetRight() end
+                end
+            end
+            return cfg, rec, at, lineX
+        end
+    end
+end
+
+local function Marker(rec, x)
+    if not marker then
+        marker = CreateFrame("Frame", nil, UIParent)
+        marker:SetFrameStrata("TOOLTIP")
+        local t = marker:CreateTexture(nil, "OVERLAY")
+        t:SetAllPoints()
+        t:SetColorTexture(A[1], A[2], A[3], 1)
+    end
+    if not rec then marker:Hide() return end
+    local f = rec.frame
+    marker:SetParent(f)
+    marker:SetFrameStrata("TOOLTIP")
+    marker:ClearAllPoints()
+    marker:SetSize(2, f:GetHeight() + 6)
+    marker:SetPoint("CENTER", f, "BOTTOMLEFT", (x or f:GetLeft()) - f:GetLeft(), f:GetHeight() / 2)
+    marker:Show()
+end
+
+local function Ghost(b)
+    if not ghost then
+        ghost = CreateFrame("Frame", nil, UIParent)
+        ghost:SetFrameStrata("TOOLTIP")
+        ns.UI.Fill(ghost, 0.05, 0.05, 0.06, 0.9)
+        ns.UI.Border(ghost, A[1], A[2], A[3], 1)
+        ghost.text = ghost:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        ghost.text:SetPoint("CENTER")
+    end
+    local def = BL.TYPES[b.cfg.type]
+    ghost.text:SetText(def and def.title or b.cfg.type)
+    ghost:SetSize(math.max(60, ghost.text:GetStringWidth() + 16), 20)
+    ghost:Show()
+end
+
+local function EndDrag(drop)
+    local d = drag
+    drag = nil
+    if ghost then ghost:Hide() ghost:SetScript("OnUpdate", nil) end
+    Marker(nil)
+    if not d then return end
+    d.b:SetAlpha(1)
+    if not drop then return end
+    local toCfg, _, at = DropAt()
+    if not toCfg then return end
+    -- out of its bar, into the new place
+    local from = d.cfg.blocks
+    for i, bc in ipairs(from) do
+        if bc == d.b.cfg then table.remove(from, i) break end
+    end
+    at = math.max(1, math.min(at, #toCfg.blocks + 1))
+    table.insert(toCfg.blocks, at, d.b.cfg)
+    DB.ApplyBar(d.cfg)
+    if toCfg ~= d.cfg then DB.ApplyBar(toCfg) end
+    if ns.RefreshConfig then ns.RefreshConfig() end
+end
+
+local function Grab(b)
+    local g = grabs[b]
+    if not g then
+        g = CreateFrame("Button", nil, b)
+        g:SetAllPoints(b)
+        g:SetFrameLevel(b:GetFrameLevel() + 10)
+        g.fill = ns.UI.Fill(g, A[1], A[2], A[3], 0.12)
+        ns.UI.Border(g, A[1], A[2], A[3], 0.9)
+        g:RegisterForDrag("LeftButton")
+        g:SetScript("OnEnter", function(self)
+            local def = BL.TYPES[self:GetParent().cfg.type]
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(def and def.title or "Block")
+            GameTooltip:AddLine("Drag it along the bar or onto another data bar.", 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        g:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        g:SetScript("OnDragStart", function(self)
+            local blk = self:GetParent()
+            GameTooltip:Hide()
+            drag = { b = blk, cfg = blk.barCfg }
+            blk:SetAlpha(0.35)
+            Ghost(blk)
+            ghost:SetScript("OnUpdate", function(gh)
+                local x, y = GetCursorPosition()
+                local s = UIParent:GetEffectiveScale()
+                gh:ClearAllPoints()
+                gh:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / s, y / s + 14)
+                local _, rec, _, lx = DropAt()
+                Marker(rec, lx)
+            end)
+        end)
+        g:SetScript("OnDragStop", function() EndDrag(true) end)
+        grabs[b] = g
+    end
+    g:Show()
+    return g
+end
+
+-- handles on a bar's blocks (after ApplyBar rebuilt them)
+function DB.Grabs(cfg)
+    local rec = recs[cfg]
+    if not rec then return end
+    for _, b in ipairs(rec.blocks) do Grab(b) end
+end
+
+local function Panel()
+    if panel then return panel end
+    panel = CreateFrame("Frame", "HUF_ArrangeBlocks", UIParent)
+    panel:SetSize(300, 54)
+    panel:SetPoint("TOP", 0, -120)
+    panel:SetFrameStrata("DIALOG")
+    panel:SetMovable(true)
+    panel:EnableMouse(true)
+    panel:RegisterForDrag("LeftButton")
+    panel:SetScript("OnDragStart", panel.StartMoving)
+    panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
+    ns.UI.Fill(panel, 0.05, 0.05, 0.06, 0.95)
+    ns.UI.Border(panel, A[1], A[2], A[3], 0.9)
+    local t = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    t:SetPoint("TOP", 0, -8)
+    t:SetText("Arranging data bar blocks")
+    t:SetTextColor(A[1], A[2], A[3])
+    local s = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    s:SetPoint("TOP", t, "BOTTOM", 0, -4)
+    s:SetText("Drag a block along its bar or onto another one.")
+    local done = ns.UI.Button(panel, 60, "Done", function() DB.SetArranging(false) end)
+    done:SetPoint("BOTTOMRIGHT", -6, 6)
+    panel:Hide()
+    return panel
+end
+
+function DB.SetArranging(on)
+    on = on and true or false
+    if drag then EndDrag(false) end
+    DB.arranging = on
+    for b, g in pairs(grabs) do g:SetShown(on and b:IsShown()) end
+    if on then
+        for cfg, rec in pairs(recs) do
+            -- hidden by its visibility setting: shown while arranging
+            if cfg.enabled and cfg.visibility ~= "NEVER" then rec.frame:Show() end
+            DB.Grabs(cfg)
+        end
+    end
+    Panel():SetShown(on)
+    DB.UpdateVisibility()
+end
+function DB.ToggleArranging() DB.SetArranging(not DB.arranging) end
 
 ns.OnLogin(function()
     DB.ApplyBars()
