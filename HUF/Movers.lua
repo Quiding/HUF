@@ -417,6 +417,8 @@ local function AddGrips(parent, hover, handle, wanted)
     gripSets[#gripSets + 1] = gs
     return gs
 end
+Movers.AddGrips = AddGrips   -- boxes of their own (the buff / debuff bars) get grips too
+
 function Movers.ShowGrips()
     for _, gs in ipairs(gripSets) do GripSetShown(gs) end
 end

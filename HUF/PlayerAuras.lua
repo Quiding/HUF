@@ -294,6 +294,32 @@ function PA.NewMover(kind)
     m:Hide()
     movers[kind] = m
     if ns.Snap then ns.Snap.Register(m) end
+    -- unlock mode's corner grips: the icons grow or shrink (rows and columns stay)
+    if ns.Movers and ns.Movers.AddGrips then
+        ns.Movers.AddGrips(m, m, {
+            box = m,
+            unit = function() return m:GetEffectiveScale() end,
+            point = function() return S(kind).point end,
+            relayout = function() PA.Apply() end,
+            sizer = {
+                get = function() local g = Geometry(S(kind)) return g.w, g.h end,
+                set = function(w, h)
+                    local s = S(kind)
+                    local g = Geometry(s)
+                    local _, _, _, vertical = Flow(s)
+                    local across = vertical and g.lines or g.perLine     -- icons side by side
+                    local down = vertical and g.perLine or g.lines       -- icons on top of each other
+                    local extra = (s.timer and s.timerPos == "BELOW") and (s.timerSize + 2) or 0
+                    local byW = (w + s.padding) / across - s.padding
+                    local byH = (h + s.padding) / down - s.padding - extra
+                    -- the side dragged more decides
+                    local size = math.abs(byW - s.size) >= math.abs(byH - s.size) and byW or byH
+                    s.size = math.max(12, math.min(64, math.floor(size + 0.5)))
+                    PA.Apply()
+                end,
+            },
+        })
+    end
     return m
 end
 
