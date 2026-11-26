@@ -80,7 +80,7 @@ local function BarsTab(f)
     R:Color("Border colour", function() return D().borderColor end, function(c) D().borderColor = c end)
     R:Slider("Slot background", 0, 1, 0.05, function() return D().slotAlpha end, function(v) D().slotAlpha = v end, "%.2f")
     R:Check("Fill the gaps between buttons", function() return D().fillGaps ~= false end, function(v) D().fillGaps = v end,
-        "The spacing between the buttons in the slot colour too: a dark grid, as EllesmereUI's bars. Off: see-through gaps.")
+        "The borders reach over the spacing, so the lines between the buttons are solid (as EllesmereUI's bars). Off: a thin border on each button and see-through gaps.")
     R:Slider("Key text size", 6, 24, 1, function() return D().keySize end, function(v) D().keySize = v end)
     R:Color("Key text colour", function() return D().keyColor end, function(c) D().keyColor = c end)
     R:Slider("Stack count size", 6, 24, 1, function() return D().countSize end, function(v) D().countSize = v end)

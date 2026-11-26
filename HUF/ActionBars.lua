@@ -124,7 +124,7 @@ end
 ---------------------------------------------------------------------------
 -- Look
 ---------------------------------------------------------------------------
-local function Skin(b, scale)
+local function Skin(b, scale, gap)
     local d = DB()
     local p = skinned[b]
     if not p then
@@ -154,11 +154,21 @@ local function Skin(b, scale)
     end
     local fb = _G[(b:GetName() or "") .. "FloatingBG"]
     if fb then fb:SetAlpha(0) end
-    p.bg:SetColorTexture(0.05, 0.05, 0.06, d.slotAlpha or 0.6)
+    -- the slot: see-through black (EllesmereUI's: black at 60 %)
+    p.bg:SetColorTexture(0, 0, 0, d.slotAlpha or 0.6)
     -- the border: one screen pixel whatever the button's scale
     local px = (PixelUtil and PixelUtil.GetNearestPixelSize) and PixelUtil.GetNearestPixelSize(1, b:GetEffectiveScale(), 1) or (1 / (scale or 1))
     local size = (d.border or 1) * px
     local e = p.border.edges
+    -- "Fill the gaps": the border reaches out over half the spacing on each side, so two
+    -- neighbours' borders meet in one solid line (EllesmereUI's grid); off: a 1 px border
+    -- inside the button and see-through gaps
+    local g = (d.fillGaps ~= false and (gap or 0) > 0) and ((gap / 2) / (scale or 1)) or 0
+    if d.fillGaps ~= false and (gap or 0) > 0 then size = size + g end
+    e[1]:ClearAllPoints(); e[1]:SetPoint("TOPLEFT", b, "TOPLEFT", -g, g); e[1]:SetPoint("TOPRIGHT", b, "TOPRIGHT", g, g)
+    e[2]:ClearAllPoints(); e[2]:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", -g, -g); e[2]:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", g, -g)
+    e[3]:ClearAllPoints(); e[3]:SetPoint("TOPLEFT", b, "TOPLEFT", -g, g); e[3]:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", -g, -g)
+    e[4]:ClearAllPoints(); e[4]:SetPoint("TOPRIGHT", b, "TOPRIGHT", g, g); e[4]:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", g, -g)
     e[1]:SetHeight(size); e[2]:SetHeight(size); e[3]:SetWidth(size); e[4]:SetWidth(size)
     p.border:SetShown((d.border or 1) > 0)
     local c = d.borderAccent and { r = ns.ACCENT[1], g = ns.ACCENT[2], b = ns.ACCENT[3] } or d.borderColor or { r = 0, g = 0, b = 0 }
@@ -244,18 +254,12 @@ local function Layout(info)
             -- past the chosen count: kept out of sight (the game still owns its key binding)
             b:SetPoint("TOPLEFT", f, "TOPLEFT", -10000, 10000)
         end
-        Skin(b, scale)
+        Skin(b, scale, gap)
         Texts(b, s)
     end
     f:SetSize(per * size + (per - 1) * gap, rows * size + (rows - 1) * gap)
     -- the gaps between the buttons: the slot colour too (EllesmereUI's dark grid), or see-through
-    if not f.fill then
-        f.fill = f:CreateTexture(nil, "BACKGROUND", nil, -8)
-        f.fill:SetAllPoints(f)
-    end
-    local d = DB()
-    f.fill:SetColorTexture(0.05, 0.05, 0.06, d.slotAlpha or 0.6)
-    f.fill:SetShown(d.fillGaps ~= false and gap > 0)
+    -- (the gaps: each button's border reaches over them, Skin)
     f:ClearAllPoints()
     local pt = s.point or { "BOTTOM", "BOTTOM", 0, 40 }
     f:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
