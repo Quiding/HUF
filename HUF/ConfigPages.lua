@@ -277,7 +277,7 @@ ns.RegisterPage("general", "General", "general", function(page)
     -- UI Scale (UIScale.lua) -----------------------------------------------
     local US_H = 124
     local US_Y = -(FF_H + TILE_GAP)
-    local _, U_ = Tile(page, X2, US_Y, TILE_W, US_H, "UI Scale", "Interface\Icons\INV_Misc_Spyglass_02")
+    local _, U_ = Tile(page, X2, US_Y, TILE_W, US_H, "UI Scale", "Interface\\Icons\\INV_Misc_Spyglass_02")
     -- below the game's 0.64, like EllesmereUI
     local US = ns.UIScale
     local U = function() return ns.db.uiScale end
