@@ -627,6 +627,33 @@ local function BuildDefaults()
             -- who: loot of SELF | TEAM (MMT team) | GROUP; not set: TEAM with MMT loaded, else SELF (LootFeed.Who)
             classColors = true,         -- others' names in their class colour
         },
+        -- action bars (ActionBars.lua): the game's buttons in HUF's bars; off = the game's bars
+        actionBars = {
+            enabled = false,
+            border = 1, borderAccent = false, borderColor = C(0, 0, 0), slotAlpha = 0.6,
+            bars = {
+                MainBar = { enabled = true, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 40 },
+                            mouseover = false, hideHotkey = false, hideMacro = false },
+                Bar2 = { enabled = true, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 78 },
+                         mouseover = false, hideHotkey = false, hideMacro = false },
+                Bar3 = { enabled = true, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "BOTTOM", "BOTTOM", 0, 116 },
+                         mouseover = false, hideHotkey = false, hideMacro = false },
+                Bar4 = { enabled = false, buttons = 12, perRow = 1, size = 36, spacing = 2, point = { "RIGHT", "RIGHT", -10, 0 },
+                         mouseover = false, hideHotkey = false, hideMacro = false },
+                Bar5 = { enabled = false, buttons = 12, perRow = 1, size = 36, spacing = 2, point = { "RIGHT", "RIGHT", -48, 0 },
+                         mouseover = false, hideHotkey = false, hideMacro = false },
+                Bar6 = { enabled = false, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "CENTER", "CENTER", 0, -200 },
+                         mouseover = false, hideHotkey = false, hideMacro = false },
+                Bar7 = { enabled = false, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "CENTER", "CENTER", 0, -238 },
+                         mouseover = false, hideHotkey = false, hideMacro = false },
+                Bar8 = { enabled = false, buttons = 12, perRow = 12, size = 36, spacing = 2, point = { "CENTER", "CENTER", 0, -276 },
+                         mouseover = false, hideHotkey = false, hideMacro = false },
+                StanceBar = { enabled = true, buttons = 10, perRow = 10, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", -170, 154 },
+                              mouseover = false, hideHotkey = false, hideMacro = false },
+                PetBar = { enabled = true, buttons = 10, perRow = 10, size = 30, spacing = 2, point = { "BOTTOM", "BOTTOM", 170, 154 },
+                           mouseover = false, hideHotkey = false, hideMacro = false },
+            },
+        },
         bags = {
             enabled = true,
             oneBag = true,              -- the game's "combined bags" option
