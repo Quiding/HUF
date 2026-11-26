@@ -413,13 +413,19 @@ function DB.LayoutBar(cfg)
     local n = #list
     if n == 0 then return end
     local even = cfg.sizing == "EVEN"
-    local widths, fillAt, sum = {}, n, 0
+    -- a block with a width of its own (cfg.width > 0, set by dragging its edge while
+    -- arranging) keeps exactly that width and never fills the rest
+    local function Fixed(b) return (tonumber(b.cfg.width) or 0) > 0 end
+    local widths, fillAt, sum = {}, nil, 0
     for i, b in ipairs(list) do
-        if b.cfg.fill then fillAt = i end
+        if b.cfg.fill and not Fixed(b) then fillAt = i end
+    end
+    if not fillAt then
+        for i = n, 1, -1 do if not Fixed(list[i]) then fillAt = i break end end
     end
     for i, b in ipairs(list) do
         local pads = even and 0 or (b.cfg.padL + b.cfg.padR)
-        widths[i] = ContentWidth(b) + pads
+        widths[i] = Fixed(b) and b.cfg.width or (ContentWidth(b) + pads)
         if i ~= fillAt then sum = sum + widths[i] end
     end
     -- a block kept in the middle (cfg.center): its text at the bar's middle,
@@ -431,10 +437,16 @@ function DB.LayoutBar(cfg)
     end
     local xs = {}
     if even then
-        for i = 1, n do widths[i] = W / n end
+        -- the blocks without a width of their own share what the others leave
+        local fixedSum, free = 0, 0
+        for _, b in ipairs(list) do if Fixed(b) then fixedSum = fixedSum + b.cfg.width else free = free + 1 end end
+        for i, b in ipairs(list) do
+            if not Fixed(b) then widths[i] = math.max(1, (W - fixedSum) / math.max(1, free)) end
+        end
     elseif centerAt then
         local cb = list[centerAt]
-        local cStart = math.floor(W / 2 - ContentWidth(cb) / 2 - cb.cfg.padL + 0.5)
+        local cStart = Fixed(cb) and math.floor((W - cb.cfg.width) / 2 + 0.5)
+            or math.floor(W / 2 - ContentWidth(cb) / 2 - cb.cfg.padL + 0.5)
         local cEnd = cStart + widths[centerAt]
         xs[centerAt] = cStart
         -- the left side: packed from 0, its fill block (if any) takes the slack
@@ -442,7 +454,7 @@ function DB.LayoutBar(cfg)
         for i = 1, centerAt - 1 do
             if list[i].cfg.fill then lfill = i else lsum = lsum + widths[i] end
         end
-        if lfill then widths[lfill] = math.max(widths[lfill], cStart - lsum) end
+        if lfill and not Fixed(list[lfill]) then widths[lfill] = math.max(widths[lfill], cStart - lsum) end
         local x = 0
         for i = 1, centerAt - 1 do xs[i] = x x = x + widths[i] end
         -- the right side: packed to the right edge, its fill block takes the slack
@@ -450,10 +462,10 @@ function DB.LayoutBar(cfg)
         for i = centerAt + 1, n do
             if list[i].cfg.fill then rfill = i else rsum = rsum + widths[i] end
         end
-        if rfill then widths[rfill] = math.max(widths[rfill], W - cEnd - rsum) end
+        if rfill and not Fixed(list[rfill]) then widths[rfill] = math.max(widths[rfill], W - cEnd - rsum) end
         x = W
         for i = n, centerAt + 1, -1 do x = x - widths[i] xs[i] = x end
-    else
+    elseif fillAt then
         widths[fillAt] = math.max(widths[fillAt], W - sum)
     end
     local x = 0
@@ -923,18 +935,23 @@ local function Grab(b)
             local even = self:GetParent():GetParent().barCfg.sizing == "EVEN"
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText("Resize")
-            GameTooltip:AddLine(even and "This bar spreads its blocks evenly (Bars tab: Sizing): drag does nothing here."
-                or "Drag: the block's width.", 1, 1, 1, true)
+            GameTooltip:AddLine("Drag: the block's width.", 1, 1, 1)
             GameTooltip:AddLine("Shift + drag: its text size.", 1, 1, 1)
+            GameTooltip:AddLine("Right-click: automatic width again.", 1, 1, 1)
             GameTooltip:Show()
         end)
         e:SetScript("OnLeave", function() bar:SetWidth(2) GameTooltip:Hide() end)
         e:SetScript("OnMouseDown", function(self, button)
-            if button ~= "LeftButton" then return end
             local blk = self:GetParent():GetParent()
+            if button == "RightButton" then
+                blk.cfg.width = 0
+                DB.LayoutBar(blk.barCfg)
+                return
+            end
+            if button ~= "LeftButton" then return end
             local bc, cfg = blk.cfg, blk.barCfg
             local x0 = GetCursorPosition() / blk:GetEffectiveScale()
-            local st = { bc = bc, cfg = cfg, x0 = x0, pads = bc.padL + bc.padR, scale = bc.scale or 100,
+            local st = { bc = bc, cfg = cfg, x0 = x0, w = blk:GetWidth(), scale = bc.scale or 100,
                 text = IsShiftKeyDown(), s = blk:GetEffectiveScale() }
             self:SetScript("OnUpdate", function()
                 local dx = GetCursorPosition() / st.s - st.x0
@@ -943,13 +960,12 @@ local function Grab(b)
                     if v ~= st.bc.scale then st.bc.scale = v DB.ApplyBar(st.cfg) end
                     GameTooltip:SetOwner(self, "ANCHOR_TOP") GameTooltip:SetText(("Text size %d%%"):format(v)) GameTooltip:Show()
                 else
-                    local total = math.max(0, math.min(400, math.floor(st.pads + dx + 0.5)))
-                    local l = math.floor(total / 2)
-                    if l ~= st.bc.padL or total - l ~= st.bc.padR then
-                        st.bc.padL, st.bc.padR = l, total - l
+                    local w = math.max(10, math.min(800, math.floor(st.w + dx + 0.5)))
+                    if w ~= st.bc.width then
+                        st.bc.width = w
                         DB.LayoutBar(st.cfg)
                     end
-                    GameTooltip:SetOwner(self, "ANCHOR_TOP") GameTooltip:SetText(("Padding %d + %d"):format(l, total - l)) GameTooltip:Show()
+                    GameTooltip:SetOwner(self, "ANCHOR_TOP") GameTooltip:SetText(("Width %d"):format(w)) GameTooltip:Show()
                 end
             end)
         end)

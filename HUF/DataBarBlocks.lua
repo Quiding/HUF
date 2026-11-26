@@ -397,6 +397,7 @@ function BL.New(key)
     if not def then return nil end
     return {
         type = key, scale = 100, align = "CENTER", padL = 10, padR = 10, fill = false,
+        width = 0,              -- a width of its own (dragging its edge while arranging); 0 = from its content
         center = false,         -- kept in the middle of the bar (spacing by content)
         showIcon = def.showIcon and true or false,
         textColor = "WHITE", textCustom = { r = 1, g = 1, b = 1 },
