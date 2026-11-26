@@ -186,18 +186,15 @@ local function Skin(b, scale, gap)
     p.border:SetColor(c.r, c.g, c.b, 1)
 end
 
--- the key: white and outlined, top right on a button with an action, in the middle of an empty
--- slot (as EllesmereUI shows them); the stack count bottom right
+-- the key: white and outlined, top right (empty slots too, as EllesmereUI); the stack count bottom right
 local function Font() return (ns.FontPath and ns.FontPath("GLOBAL")) or STANDARD_TEXT_FONT end
 local function PlaceTexts(b)
     local p = skinned[b]
     if not (p and p.hotkey) then return end
     local d = DB()
-    local empty = b.action and HasAction and not HasAction(b.action)
     p.hotkey:ClearAllPoints()
-    if empty then p.hotkey:SetPoint("CENTER", b, "CENTER", 0, 0)
-    else p.hotkey:SetPoint("TOPRIGHT", b, "TOPRIGHT", -2, -2) end
-    p.hotkey:SetJustifyH(empty and "CENTER" or "RIGHT")
+    p.hotkey:SetPoint("TOPRIGHT", b, "TOPRIGHT", -2, -2)
+    p.hotkey:SetJustifyH("RIGHT")
     -- a borrowed bar's own key (bars 9 / 10): the game's button doesn't know it
     if b.hufKey then p.hotkey:SetText(GetBindingText and GetBindingText(b.hufKey, true) or b.hufKey) p.hotkey:Show() end
     local c = d.keyColor or { r = 1, g = 1, b = 1 }
@@ -444,7 +441,7 @@ function AB.Fade()
 end
 
 -- forms learned / changed: the stance bar's count and visibility
--- an action placed or removed: the key moves between the middle (empty) and the corner
+-- keys changed or an action placed: the key text again (the game resets it)
 local slotEv = CreateFrame("Frame")
 slotEv:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 slotEv:RegisterEvent("UPDATE_BINDINGS")
