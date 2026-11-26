@@ -228,8 +228,11 @@ end
 ---------------------------------------------------------------------------
 -- Layout (out of combat only)
 ---------------------------------------------------------------------------
+-- unlock mode: the stance and pet bars show even without forms / a pet, so they can be placed
+local previewing = false
+
 local function Shown(info, list)
-    if info.stance then
+    if info.stance and not previewing then
         local n = GetNumShapeshiftForms and GetNumShapeshiftForms() or 0
         return math.min(n, #list)
     end
@@ -302,6 +305,16 @@ local function BarFrame(info)
     ns.RegisterMover("HUF_AB_" .. info.key, {
         label = info.label,
         frame = f,
+        preview = (info.stance or info.pet) and function(on)
+            ns.RunOOC("ab:preview:" .. info.key, function()
+                previewing = on and true or false
+                if info.pet then
+                    if on then UnregisterStateDriver(f, "visibility")
+                    else RegisterStateDriver(f, "visibility", "[@pet,exists,nopossessbar]show;hide") end
+                end
+                if taken[info.key] then Layout(info) Visible(info) end
+            end)
+        end or nil,
         shown = function() return taken[info.key] and S(info.key).enabled end,
         save = function(fr)
             local s = S(info.key)
@@ -332,6 +345,14 @@ local function BarFrame(info)
                 s.size = math.max(16, math.min(64, math.floor(bestSize + 0.5)))
                 Layout(info)
             end,
+            -- Shift + drag: the button size only (rows and columns stay)
+            scale = {
+                get = function() return S(info.key).size or 36 end,
+                set = function(v)
+                    S(info.key).size = math.max(16, math.min(64, math.floor(v + 0.5)))
+                    Layout(info)
+                end,
+            },
         },
     })
     return f
@@ -410,7 +431,9 @@ AB.Allowed = function(key) local info = BY_KEY[key] return info and Allowed(info
 
 local function Visible(info)
     local f = frames[info.key]
-    if not f or info.pet then return end   -- the pet bar: its state driver
+    if not f then return end
+    if previewing and (info.stance or info.pet) then f:Show() return end
+    if info.pet then return end   -- the pet bar: its state driver
     if info.stance then
         local n = GetNumShapeshiftForms and GetNumShapeshiftForms() or 0
         f:SetShown(n > 0)

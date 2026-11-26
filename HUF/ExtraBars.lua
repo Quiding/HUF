@@ -254,6 +254,10 @@ local function Hold(key)
                 S(key).scale = math.max(0.5, math.min(2, w / base))
                 Seat(key)
             end,
+            scale = {   -- Shift + drag: the same, its scale
+                get = function() return S(key).scale or 1 end,
+                set = function(v) S(key).scale = math.max(0.5, math.min(2, math.floor(v * 100 + 0.5) / 100)) Seat(key) end,
+            },
         },
     })
     return h
