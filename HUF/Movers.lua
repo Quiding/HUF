@@ -288,6 +288,8 @@ local previews = {}
 -- is (the frame's place is moved by as much as its anchor would shift it).
 -- A handle (also the size / position window's, below):
 --   sizer = { get() -> w, h, set(w, h), done(), step() }   in the frame's units
+--   scaler = { get() -> v, set(v) }   optional: Shift + drag scales instead - v is multiplied by
+--            how much the box grew (set clamps and rounds it the frame's own way)
 --   point()      its place (offsets [3] / [4] in the frame's units)
 --   relayout()   put it where its settings say (live, cheap)
 --   unit()       the frame's effective scale (screen pixels per unit)
@@ -366,6 +368,8 @@ local function AddGrips(parent, hover, handle, wanted)
         g:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Drag to resize")
+            local h = type(handle) == "function" and handle() or handle
+            if h and h.scaler then GameTooltip:AddLine("Shift + drag: scale", 0.8, 0.8, 0.8) end
             GameTooltip:Show()
         end)
         g:SetScript("OnLeave", function() GameTooltip:Hide() GripSetLater(gs) end)
@@ -378,6 +382,11 @@ local function AddGrips(parent, hover, handle, wanted)
             local x, y = GetCursorPosition()
             local fx, fy = CornerXY(h.box, fixed)
             self.drag = { h = h, x = x, y = y, w = w, hh = hh, fx = fx, fy = fy, u = h.unit() }
+            -- Shift held at the start: scale (the frame's scaler) instead of resizing
+            if IsShiftKeyDown() and h.scaler then
+                local ok, v = pcall(h.scaler.get)
+                if ok and type(v) == "number" then self.drag.scale = v end
+            end
             gs.dragging = true
             if Movers.Select then Movers.Select(h) end
             self.wait = 0
@@ -391,7 +400,16 @@ local function AddGrips(parent, hover, handle, wanted)
                 local nh = math.floor(d.hh + sy * (cy - d.y) / d.u + 0.5)
                 if nw ~= s.lastW or nh ~= s.lastH then
                     s.lastW, s.lastH = nw, nh
-                    ResizeKeeping(d.h, nw, nh, fixed, d.fx, d.fy)
+                    if d.scale then
+                        -- the side dragged more decides how much it grew
+                        local fw, fh = nw / math.max(1, d.w), nh / math.max(1, d.hh)
+                        local f = math.abs(fw - 1) >= math.abs(fh - 1) and fw or fh
+                        local ok, err = pcall(d.h.scaler.set, d.scale * math.max(0.05, f))
+                        if not ok then ns.Log("move", "scale: %s", tostring(err)) end
+                        KeepCorner(d.h, fixed, d.fx, d.fy)
+                    else
+                        ResizeKeeping(d.h, nw, nh, fixed, d.fx, d.fy)
+                    end
                     if Movers.EditRefresh then Movers.EditRefresh() end
                 end
             end)
@@ -654,7 +672,15 @@ local function Preview(key)
     }
     f.handle = { label = f.previewTitle, sizer = f.sizer, box = f,
         point = function() return ns.db.units[key].point end, moved = function() ns.Refresh(true) end,
-        relayout = function() Layout(key) end, unit = function() return f:GetEffectiveScale() end }
+        relayout = function() Layout(key) end, unit = function() return f:GetEffectiveScale() end,
+        -- Shift + drag: the frame's scale (its Scale slider: 0.5 - 2)
+        scaler = {
+            get = function() return ns.db.units[key].scale or 1 end,
+            set = function(v)
+                ns.db.units[key].scale = math.floor(math.max(0.5, math.min(2, v)) * 100 + 0.5) / 100
+                Layout(key)
+            end,
+        } }
     f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     f:SetScript("OnClick", function(self, button)
         if button == "LeftButton" then Movers.Select(self.handle) return end
@@ -741,7 +767,14 @@ local function GroupPreview()
     }
     box.handle = { label = "Group", sizer = box.sizer, box = box,
         point = function() return ns.db.units.party.point end, moved = function() ns.Refresh(true) end,
-        relayout = function() LayoutGroup() end, unit = function() return box:GetEffectiveScale() end }
+        relayout = function() LayoutGroup() end, unit = function() return box:GetEffectiveScale() end,
+        scaler = {   -- Shift + drag: the group's scale
+            get = function() return ns.db.units.party.scale or 1 end,
+            set = function(v)
+                ns.db.units.party.scale = math.floor(math.max(0.5, math.min(2, v)) * 100 + 0.5) / 100
+                LayoutGroup()
+            end,
+        } }
     AddGrips(box, box, box.handle)
     group = box
     Snap.Register(box)
@@ -812,6 +845,8 @@ local boxes = {}
 --           set = function(w, h) end,                -- a new size (the opposite corner stays put)
 --           done = function() end,                   -- optional: the drag / typing ended
 --           step = function() return 1, 1 end,       -- optional: snap the size to steps
+--           scale = { get = function() return v end, set = function(v) end },
+--                                                    -- optional: Shift + drag (v x how much it grew)
 --       },
 --   })
 --   HUF.UnregisterMover(id)
@@ -965,6 +1000,7 @@ local function Box(id, spec)
     m.handle.point = (not spec.external) and spec.point or nil
     m.handle.frame = spec.external and spec.frame or nil
     m.handle.sizer = spec.resize and m.sizerObj or nil
+    m.handle.scaler = spec.resize and type(spec.resize.scale) == "table" and spec.resize.scale or nil
     if not m.gripSet then
         m.gripSet = AddGrips(m, m, m.handle, function() return m.spec and m.spec.resize ~= nil end)
     end
